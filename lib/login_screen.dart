@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'social_feed_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,8 +64,15 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    // Screen dimensions to calculate exact widths
+    // Screen dimensions to calculate exact responsive metrics
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // Proportional spacers to fit perfectly on any mobile device without overflow scroll
+    final topSpacer = screenHeight * 0.16;
+    final middleSpacer = screenHeight * 0.12;
+    final buttonSpacer = screenHeight * 0.09;
+    final bottomSpacer = screenHeight * 0.05;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -95,38 +103,35 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 140),
-                      // Title with Continuous Shimmer and Hero morphing
-                      AnimatedBuilder(
-                        animation: _shimmerController,
-                        builder: (context, child) {
-                          return ShaderMask(
-                            blendMode: BlendMode.srcIn,
-                            shaderCallback: (bounds) {
-                              return LinearGradient(
-                                colors: const [
-                                  Color(0xFFFFFFFF),
-                                  Color(0xFF8AB4F8),
-                                  Color(0xFFC58AF9),
-                                  Color(0xFFFFFFFF),
-                                ],
-                                stops: const [0.0, 0.45, 0.55, 1.0],
-                                begin: Alignment(-2.5 + 5.0 * _shimmerController.value, -1.0),
-                                end: Alignment(-1.5 + 5.0 * _shimmerController.value, 1.0),
-                              ).createShader(bounds);
-                            },
-                            child: Text(
-                              'MEMORIA',
-                              style: GoogleFonts.inter(
-                                fontSize: 34,
-                                fontWeight: FontWeight.w400,
-                                letterSpacing: 8.0,
-                              ),
+                      SizedBox(height: topSpacer),
+                      // Title Box Outline (no color animation, eye-catchy sharp rectangle)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF141415),
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 2.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
                             ),
-                          );
-                        },
+                          ],
+                        ),
+                        child: Text(
+                          'memoria',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 3.0,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 110),
+                      SizedBox(height: middleSpacer),
                       // Animated inputs, buttons, and footer
                       AnimatedBuilder(
                         animation: _formController,
@@ -228,7 +233,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 24),
                             // Buttons Container
                             SizedBox(
                               width: screenWidth * 0.85,
@@ -239,7 +244,61 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                     width: double.infinity,
                                     height: 48,
                                     child: TextButton(
-                                      onPressed: () {},
+                                      onPressed: () {
+                                        if (_emailController.text == 'admin' &&
+                                            _passwordController.text == 'admin') {
+                                          Navigator.of(context).pushReplacement(
+                                            PageRouteBuilder(
+                                              pageBuilder: (context, animation, secondaryAnimation) =>
+                                                  const SocialFeedPage(),
+                                              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                                final slideAnimation = Tween<Offset>(
+                                                  begin: const Offset(0.0, 0.05),
+                                                  end: Offset.zero,
+                                                ).animate(
+                                                  CurvedAnimation(
+                                                    parent: animation,
+                                                    curve: Curves.easeOutCubic,
+                                                  ),
+                                                );
+
+                                                final fadeAnimation = Tween<double>(
+                                                  begin: 0.0,
+                                                  end: 1.0,
+                                                ).animate(
+                                                  CurvedAnimation(
+                                                    parent: animation,
+                                                    curve: Curves.easeIn,
+                                                  ),
+                                                );
+
+                                                return FadeTransition(
+                                                  opacity: fadeAnimation,
+                                                  child: SlideTransition(
+                                                    position: slideAnimation,
+                                                    child: child,
+                                                  ),
+                                                );
+                                              },
+                                              transitionDuration: const Duration(milliseconds: 600),
+                                            ),
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Invalid credentials',
+                                                style: GoogleFonts.inter(color: Colors.white),
+                                              ),
+                                              backgroundColor: Colors.redAccent,
+                                              behavior: SnackBarBehavior.floating,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
                                       style: TextButton.styleFrom(
                                         backgroundColor: const Color(0xFFFFFFFF),
                                         shape: RoundedRectangleBorder(
@@ -298,7 +357,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 80),
+                            SizedBox(height: buttonSpacer),
                             // Footer
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -327,7 +386,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 40),
+                            SizedBox(height: bottomSpacer),
                           ],
                         ),
                       ),

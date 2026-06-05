@@ -105,39 +105,36 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               },
             ),
           ),
-          // Shimmering Text Centered
+          // Lowercase logo inside an elegant sharp bordered Box (eye-catchy, matching image)
           Center(
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_controller, _shimmerController]),
-              builder: (context, child) {
-                return Opacity(
-                  opacity: _fadeAnimation.value,
-                  child: ShaderMask(
-                    blendMode: BlendMode.srcIn,
-                    shaderCallback: (bounds) {
-                      return LinearGradient(
-                        colors: const [
-                          Color(0xFFFFFFFF),
-                          Color(0xFF8AB4F8),
-                          Color(0xFFC58AF9),
-                          Color(0xFFFFFFFF),
-                        ],
-                        stops: const [0.0, 0.45, 0.55, 1.0],
-                        begin: Alignment(-2.5 + 5.0 * _shimmerController.value, -1.0),
-                        end: Alignment(-1.5 + 5.0 * _shimmerController.value, 1.0),
-                      ).createShader(bounds);
-                    },
-                    child: Text(
-                      'MEMORIA',
-                      style: GoogleFonts.inter(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 8.0,
-                      ),
-                    ),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141415),
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 2.0,
                   ),
-                );
-              },
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  'memoria',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 3.0,
+                  ),
+                ),
+              ),
             ),
           ),
         ],

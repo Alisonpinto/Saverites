@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/notification_model.dart';
+import '../utils/translation_manager.dart';
 
 /// A single row in the notification list.
 ///
@@ -26,6 +27,16 @@ class NotificationTile extends StatelessWidget {
     required this.isAlternate,
     this.onTap,
   });
+
+  String _translatePreviewText(String text) {
+    if (text == 'liked your post') return TranslationManager.t('likedYourPost');
+    if (text == 'started following you') return TranslationManager.t('startedFollowing');
+    if (text == 'saved your post') return TranslationManager.t('savedYourPost');
+    if (text == 'shared your post') return TranslationManager.t('sharedYourPost');
+    if (text == 'commented: "This is stunning 🔥"') return TranslationManager.t('commentedStunning');
+    if (text == 'commented: "Where was this taken?"') return TranslationManager.t('commentedWhere');
+    return text;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +73,7 @@ class NotificationTile extends StatelessWidget {
                           ),
                         ),
                         TextSpan(
-                          text: notification.previewText,
+                          text: _translatePreviewText(notification.previewText),
                           style: GoogleFonts.inter(
                             color: const Color(0xFFAEAEB2),
                             fontSize: 14,

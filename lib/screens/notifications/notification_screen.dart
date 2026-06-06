@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/notification_model.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/notification_tile.dart';
+import '../../utils/translation_manager.dart';
 
 /// Notification centre screen.
 ///
@@ -129,13 +130,16 @@ class NotificationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        systemNavigationBarColor: Color(0xFF272729),
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: Colors.transparent,
-      ),
-      child: Scaffold(
+    return ValueListenableBuilder<String>(
+      valueListenable: TranslationManager.currentLanguageNotifier,
+      builder: (context, _, _) {
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Color(0xFF272729),
+            systemNavigationBarIconBrightness: Brightness.light,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ),
+          child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         body: Column(
           children: [
@@ -175,6 +179,8 @@ class NotificationScreen extends StatelessWidget {
         ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -212,7 +218,7 @@ class _NotificationHeader extends StatelessWidget {
           const SizedBox(width: 4),
           // Title
           Text(
-            'Notification',
+            TranslationManager.t('notification'),
             style: GoogleFonts.inter(
               color: Colors.white,
               fontSize: 18,

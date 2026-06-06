@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../utils/translation_manager.dart';
 
 /// Fixed header bar rendered above the scrollable feed.
 ///
@@ -23,7 +24,10 @@ class FeedHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
 
-    return Container(
+    return ValueListenableBuilder<String>(
+      valueListenable: TranslationManager.currentLanguageNotifier,
+      builder: (context, _, _) {
+        return Container(
       // Height = fixed inner height + status bar so content never
       // sits under the system status bar on any device.
       height: 62.0 + statusBarHeight,
@@ -90,7 +94,7 @@ class FeedHeader extends StatelessWidget {
                         fontSize: 14,
                       ),
                       decoration: InputDecoration(
-                        hintText: 'Find anything',
+                        hintText: TranslationManager.t('findAnything'),
                         hintStyle: GoogleFonts.inter(
                           color: const Color(0xFF8E8E93),
                           fontSize: 14,
@@ -108,6 +112,8 @@ class FeedHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+      },
     );
   }
 }

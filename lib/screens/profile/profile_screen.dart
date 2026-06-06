@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
-
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../utils/translation_manager.dart';
 
 import '../../models/saved_item_model.dart';
 import '../../widgets/app_bottom_navigation.dart';
+import 'settings_screen.dart';
 
 /// User profile screen.
 ///
@@ -80,13 +81,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        systemNavigationBarColor: Color(0xFF272729),
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: Colors.transparent,
-      ),
-      child: Scaffold(
+    return ValueListenableBuilder<String>(
+      valueListenable: TranslationManager.currentLanguageNotifier,
+      builder: (context, _, _) {
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Color(0xFF272729),
+            systemNavigationBarIconBrightness: Brightness.light,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ),
+          child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         body: Stack(
           children: [
@@ -169,6 +173,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -197,7 +203,7 @@ class _ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            'Profile',
+            TranslationManager.t('profile'),
             style: GoogleFonts.inter(
               color: Colors.white,
               fontSize: 18,
@@ -207,7 +213,43 @@ class _ProfileHeader extends StatelessWidget {
           const Spacer(),
           IconButton(
             onPressed: () {
-              // TODO: open settings
+              Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const SettingsScreen(),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    final slideAnimation = Tween<Offset>(
+                      begin: const Offset(0.0, 0.05),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    );
+
+                    final fadeAnimation = Tween<double>(
+                      begin: 0.0,
+                      end: 1.0,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeIn,
+                      ),
+                    );
+
+                    return FadeTransition(
+                      opacity: fadeAnimation,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  transitionDuration: const Duration(milliseconds: 600),
+                ),
+              );
             },
             icon: const Icon(
               Icons.settings_outlined,
@@ -278,9 +320,9 @@ class _ProfileInfo extends StatelessWidget {
               // Stats row
               Row(
                 children: [
-                  _StatItem(value: '6.7k', label: 'likes'),
+                  _StatItem(value: '6.7k', label: TranslationManager.t('likes')),
                   const SizedBox(width: 28),
-                  _StatItem(value: '170', label: 'post'),
+                  _StatItem(value: '170', label: TranslationManager.t('posts')),
                 ],
               ),
             ],
@@ -349,7 +391,7 @@ class _ProfileSearchBar extends StatelessWidget {
               child: TextField(
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Find anything',
+                  hintText: TranslationManager.t('findAnything'),
                   hintStyle: GoogleFonts.inter(
                     color: const Color(0xFF8E8E93),
                     fontSize: 14,
@@ -386,13 +428,13 @@ class _ProfileTabBar extends StatelessWidget {
       child: Row(
         children: [
           _TabItem(
-            label: 'Social save',
+            label: TranslationManager.t('socialSave'),
             isActive: activeTab == 0,
             onTap: () => onTabChanged(0),
           ),
           const SizedBox(width: 28),
           _TabItem(
-            label: 'Self save',
+            label: TranslationManager.t('selfSave'),
             isActive: activeTab == 1,
             onTap: () => onTabChanged(1),
           ),
@@ -458,7 +500,7 @@ class _SavedContentGrid extends StatelessWidget {
     if (items.isEmpty) {
       return Center(
         child: Text(
-          'Nothing saved yet',
+          TranslationManager.t('nothingSaved'),
           style: GoogleFonts.inter(
             color: const Color(0xFF48484A),
             fontSize: 14,
@@ -576,13 +618,13 @@ class _ProfileFabOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _FabAction(
-                    label: 'Write a Post',
+                    label: TranslationManager.t('writePost'),
                     icon: Icons.edit_note_rounded,
                     onTap: onWritePost,
                   ),
                   const SizedBox(height: 10),
                   _FabAction(
-                    label: 'Save a Item',
+                    label: TranslationManager.t('saveItem'),
                     icon: Icons.bookmark_add_outlined,
                     onTap: onSaveItem,
                   ),

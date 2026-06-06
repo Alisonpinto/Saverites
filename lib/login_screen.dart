@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/feed/feed_screen.dart';
+import 'utils/translation_manager.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -74,8 +75,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     final buttonSpacer = screenHeight * 0.05;
     final bottomSpacer = screenHeight * 0.03;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
+    return ValueListenableBuilder<String>(
+      valueListenable: TranslationManager.currentLanguageNotifier,
+      builder: (context, _, _) {
+        return Scaffold(
+          backgroundColor: Colors.black,
       body: Center(
         child: ClipRRect(
           borderRadius: BorderRadius.circular(40),
@@ -136,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 children: [
                                   // Email Label
                                   Text(
-                                    'Email',
+                                    TranslationManager.t('email'),
                                     style: GoogleFonts.inter(
                                       color: const Color(0xFFFFFFFF),
                                       fontSize: 16,
@@ -160,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                         fontSize: 14,
                                       ),
                                       decoration: InputDecoration(
-                                        hintText: 'Enter your email',
+                                        hintText: TranslationManager.t('enterEmail'),
                                         hintStyle: GoogleFonts.inter(
                                           color: const Color(0xFF515151),
                                           fontSize: 12,
@@ -175,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                   const SizedBox(height: 24),
                                   // Password Label
                                   Text(
-                                    'Password',
+                                    TranslationManager.t('password'),
                                     style: GoogleFonts.inter(
                                       color: const Color(0xFFFFFFFF),
                                       fontSize: 16,
@@ -200,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                         fontSize: 14,
                                       ),
                                       decoration: InputDecoration(
-                                        hintText: 'Enter your password',
+                                        hintText: TranslationManager.t('enterPassword'),
                                         hintStyle: GoogleFonts.inter(
                                           color: const Color(0xFF515151),
                                           fontSize: 12,
@@ -269,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                'Invalid credentials',
+                                                TranslationManager.t('invalidCredentials'),
                                                 style: GoogleFonts.inter(color: Colors.white),
                                               ),
                                               backgroundColor: Colors.redAccent,
@@ -288,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                         ),
                                       ),
                                       child: Text(
-                                        'Login',
+                                        TranslationManager.t('login'),
                                         style: GoogleFonts.inter(
                                           color: const Color(0xFF000000),
                                           fontSize: 16,
@@ -324,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                           Align(
                                             alignment: Alignment.center,
                                             child: Text(
-                                              'Continue with Google',
+                                              TranslationManager.t('continueGoogle'),
                                               style: GoogleFonts.inter(
                                                 color: const Color(0xFF000000),
                                                 fontSize: 16,
@@ -345,7 +349,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Don’t have an account? ',
+                                  TranslationManager.t('noAccount'),
                                   style: GoogleFonts.inter(
                                     color: const Color(0xFFFFFFFF),
                                     fontSize: 13,
@@ -355,7 +359,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 GestureDetector(
                                   onTap: () {},
                                   child: Text(
-                                    'Sign up',
+                                    TranslationManager.t('signUp'),
                                     style: GoogleFonts.inter(
                                       color: const Color(0xFFFFFFFF),
                                       fontSize: 13,
@@ -380,6 +384,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           ),
         ),
       ),
+    );
+      },
     );
   }
 }

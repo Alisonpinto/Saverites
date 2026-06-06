@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/post_model.dart';
+import '../../utils/translation_manager.dart';
 
 /// Full-screen detail view for a single post.
 ///
@@ -50,13 +51,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
     final double mediaHeight = screenHeight * 0.48;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        systemNavigationBarColor: Color(0xFF1C1C1E),
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: Colors.transparent,
-      ),
-      child: Scaffold(
+    return ValueListenableBuilder<String>(
+      valueListenable: TranslationManager.currentLanguageNotifier,
+      builder: (context, _, _) {
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Color(0xFF1C1C1E),
+            systemNavigationBarIconBrightness: Brightness.light,
+            systemNavigationBarDividerColor: Colors.transparent,
+          ),
+          child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         body: Column(
           children: [
@@ -208,6 +212,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -291,7 +297,7 @@ class _AuthorRow extends StatelessWidget {
               ),
             ),
             Text(
-              'Posted a memory',
+              TranslationManager.t('postedMemory'),
               style: GoogleFonts.inter(
                 color: const Color(0xFF8E8E93),
                 fontSize: 12,

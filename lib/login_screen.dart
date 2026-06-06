@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'social_feed_page.dart';
+import 'screens/feed/feed_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -68,11 +68,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    // Proportional spacers to fit perfectly on any mobile device without overflow scroll
-    final topSpacer = screenHeight * 0.16;
-    final middleSpacer = screenHeight * 0.12;
-    final buttonSpacer = screenHeight * 0.09;
-    final bottomSpacer = screenHeight * 0.05;
+    // Proportional spacers — tightened so everything fits on one screen
+    final topSpacer = screenHeight * 0.21;
+    final middleSpacer = screenHeight * 0.07;
+    final buttonSpacer = screenHeight * 0.05;
+    final bottomSpacer = screenHeight * 0.03;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -96,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             ),
             child: SafeArea(
               child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
+                physics: const NeverScrollableScrollPhysics(),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 28.0),
                   child: Column(
@@ -104,31 +104,13 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       SizedBox(height: topSpacer),
-                      // Title Box Outline (no color animation, eye-catchy sharp rectangle)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF141415),
-                          border: Border.all(
-                            color: Colors.white,
-                            width: 2.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.45),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'memoria',
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 3.0,
-                          ),
+                      // Logo — plain text, matching splash screen exactly
+                      Text(
+                        'memoria',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       SizedBox(height: middleSpacer),
@@ -250,7 +232,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                           Navigator.of(context).pushReplacement(
                                             PageRouteBuilder(
                                               pageBuilder: (context, animation, secondaryAnimation) =>
-                                                  const SocialFeedPage(),
+                                                  const FeedScreen(),
                                               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                                                 final slideAnimation = Tween<Offset>(
                                                   begin: const Offset(0.0, 0.05),

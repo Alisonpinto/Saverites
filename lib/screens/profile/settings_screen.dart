@@ -626,7 +626,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _t('title'), // Translated "Settings"
                           style: GoogleFonts.inter(
                             color: Colors.white,
-                            fontSize: 18,
+                            fontSize: 24,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

@@ -1,24 +1,25 @@
+import 'dart:io';
 import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/post_model.dart';
-import '../../utils/translation_manager.dart';
+import '../../utils/post_store.dart';
+import '../../widgets/running_video_player.dart';
 
-/// Full-screen detail view for a single post.
+/// Unified full-screen detail view for any post (user-created or predefined social post).
 ///
-/// Opened by tapping any [PostCard] on the feed. Receives a [PostModel]
-/// and renders the media, author info, title, description, URL, and
-/// interactive action buttons.
-///
-/// Back navigation via the top-left arrow returns to the feed at the
-/// same scroll position (Flutter preserves it automatically with push/pop).
+/// Styled matching the premium Figma dark mode specification.
 class PostDetailScreen extends StatefulWidget {
-  final PostModel post;
+  final UserPost? userPost;
+  final PostModel? postModel;
 
-  const PostDetailScreen({super.key, required this.post});
+  const PostDetailScreen({
+    super.key,
+    this.userPost,
+    this.postModel,
+  });
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -26,15 +27,59 @@ class PostDetailScreen extends StatefulWidget {
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _liked = false;
-  bool _saved = false;
   late int _likes;
   late int _saves;
+  late int _shares;
 
   @override
   void initState() {
     super.initState();
-    _likes = widget.post.likesCount;
-    _saves = widget.post.savesCount;
+    _likes = widget.postModel?.likesCount ?? 1000;
+    _saves = widget.postModel?.savesCount ?? 1300;
+    _shares = widget.postModel?.sharesCount ?? 100;
+
+    // Listen to changes in the global stores to update reactive status
+    PostStore.instance.postsNotifier.addListener(_onStoreChanged);
+    PostStore.instance.savedSocialPostIdsNotifier.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    PostStore.instance.postsNotifier.removeListener(_onStoreChanged);
+    PostStore.instance.savedSocialPostIdsNotifier.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // Helper getters to unify UserPost and PostModel properties
+  String get id => widget.userPost?.id ?? widget.postModel!.id;
+  String get title => widget.userPost?.title ?? widget.postModel?.title ?? '';
+  String get description => widget.userPost?.body ?? widget.postModel?.description ?? '';
+  String get username => widget.userPost != null ? 'gangster_vagas' : (widget.postModel?.username ?? 'Unknown user');
+  String? get avatarAssetPath => widget.userPost != null ? null : widget.postModel?.avatarAssetPath;
+  String? get url => widget.postModel?.url;
+
+  bool get isSaved {
+    if (widget.userPost != null) {
+      final posts = PostStore.instance.posts;
+      final idx = posts.indexWhere((p) => p.id == widget.userPost!.id);
+      if (idx != -1) {
+        return posts[idx].savedInProfile;
+      }
+      return widget.userPost!.savedInProfile;
+    } else {
+      return PostStore.instance.savedSocialPostIds.contains(widget.postModel!.id);
+    }
+  }
+
+  bool get isVideo {
+    return widget.userPost?.videoPath != null ||
+        widget.postModel?.mediaType == PostMediaType.video;
   }
 
   String _format(int count) {
@@ -45,429 +90,332 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     return count.toString();
   }
 
+  void _toggleSave() {
+    if (widget.userPost != null) {
+      PostStore.instance.toggleSavedInProfile(id);
+    } else {
+      PostStore.instance.toggleSavedSocialPost(id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final double screenHeight = MediaQuery.of(context).size.height;
     final double statusBarHeight = MediaQuery.of(context).padding.top;
     final double mediaHeight = screenHeight * 0.48;
 
-    return ValueListenableBuilder<String>(
-      valueListenable: TranslationManager.currentLanguageNotifier,
-      builder: (context, _, _) {
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: const SystemUiOverlayStyle(
-            systemNavigationBarColor: Color(0xFF1C1C1E),
-            systemNavigationBarIconBrightness: Brightness.light,
-            systemNavigationBarDividerColor: Colors.transparent,
-          ),
-          child: Scaffold(
-        backgroundColor: const Color(0xFF121212),
-        body: Column(
-          children: [
-            // ── Media area ──────────────────────────────────────────────────
-            Stack(
-              children: [
-                _MediaArea(
-                  post: widget.post,
-                  height: mediaHeight,
-                ),
-
-                // Back button — frosted circle overlay
-                Positioned(
-                  top: statusBarHeight + 12,
-                  left: 16,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF7C7C81),
+                Color(0xFF1A1A1B),
+                Color(0xFF000000),
               ],
+              stops: [0.0, 0.24, 1.0],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
-
-            // ── Bottom info card ────────────────────────────────────────────
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1C1C1E),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(28),
-                    topRight: Radius.circular(28),
-                  ),
-                ),
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Handle bar
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF48484A),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // ── Author row ──────────────────────────────────────
-                      _AuthorRow(post: widget.post),
-                      const SizedBox(height: 20),
-
-                      // ── Title ───────────────────────────────────────────
-                      if (widget.post.title != null) ...[
-                        Text(
-                          widget.post.title!,
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ] else ...[
-                        // Placeholder title when no data yet
-                        _PlaceholderLine(width: double.infinity, height: 26),
-                        const SizedBox(height: 8),
-                        _PlaceholderLine(width: 200, height: 26),
-                        const SizedBox(height: 12),
-                      ],
-
-                      // ── Description ─────────────────────────────────────
-                      if (widget.post.description != null) ...[
-                        Text(
-                          widget.post.description!,
-                          style: GoogleFonts.inter(
-                            color: const Color(0xFFAEAEB2),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w400,
-                            height: 1.65,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ] else ...[
-                        _PlaceholderLine(width: double.infinity, height: 14),
-                        const SizedBox(height: 6),
-                        _PlaceholderLine(width: double.infinity, height: 14),
-                        const SizedBox(height: 6),
-                        _PlaceholderLine(width: 160, height: 14),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // ── URL chip ────────────────────────────────────────
-                      if (widget.post.url != null) ...[
-                        _UrlChip(url: widget.post.url!),
-                        const SizedBox(height: 16),
-                      ],
-
-                      const Divider(
-                        color: Color(0xFF2C2C2E),
-                        height: 32,
-                        thickness: 1,
-                      ),
-
-                      // ── Action row ──────────────────────────────────────
-                      _DetailActions(
-                        liked: _liked,
-                        saved: _saved,
-                        likes: _likes,
-                        saves: _saves,
-                        shares: widget.post.sharesCount,
-                        format: _format,
-                        onLike: () => setState(() {
-                          _liked = !_liked;
-                          _likes += _liked ? 1 : -1;
-                        }),
-                        onSave: () => setState(() {
-                          _saved = !_saved;
-                          _saves += _saved ? 1 : -1;
-                        }),
-                        onShare: () {
-                          // TODO: wire share sheet
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-      },
-    );
-  }
-}
-
-// ── Media area ────────────────────────────────────────────────────────────────
-
-class _MediaArea extends StatelessWidget {
-  final PostModel post;
-  final double height;
-
-  const _MediaArea({required this.post, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    if (post.mediaAssetPath.isNotEmpty) {
-      return SizedBox(
-        height: height,
-        width: double.infinity,
-        child: Image.asset(
-          post.mediaAssetPath,
-          fit: BoxFit.cover,
-        ),
-      );
-    }
-    // Empty skeleton media area
-    return Container(
-      height: height,
-      width: double.infinity,
-      color: const Color(0xFF2A2A2E),
-    );
-  }
-}
-
-// ── Author row ────────────────────────────────────────────────────────────────
-
-class _AuthorRow extends StatelessWidget {
-  final PostModel post;
-
-  const _AuthorRow({required this.post});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        // Avatar
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF3A3A3C),
-            image: post.avatarAssetPath != null
-                ? DecorationImage(
-                    image: AssetImage(post.avatarAssetPath!),
-                    fit: BoxFit.cover,
-                  )
-                : null,
           ),
-          child: post.avatarAssetPath == null
-              ? Center(
-                  child: Text(
-                    (post.username ?? 'U')[0].toUpperCase(),
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+          child: Column(
+            children: [
+              // ── Media Area ──────────────────────────────────────────────────
+              Stack(
+                children: [
+                  SizedBox(
+                    height: mediaHeight,
+                    width: double.infinity,
+                    child: isVideo
+                        ? RunningVideoPlayer(
+                            file: widget.userPost?.videoPath != null
+                                ? File(widget.userPost!.videoPath!)
+                                : null,
+                            assetPath: widget.postModel?.mediaAssetPath,
+                            height: mediaHeight,
+                          )
+                        : (widget.userPost?.imagePath != null
+                            ? Image.file(
+                                File(widget.userPost!.imagePath!),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: const Color(0xFF2A2A2E),
+                                    child: const Center(
+                                      child: Icon(Icons.broken_image,
+                                          color: Colors.white54, size: 48),
+                                    ),
+                                  );
+                                },
+                              )
+                            : (widget.postModel?.mediaAssetPath != null &&
+                                    widget.postModel!.mediaAssetPath.isNotEmpty
+                                ? (widget.postModel!.mediaAssetPath == 'assets/images/outfit.png' ||
+                                        widget.postModel!.mediaAssetPath == 'assets/images/jacket.png' ||
+                                        widget.postModel!.mediaAssetPath == 'assets/images/meme.png'
+                                    ? Container(
+                                        color: const Color(0xFF2A2A2E),
+                                        child: const Center(
+                                          child: Icon(Icons.image_outlined,
+                                              color: Colors.white24, size: 48),
+                                        ),
+                                      )
+                                    : Image.asset(
+                                        widget.postModel!.mediaAssetPath,
+                                        fit: BoxFit.cover,
+                                      ))
+                                : Container(
+                                    color: const Color(0xFF2A2A2E),
+                                    child: const Center(
+                                      child: Icon(Icons.broken_image,
+                                          color: Colors.white54, size: 48),
+                                    ),
+                                  ))),
+                  ),
+
+                  // Back button — plain white arrow overlay
+                  Positioned(
+                    top: statusBarHeight + 12,
+                    left: 16,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
                     ),
                   ),
-                )
-              : null,
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              post.username ?? 'Unknown user',
-              style: GoogleFonts.inter(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                ],
               ),
-            ),
-            Text(
-              TranslationManager.t('postedMemory'),
-              style: GoogleFonts.inter(
-                color: const Color(0xFF8E8E93),
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
+
+              // ── Bottom info card (Solid Black, Figma design spec) ───────────
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(28),
+                      topRight: Radius.circular(28),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Handle bar
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF48484A),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Author row ──────────────────────────────────────
+                        Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF3A3A3C),
+                                image: avatarAssetPath != null
+                                    ? DecorationImage(
+                                        image: AssetImage(avatarAssetPath!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: avatarAssetPath == null
+                                  ? Center(
+                                      child: Text(
+                                        username.isNotEmpty ? username[0].toUpperCase() : 'U',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              username,
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Title (All Caps, Bold, White) ────────────────────
+                        if (title.isNotEmpty) ...[
+                          Text(
+                            title.toUpperCase(),
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        // ── Description (Inter Light w300, Silver) ────────────
+                        if (description.isNotEmpty) ...[
+                          Text(
+                            description,
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFFAEAEB2),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w300,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // ── URL Chip (Grey, rounded box) ─────────────────────
+                        if (url != null && url!.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2C2C2E),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              url!,
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFF8E8E93),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        const Divider(
+                          color: Color(0xFF2C2C2E),
+                          height: 32,
+                          thickness: 1,
+                        ),
+
+                        // ── Action Row (Footer with reaction counts) ──────────
+                        Row(
+                          children: [
+                            // Likes
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _liked = !_liked;
+                                _likes += _liked ? 1 : -1;
+                              }),
+                              behavior: HitTestBehavior.opaque,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _liked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
+                                    color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _format(_likes),
+                                    style: GoogleFonts.inter(
+                                      color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+
+                            // Bookmarks / Saves
+                            GestureDetector(
+                              onTap: _toggleSave,
+                              behavior: HitTestBehavior.opaque,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isSaved ? Icons.bookmark : Icons.bookmark_border,
+                                    color: isSaved ? const Color(0xFFBF5AF2) : const Color(0xFFAEAEB2),
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _format(isSaved ? _saves + 1 : _saves),
+                                    style: GoogleFonts.inter(
+                                      color: isSaved ? const Color(0xFFBF5AF2) : const Color(0xFFAEAEB2),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+
+                            // Shares
+                            Row(
+                              children: [
+                                Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.rotationY(math.pi),
+                                  child: const Icon(
+                                    Icons.reply,
+                                    color: Color(0xFFAEAEB2),
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _format(_shares),
+                                  style: GoogleFonts.inter(
+                                    color: const Color(0xFFAEAEB2),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-// ── URL chip ──────────────────────────────────────────────────────────────────
-
-class _UrlChip extends StatelessWidget {
-  final String url;
-
-  const _UrlChip({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C2C2E),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.link, color: Color(0xFF8E8E93), size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              url,
-              style: GoogleFonts.inter(
-                color: const Color(0xFF6B9BF7),
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                decoration: TextDecoration.underline,
-                decorationColor: const Color(0xFF6B9BF7),
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Detail action row ─────────────────────────────────────────────────────────
-
-class _DetailActions extends StatelessWidget {
-  final bool liked;
-  final bool saved;
-  final int likes;
-  final int saves;
-  final int shares;
-  final String Function(int) format;
-  final VoidCallback onLike;
-  final VoidCallback onSave;
-  final VoidCallback onShare;
-
-  const _DetailActions({
-    required this.liked,
-    required this.saved,
-    required this.likes,
-    required this.saves,
-    required this.shares,
-    required this.format,
-    required this.onLike,
-    required this.onSave,
-    required this.onShare,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _Btn(
-          icon: liked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
-          label: format(likes),
-          active: liked,
-          activeColor: const Color(0xFF6B9BF7),
-          onTap: onLike,
         ),
-        const SizedBox(width: 24),
-        _Btn(
-          icon: saved ? Icons.bookmark : Icons.bookmark_border,
-          label: format(saves),
-          active: saved,
-          activeColor: const Color(0xFFBF5AF2),
-          onTap: onSave,
-        ),
-        const SizedBox(width: 24),
-        _Btn(
-          iconWidget: Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.rotationY(math.pi),
-            child: const Icon(Icons.reply, size: 22, color: Color(0xFFAEAEB2)),
-          ),
-          label: format(shares),
-          active: false,
-          activeColor: Colors.white,
-          onTap: onShare,
-        ),
-      ],
-    );
-  }
-}
-
-class _Btn extends StatelessWidget {
-  final IconData? icon;
-  final Widget? iconWidget;
-  final String label;
-  final bool active;
-  final Color activeColor;
-  final VoidCallback onTap;
-
-  const _Btn({
-    this.icon,
-    this.iconWidget,
-    required this.label,
-    required this.active,
-    required this.activeColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color = active ? activeColor : const Color(0xFFAEAEB2);
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          iconWidget ??
-              Icon(icon, size: 22, color: active ? activeColor : const Color(0xFFAEAEB2)),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: color,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Skeleton placeholder line ─────────────────────────────────────────────────
-
-class _PlaceholderLine extends StatelessWidget {
-  final double width;
-  final double height;
-
-  const _PlaceholderLine({required this.width, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C2C2E),
-        borderRadius: BorderRadius.circular(6),
       ),
     );
   }

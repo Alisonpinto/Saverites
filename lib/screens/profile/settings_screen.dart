@@ -587,10 +587,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _currentLanguage = currentLang;
         return Scaffold(
           backgroundColor: Colors.black,
-          body: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(40), // Large outer corner radius
-          child: Container(
+          body: Container(
             width: double.infinity,
             height: double.infinity,
             color: const Color(0xFF121212), // Same background as the profile screen
@@ -910,9 +907,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-        ),
-      ),
-    );
+        );
       },
     );
   }
@@ -933,14 +928,11 @@ class DetailInfoScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(40), // Large outer corner radius
-          child: Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: const Color(0xFF121212), // Same background as settings
-            child: SafeArea(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: const Color(0xFF121212), // Same background as settings
+        child: SafeArea(
               top: false,
               bottom: false,
               child: Column(
@@ -994,8 +986,6 @@ class DetailInfoScreen extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }

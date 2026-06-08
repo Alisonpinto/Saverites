@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'splash_screen.dart';
+import 'utils/notification_manager.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationManager.instance.init();
   runApp(const MyApp());
 }
 

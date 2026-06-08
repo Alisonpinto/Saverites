@@ -33,7 +33,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+                      padding: const EdgeInsets.all(16),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -51,7 +51,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                                   height: 270,
                                   arrow: true,
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 // Card 3: Meme Card (Medium)
                                 _buildMemeCard(
                                   query: 'rekha ji not so sanskari pics',
@@ -60,7 +60,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                                   shares: '100',
                                   height: 210,
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 // Card 5: Second Jacket Card (Short)
                                 _buildJacketCard(
                                   likes: '1.2k',
@@ -68,8 +68,8 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                                   shares: '45',
                                   height: 150,
                                 ),
-                                const SizedBox(height: 12),
-                                // Card 6: Second Panda Card (Tall, Cyan Border)
+                                const SizedBox(height: 16),
+                                // Card 6: Second Panda Card (Tall)
                                 _buildPandaCard(
                                   text: 'chill\nTIME',
                                   borderColor: const Color(0xFF00B0FF),
@@ -81,7 +81,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 16),
                           // Right Column
                           Expanded(
                             child: Column(
@@ -93,8 +93,8 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                                   shares: '100',
                                   height: 150,
                                 ),
-                                const SizedBox(height: 12),
-                                // Card 4: Panda Card (Tall, Pink Border)
+                                const SizedBox(height: 16),
+                                // Card 4: Panda Card (Tall)
                                 _buildPandaCard(
                                   text: 'peace\nBRO!!',
                                   borderColor: const Color(0xFFE52E5E),
@@ -103,7 +103,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                                   shares: '100',
                                   height: 250,
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 // Card 7: Second Meme Card (Medium)
                                 _buildMemeCard(
                                   query: 'flutter app look professional in 5 minutes',
@@ -112,7 +112,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                                   shares: '25',
                                   height: 210,
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 // Card 8: Second Outfit Card (Tall)
                                 _buildOutfitCard(
                                   title: 'Street Style',
@@ -444,12 +444,6 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
       likes: likes,
       bookmarks: bookmarks,
       shares: shares,
-      cardColor: borderColor, // Custom border highlight shell
-      imagePadding: const EdgeInsets.only(top: 6.0, left: 6.0, right: 6.0),
-      imageBorderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(18),
-        topRight: Radius.circular(18),
-      ),
       imageWidget: Stack(
         children: [
           Image.asset(
@@ -576,95 +570,99 @@ class FeedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor ?? Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: imagePadding ?? EdgeInsets.zero,
-            child: ClipRRect(
-              borderRadius: imageBorderRadius ??
-                  const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Top Media Area (Touches left/right edges, no padding, top rounded to 10px)
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(10),
+            topRight: Radius.circular(10),
+          ),
+          child: imageWidget,
+        ),
+        // Bottom Action Strip (Height: 44px, background #E5E5E5, no gap, bottom rounded to 10px)
+        Container(
+          height: 44,
+          decoration: const BoxDecoration(
+            color: Color(0xFFE5E5E5),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(10),
+              bottomRight: Radius.circular(10),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Likes Section
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.thumb_up_alt_outlined,
+                    size: 18,
+                    color: Color(0xFF7C7C81),
                   ),
-              child: imageWidget,
-            ),
-          ),
-          // Light Grey Reaction Footer
-          Container(
-            height: 44,
-            decoration: const BoxDecoration(
-              color: Color(0xFFD9D9D9),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
+                  const SizedBox(width: 4),
+                  Text(
+                    likes,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Likes Section
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.thumb_up_alt_outlined, size: 16, color: Color(0xFF333333)),
-                    const SizedBox(width: 4),
-                    Text(
-                      likes,
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFF333333),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+              // Bookmarks Section
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.bookmark,
+                    size: 18,
+                    color: Color(0xFF7C7C81),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    bookmarks,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                  ],
-                ),
-                // Bookmarks Section
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.bookmark, size: 16, color: Color(0xFF333333)),
-                    const SizedBox(width: 4),
-                    Text(
-                      bookmarks,
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFF333333),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  ),
+                ],
+              ),
+              // Share Section
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.rotationY(math.pi),
+                    child: const Icon(
+                      Icons.reply,
+                      size: 22,
+                      color: Color(0xFF7C7C81),
                     ),
-                  ],
-                ),
-                // Share Section (Flipped reply arrow)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.rotationY(math.pi),
-                      child: const Icon(Icons.reply, size: 20, color: Color(0xFF333333)),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    shares,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      shares,
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFF333333),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

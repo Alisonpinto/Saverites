@@ -7,124 +7,31 @@ import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/notification_tile.dart';
 import '../../utils/translation_manager.dart';
 
-/// Notification centre screen.
-///
-/// Opened by tapping the bell icon in [AppBottomNavigation].
-/// Shows a scrollable list of [NotificationTile] rows with alternating
-/// row backgrounds, matching the Figma design.
-///
-/// Replace [_sampleNotifications] with a `StreamBuilder<List<NotificationModel>>`
-/// connected to Firestore when the backend is ready.
-class NotificationScreen extends StatelessWidget {
-  const NotificationScreen({super.key});
+import '../../utils/notification_manager.dart';
+import '../profile/profile_screen.dart';
 
-  // ── Sample data ────────────────────────────────────────────────────────────
-  //
-  // Structured as a typed list. Every field maps to a Firestore field.
-  // Colours are deterministic per user — in production derive from user ID hash.
+class NotificationScreen extends StatefulWidget {
+  final bool showBottomNav;
+  final bool showBackButton;
 
-  static const List<NotificationModel> _notifications = [
-    NotificationModel(
-      id: 'n1',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'A',
-      avatarColor: Color(0xFF4A90E2),
-      username: 'alex.creates',
-      previewText: 'liked your post',
-      timestamp: '52m',
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n2',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'S',
-      avatarColor: Color(0xFF7B61FF),
-      username: 'sara.m',
-      previewText: 'started following you',
-      timestamp: '1h',
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n3',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'J',
-      avatarColor: Color(0xFFE24A6A),
-      username: 'jordan',
-      previewText: 'saved your post',
-      timestamp: '3h',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n4',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'M',
-      avatarColor: Color(0xFF2ECC71),
-      username: 'mia.visual',
-      previewText: 'commented: "This is stunning 🔥"',
-      timestamp: '5h',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n5',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'R',
-      avatarColor: Color(0xFFE67E22),
-      username: 'ravi.dev',
-      previewText: 'liked your post',
-      timestamp: '8h',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n6',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'L',
-      avatarColor: Color(0xFF1ABC9C),
-      username: 'luna.arts',
-      previewText: 'started following you',
-      timestamp: '1d',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n7',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'K',
-      avatarColor: Color(0xFF9B59B6),
-      username: 'kai.shoots',
-      previewText: 'shared your post',
-      timestamp: '1d',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n8',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'P',
-      avatarColor: Color(0xFFE74C3C),
-      username: 'priya.lens',
-      previewText: 'liked your post',
-      timestamp: '2d',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n9',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'T',
-      avatarColor: Color(0xFF3498DB),
-      username: 'tom.ink',
-      previewText: 'commented: "Where was this taken?"',
-      timestamp: '3d',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n10',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'Z',
-      avatarColor: Color(0xFFF39C12),
-      username: 'zara.film',
-      previewText: 'started following you',
-      timestamp: '5d',
-      isRead: true,
-    ),
-  ];
+  const NotificationScreen({
+    super.key,
+    this.showBottomNav = true,
+    this.showBackButton = true,
+  });
+
+  @override
+  State<NotificationScreen> createState() => _NotificationScreenState();
+}
+
+class _NotificationScreenState extends State<NotificationScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationManager.instance.markAllAsRead();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,45 +47,71 @@ class NotificationScreen extends StatelessWidget {
             systemNavigationBarDividerColor: Colors.transparent,
           ),
           child: Scaffold(
-        backgroundColor: const Color(0xFF121212),
-        body: Column(
-          children: [
-            // ── Header ────────────────────────────────────────────────────
-            _NotificationHeader(statusBarHeight: statusBarHeight),
+            backgroundColor: const Color(0xFF121212),
+            body: Column(
+              children: [
+                // ── Header ────────────────────────────────────────────────────
+                _NotificationHeader(
+                  statusBarHeight: statusBarHeight,
+                  showBackButton: widget.showBackButton,
+                ),
 
-            // ── Notification list ─────────────────────────────────────────
-            Expanded(
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                physics: const BouncingScrollPhysics(),
-                itemCount: _notifications.length,
-                itemBuilder: (context, index) {
-                  return NotificationTile(
-                    notification: _notifications[index],
-                    // Even-index rows get the alternate (slightly lighter) bg.
-                    isAlternate: index.isEven,
-                    onTap: () {
-                      // TODO: mark as read + open notification detail
+                // ── Notification list ─────────────────────────────────────────
+                Expanded(
+                  child: ValueListenableBuilder<List<NotificationModel>>(
+                    valueListenable: NotificationManager.instance.notificationsNotifier,
+                    builder: (context, notificationsList, _) {
+                      return ListView.builder(
+                        padding: EdgeInsets.zero,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: notificationsList.length,
+                        itemBuilder: (context, index) {
+                          return NotificationTile(
+                            notification: notificationsList[index],
+                            // Even-index rows get the alternate (slightly lighter) bg.
+                            isAlternate: index.isEven,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProfileScreen(
+                                    username: notificationsList[index].username,
+                                    avatarAssetPath: notificationsList[index].avatarAssetPath,
+                                    avatarInitial: notificationsList[index].avatarInitial,
+                                    avatarColor: notificationsList[index].avatarColor,
+                                    showBottomNav: false,
+                                    showBackButton: true,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
 
-        // ── Bottom navigation — bell tab active ───────────────────────────
-        bottomNavigationBar: AppBottomNavigation(
-          currentIndex: 2,
-          onTabChanged: (index) {
-            if (index != 2) {
-              // Any other tab → return to feed so it can handle routing.
-              Navigator.pop(context);
-            }
-          },
-        ),
-      ),
-    );
+            // ── Bottom navigation — bell tab active ───────────────────────────
+            bottomNavigationBar: widget.showBottomNav
+                ? AppBottomNavigation(
+                    currentIndex: 2,
+                    onTabChanged: (index) {
+                      if (index == 3) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                        );
+                      } else if (index == 0 || index == 1) {
+                        Navigator.pop(context, index);
+                      }
+                    },
+                  )
+                : null,
+          ),
+        );
       },
     );
   }
@@ -188,8 +121,12 @@ class NotificationScreen extends StatelessWidget {
 
 class _NotificationHeader extends StatelessWidget {
   final double statusBarHeight;
+  final bool showBackButton;
 
-  const _NotificationHeader({required this.statusBarHeight});
+  const _NotificationHeader({
+    required this.statusBarHeight,
+    required this.showBackButton,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -205,17 +142,20 @@ class _NotificationHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Back arrow
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.arrow_back,
-              color: Colors.white,
-              size: 24,
+          if (showBackButton) ...[
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(
+                Icons.arrow_back,
+                color: Colors.white,
+                size: 24,
+              ),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(),
             ),
-            padding: const EdgeInsets.all(8),
-            constraints: const BoxConstraints(),
-          ),
-          const SizedBox(width: 4),
+            const SizedBox(width: 4),
+          ],
+          if (!showBackButton) const SizedBox(width: 12),
           // Title
           Text(
             TranslationManager.t('notification'),

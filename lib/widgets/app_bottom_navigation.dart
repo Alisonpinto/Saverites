@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../utils/notification_manager.dart';
+import '../models/notification_model.dart';
 
 /// Full-width bottom navigation bar.
 ///
@@ -44,11 +46,17 @@ class AppBottomNavigation extends StatelessWidget {
               currentIndex: currentIndex,
               onTap: onTabChanged,
             ),
-            _NotificationIcon(
-              index: 2,
-              currentIndex: currentIndex,
-              onTap: onTabChanged,
-              badge: '1',
+            ValueListenableBuilder<List<NotificationModel>>(
+              valueListenable: NotificationManager.instance.notificationsNotifier,
+              builder: (context, notificationsList, _) {
+                final int unreadCount = notificationsList.where((n) => !n.isRead).length;
+                return _NotificationIcon(
+                  index: 2,
+                  currentIndex: currentIndex,
+                  onTap: onTabChanged,
+                  badge: unreadCount > 0 ? unreadCount.toString() : null,
+                );
+              },
             ),
             _NavIcon(
               icon: Icons.person_outline,

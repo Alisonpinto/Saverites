@@ -13,15 +13,33 @@ import '../../widgets/feed_card.dart';
 import '../../widgets/running_video_player.dart';
 import 'settings_screen.dart';
 import '../post/write_post_screen.dart';
+import '../notifications/notification_screen.dart';
 import '../../utils/post_store.dart';
 import '../post_detail/post_detail_screen.dart';
+import '../../utils/share_helper.dart';
+import '../../utils/rich_text_controller.dart';
 
 
 // ─────────────────────────────────────────────
 //  ProfileScreen – root
 // ─────────────────────────────────────────────
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final String? username;
+  final String? avatarAssetPath;
+  final String? avatarInitial;
+  final Color? avatarColor;
+  final bool showBottomNav;
+  final bool showBackButton;
+
+  const ProfileScreen({
+    super.key,
+    this.username,
+    this.avatarAssetPath,
+    this.avatarInitial,
+    this.avatarColor,
+    this.showBottomNav = true,
+    this.showBackButton = true,
+  });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -181,14 +199,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                              splashRadius: 20,
-                            ),
-                            const SizedBox(width: 4),
+                            if (widget.showBackButton) ...[
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                                padding: const EdgeInsets.all(8),
+                                constraints: const BoxConstraints(),
+                                splashRadius: 20,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            if (!widget.showBackButton)
+                              const SizedBox(width: 12),
                             Text(
                               'Profile',
                               style: GoogleFonts.inter(
@@ -242,10 +264,34 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   children: [
                                     Transform.translate(
                                       offset: Offset(0, -(_scrollOffset * 0.04).clamp(-8.0, 8.0)),
-                                      child: const SizedBox(
+                                      child: SizedBox(
                                         width: 130,
                                         height: 130,
-                                        child: _AnimatedAvatar(size: 130),
+                                        child: widget.avatarAssetPath != null || widget.avatarInitial != null
+                                            ? Container(
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: widget.avatarColor ?? const Color(0xFF7B61FF),
+                                                  image: widget.avatarAssetPath != null
+                                                      ? DecorationImage(
+                                                          image: AssetImage(widget.avatarAssetPath!),
+                                                          fit: BoxFit.cover,
+                                                        )
+                                                      : null,
+                                                ),
+                                                alignment: Alignment.center,
+                                                child: widget.avatarAssetPath == null && widget.avatarInitial != null
+                                                    ? Text(
+                                                        widget.avatarInitial!.toUpperCase(),
+                                                        style: GoogleFonts.inter(
+                                                          color: Colors.white,
+                                                          fontSize: 48,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      )
+                                                    : null,
+                                              )
+                                            : const _AnimatedAvatar(size: 130),
                                       ),
                                     ),
                                     const SizedBox(width: 20),
@@ -254,7 +300,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'gangster_vagas',
+                                            widget.username ?? 'gangster_vagas',
                                             style: GoogleFonts.inter(
                                               color: Colors.white,
                                               fontSize: 18,
@@ -464,7 +510,40 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   icon: Icons.save_outlined,
                                   onTap: () {
                                     _closeFab();
-                                    // TODO: navigate to save item
+                                    Navigator.push(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder: (context, animation, secondaryAnimation) => const WritePostScreen(isSaveItem: true),
+                                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                          final slideAnimation = Tween<Offset>(
+                                            begin: const Offset(0.0, 0.08),
+                                            end: Offset.zero,
+                                          ).animate(
+                                            CurvedAnimation(
+                                              parent: animation,
+                                              curve: Curves.easeOutCubic,
+                                            ),
+                                          );
+                                          final fadeAnimation = Tween<double>(
+                                            begin: 0.0,
+                                            end: 1.0,
+                                          ).animate(
+                                            CurvedAnimation(
+                                              parent: animation,
+                                              curve: Curves.easeIn,
+                                            ),
+                                          );
+                                          return FadeTransition(
+                                            opacity: fadeAnimation,
+                                            child: SlideTransition(
+                                              position: slideAnimation,
+                                              child: child,
+                                            ),
+                                          );
+                                        },
+                                        transitionDuration: const Duration(milliseconds: 400),
+                                      ),
+                                    );
                                   },
                                 ),
                               ),
@@ -491,12 +570,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ],
             ),
-            bottomNavigationBar: AppBottomNavigation(
-              currentIndex: 3,
-              onTabChanged: (index) {
-                if (index != 3) Navigator.pop(context);
-              },
-            ),
+            bottomNavigationBar: widget.showBottomNav
+                ? AppBottomNavigation(
+                    currentIndex: 3,
+                    onTabChanged: (index) {
+                      if (index == 2) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                        );
+                      } else if (index == 0 || index == 1) {
+                        Navigator.pop(context, index);
+                      }
+                    },
+                  )
+                : null,
           ),
         );
       },
@@ -504,24 +592,43 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildProfileGrid() {
+    final bool isMyProfile = widget.username == null || widget.username == 'gangster_vagas';
+    
     if (_activeTab == 0) {
-      return ValueListenableBuilder<Set<String>>(
-        valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
-        builder: (context, savedSocialIds, _) {
-          final posts = PostStore.predefinedPosts
-              .where((p) => savedSocialIds.contains(p.id))
-              .toList();
-          return _ProfileMasonryGrid(items: posts, isOnline: _isOnline);
-        },
-      );
+      if (isMyProfile) {
+        return ValueListenableBuilder<Set<String>>(
+          valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
+          builder: (context, savedSocialIds, _) {
+            return ValueListenableBuilder<List<UserPost>>(
+              valueListenable: PostStore.instance.postsNotifier,
+              builder: (context, postsList, _) {
+                final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
+                final savedPredefined = PostStore.predefinedPosts
+                    .where((p) => savedSocialIds.contains(p.id))
+                    .toList();
+                final allSaved = [...savedUserPosts, ...savedPredefined];
+                return _ProfileMasonryGrid(items: allSaved, isOnline: _isOnline);
+              },
+            );
+          },
+        );
+      } else {
+        final friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+        return _ProfileMasonryGrid(items: friendPosts, isOnline: _isOnline);
+      }
     } else {
-      return ValueListenableBuilder<List<UserPost>>(
-        valueListenable: PostStore.instance.postsNotifier,
-        builder: (context, postsList, _) {
-          final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
-          return _ProfileMasonryGrid(items: savedUserPosts, isOnline: _isOnline);
-        },
-      );
+      if (isMyProfile) {
+        return ValueListenableBuilder<List<UserPost>>(
+          valueListenable: PostStore.instance.postsNotifier,
+          builder: (context, postsList, _) {
+            final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
+            return _ProfileMasonryGrid(items: savedUserPosts, isOnline: _isOnline);
+          },
+        );
+      } else {
+        final friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+        return _ProfileMasonryGrid(items: friendPosts, isOnline: _isOnline);
+      }
     }
   }
 }
@@ -981,7 +1088,7 @@ class _ProfileMasonryGrid extends StatelessWidget {
           Expanded(
             child: _ProfileMasonryColumn(items: left, isOnline: isOnline),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             child: _ProfileMasonryColumn(items: right, isOnline: isOnline),
           ),
@@ -1010,7 +1117,7 @@ class _ProfileMasonryColumn extends StatelessWidget {
             item: items[i],
             isOnline: isOnline,
           ),
-          if (i < items.length - 1) const SizedBox(height: 12),
+          if (i < items.length - 1) const SizedBox(height: 16),
         ],
       ],
     );
@@ -1105,137 +1212,205 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
       );
     }
 
-    final isSaved = widget.item is UserPost
-        ? (widget.item as UserPost).savedInProfile
-        : PostStore.instance.savedSocialPostIds.contains((widget.item as PostModel).id);
+    final itemId = widget.item is UserPost
+        ? (widget.item as UserPost).id
+        : (widget.item as PostModel).id;
 
-    final likes = widget.item is UserPost ? '1k' : _format((widget.item as PostModel).likesCount);
-    final bookmarks = widget.item is UserPost ? '1.3k' : _format((widget.item as PostModel).savesCount);
-    final shares = widget.item is UserPost ? '100' : _format((widget.item as PostModel).sharesCount);
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        PostStore.instance.likedPostIdsNotifier,
+        widget.item is UserPost
+            ? PostStore.instance.postsNotifier
+            : PostStore.instance.savedSocialPostIdsNotifier,
+      ]),
+      builder: (context, _) {
+        final isLiked = PostStore.instance.likedPostIds.contains(itemId);
+        final isSaved = widget.item is UserPost
+            ? PostStore.instance.posts
+                .firstWhere((p) => p.id == itemId, orElse: () => widget.item as UserPost)
+                .savedInProfile
+            : PostStore.instance.savedSocialPostIds.contains(itemId);
 
-    Widget mediaWidget;
-    Color? cardColor;
-    EdgeInsets? imagePadding;
-    BorderRadius? imageBorderRadius;
+        final likes = isLiked ? '1' : '0';
+        final bookmarks = widget.item is UserPost
+            ? (isSaved ? '1' : '0')
+            : _format(isSaved
+                ? (widget.item as PostModel).savesCount + 1
+                : (widget.item as PostModel).savesCount);
+        final shares = widget.item is UserPost ? '0' : _format((widget.item as PostModel).sharesCount);
 
-    if (widget.item is UserPost) {
-      final post = widget.item as UserPost;
-      if (post.videoPath != null) {
-        mediaWidget = RunningVideoPlayer(
-          file: File(post.videoPath!),
-          height: cardHeight - 44,
-        );
-      } else if (post.imagePath != null) {
-        mediaWidget = Image.file(
-          File(post.imagePath!),
-          fit: BoxFit.cover,
-          height: cardHeight - 44,
-          width: double.infinity,
-          errorBuilder: (context, error, stackTrace) => Container(
-            height: cardHeight - 44,
-            color: const Color(0xFF2A2A2E),
-            child: const Center(
-              child: Icon(Icons.broken_image, color: Colors.white54, size: 32),
-            ),
+        Widget mediaWidget;
+        Color? cardColor;
+        EdgeInsets? imagePadding;
+        BorderRadius? imageBorderRadius;
+
+        if (widget.item is UserPost) {
+          final post = widget.item as UserPost;
+          if (post.videoPath != null) {
+            mediaWidget = RunningVideoPlayer(
+              file: File(post.videoPath!),
+            );
+          } else if (post.imagePath != null) {
+            mediaWidget = Image.file(
+              File(post.imagePath!),
+              fit: BoxFit.cover,
+              width: double.infinity,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: 150,
+                color: const Color(0xFF2A2A2E),
+                child: const Center(
+                  child: Icon(Icons.broken_image, color: Colors.white54, size: 32),
+                ),
+              ),
+            );
+          } else {
+            mediaWidget = Container(
+              height: 120,
+              padding: const EdgeInsets.all(12),
+              color: const Color(0xFF2A2A2E),
+              alignment: Alignment.topLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    post.title.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: RichTextController.buildRichText(
+                      post.body,
+                      post.charStyles,
+                      defaultStyle: GoogleFonts.inter(
+                        color: const Color(0xFFAEAEB2),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w300,
+                      ),
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        } else {
+          final post = widget.item as PostModel;
+          
+          // Removed custom border padding and accentColor backgrounds to enforce uniform layout
+          Widget childWidget;
+          if (post.mediaType == PostMediaType.video) {
+            childWidget = RunningVideoPlayer(
+              assetPath: post.mediaAssetPath,
+              height: cardHeight - 44,
+            );
+          } else {
+            childWidget = Image.asset(
+              post.mediaAssetPath,
+              fit: BoxFit.cover,
+              height: cardHeight - 44,
+              width: double.infinity,
+            );
+          }
+
+          if (post.id == 'social-1') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildOutfitOverlay('Trend Huntss', true),
+              ],
+            );
+          } else if (post.id == 'social-8') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildOutfitOverlay('Street Style', false),
+              ],
+            );
+          } else if (post.id == 'social-3') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildMemeOverlay('rekha ji not so sanskari pics'),
+              ],
+            );
+          } else if (post.id == 'social-7') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildMemeOverlay('flutter app look professional in 5 minutes'),
+              ],
+            );
+          } else if (post.id == 'social-4') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildPandaOverlay('peace\nBRO!!'),
+              ],
+            );
+          } else if (post.id == 'social-6') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildPandaOverlay('chill\nTIME'),
+              ],
+            );
+          } else {
+            mediaWidget = childWidget;
+          }
+        }
+
+
+        return GestureDetector(
+          onTap: onTap,
+          child: FeedCard(
+            imageWidget: mediaWidget,
+            likes: likes,
+            bookmarks: bookmarks,
+            shares: shares,
+            cardColor: cardColor,
+            imagePadding: imagePadding,
+            imageBorderRadius: imageBorderRadius,
+            isLiked: isLiked,
+            isSaved: isSaved,
+            onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
+            onSaveTap: () {
+              if (widget.item is UserPost) {
+                PostStore.instance.toggleSavedInProfile(itemId);
+              } else {
+                PostStore.instance.toggleSavedSocialPost(itemId);
+              }
+            },
+            onShareTap: () async {
+              if (widget.item is UserPost) {
+                final post = widget.item as UserPost;
+                await ShareHelper.sharePost(
+                  title: post.title,
+                  description: post.body,
+                  url: post.url,
+                  localImagePath: post.imagePath,
+                  localVideoPath: post.videoPath,
+                );
+              } else {
+                final post = widget.item as PostModel;
+                await ShareHelper.sharePost(
+                  title: post.title ?? '',
+                  description: post.description,
+                  url: post.url,
+                  assetPath: post.mediaAssetPath,
+                );
+              }
+            },
           ),
         );
-      } else {
-        mediaWidget = Container(height: cardHeight - 44, color: const Color(0xFF2A2A2E));
-      }
-    } else {
-      final post = widget.item as PostModel;
-      
-      if (post.id == 'social-4' || post.id == 'social-6') {
-        cardColor = post.accentColor;
-        imagePadding = const EdgeInsets.only(top: 6.0, left: 6.0, right: 6.0);
-        imageBorderRadius = const BorderRadius.only(
-          topLeft: Radius.circular(18),
-          topRight: Radius.circular(18),
-        );
-      }
-
-      Widget childWidget;
-      if (post.mediaType == PostMediaType.video) {
-        childWidget = RunningVideoPlayer(
-          assetPath: post.mediaAssetPath,
-          height: cardHeight - 44,
-        );
-      } else if (post.mediaAssetPath == 'assets/images/outfit.png' ||
-          post.mediaAssetPath == 'assets/images/jacket.png' ||
-          post.mediaAssetPath == 'assets/images/meme.png') {
-        childWidget = Container(
-          height: cardHeight - 44,
-          width: double.infinity,
-          color: const Color(0xFF2A2A2E),
-        );
-      } else {
-        childWidget = Image.asset(
-          post.mediaAssetPath,
-          fit: BoxFit.cover,
-          height: cardHeight - 44,
-          width: double.infinity,
-        );
-      }
-
-      if (post.id == 'social-1') {
-        mediaWidget = Stack(
-          children: [
-            childWidget,
-            _buildOutfitOverlay('Trend Huntss', true),
-          ],
-        );
-      } else if (post.id == 'social-8') {
-        mediaWidget = Stack(
-          children: [
-            childWidget,
-            _buildOutfitOverlay('Street Style', false),
-          ],
-        );
-      } else if (post.id == 'social-3') {
-        mediaWidget = Stack(
-          children: [
-            childWidget,
-            _buildMemeOverlay('rekha ji not so sanskari pics'),
-          ],
-        );
-      } else if (post.id == 'social-7') {
-        mediaWidget = Stack(
-          children: [
-            childWidget,
-            _buildMemeOverlay('flutter app look professional in 5 minutes'),
-          ],
-        );
-      } else if (post.id == 'social-4') {
-        mediaWidget = Stack(
-          children: [
-            childWidget,
-            _buildPandaOverlay('peace\nBRO!!'),
-          ],
-        );
-      } else if (post.id == 'social-6') {
-        mediaWidget = Stack(
-          children: [
-            childWidget,
-            _buildPandaOverlay('chill\nTIME'),
-          ],
-        );
-      } else {
-        mediaWidget = childWidget;
-      }
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: FeedCard(
-        imageWidget: mediaWidget,
-        likes: likes,
-        bookmarks: bookmarks,
-        shares: shares,
-        cardColor: cardColor,
-        imagePadding: imagePadding,
-        imageBorderRadius: imageBorderRadius,
-        isSaved: isSaved,
-      ),
+      },
     );
   }
 

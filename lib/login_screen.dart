@@ -80,10 +80,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       builder: (context, _, _) {
         return Scaffold(
           backgroundColor: Colors.black,
-      body: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(40),
-          child: Container(
+          body: Container(
             width: double.infinity,
             height: double.infinity,
             decoration: const BoxDecoration(
@@ -382,9 +379,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               ),
             ),
           ),
-        ),
-      ),
-    );
+        );
       },
     );
   }

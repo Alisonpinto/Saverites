@@ -125,6 +125,13 @@ class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBin
       );
     }
 
+    if (widget.height == null) {
+      return AspectRatio(
+        aspectRatio: _controller!.value.aspectRatio,
+        child: VideoPlayer(_controller!),
+      );
+    }
+
     return SizedBox(
       height: widget.height,
       width: double.infinity,

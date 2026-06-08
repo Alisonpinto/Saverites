@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +7,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/post_model.dart';
 import '../../utils/post_store.dart';
+import '../../utils/share_helper.dart';
 import '../../widgets/running_video_player.dart';
+import '../../widgets/feed_card.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../utils/rich_text_controller.dart';
 
 /// Unified full-screen detail view for any post (user-created or predefined social post).
 ///
@@ -26,7 +31,6 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  bool _liked = false;
   late int _likes;
   late int _saves;
   late int _shares;
@@ -34,19 +38,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _likes = widget.postModel?.likesCount ?? 1000;
-    _saves = widget.postModel?.savesCount ?? 1300;
-    _shares = widget.postModel?.sharesCount ?? 100;
+    _likes = 0;
+    _saves = widget.postModel?.savesCount ?? 0;
+    _shares = widget.postModel?.sharesCount ?? 0;
 
     // Listen to changes in the global stores to update reactive status
     PostStore.instance.postsNotifier.addListener(_onStoreChanged);
     PostStore.instance.savedSocialPostIdsNotifier.addListener(_onStoreChanged);
+    PostStore.instance.likedPostIdsNotifier.addListener(_onStoreChanged);
   }
 
   @override
   void dispose() {
     PostStore.instance.postsNotifier.removeListener(_onStoreChanged);
     PostStore.instance.savedSocialPostIdsNotifier.removeListener(_onStoreChanged);
+    PostStore.instance.likedPostIdsNotifier.removeListener(_onStoreChanged);
     super.dispose();
   }
 
@@ -57,12 +63,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   // Helper getters to unify UserPost and PostModel properties
+  UserPost? get currentUserPost {
+    if (widget.userPost == null) return null;
+    final posts = PostStore.instance.posts;
+    final idx = posts.indexWhere((p) => p.id == widget.userPost!.id);
+    if (idx != -1) return posts[idx];
+    return widget.userPost;
+  }
+
   String get id => widget.userPost?.id ?? widget.postModel!.id;
-  String get title => widget.userPost?.title ?? widget.postModel?.title ?? '';
-  String get description => widget.userPost?.body ?? widget.postModel?.description ?? '';
+  String get title => currentUserPost?.title ?? widget.postModel?.title ?? '';
+  String get description => currentUserPost?.body ?? widget.postModel?.description ?? '';
+  List<RichStyle>? get charStyles => currentUserPost?.charStyles;
   String get username => widget.userPost != null ? 'gangster_vagas' : (widget.postModel?.username ?? 'Unknown user');
   String? get avatarAssetPath => widget.userPost != null ? null : widget.postModel?.avatarAssetPath;
-  String? get url => widget.postModel?.url;
+  String? get url => widget.userPost?.url ?? widget.postModel?.url;
+  bool get _liked => PostStore.instance.likedPostIds.contains(id);
 
   bool get isSaved {
     if (widget.userPost != null) {
@@ -95,6 +111,40 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       PostStore.instance.toggleSavedInProfile(id);
     } else {
       PostStore.instance.toggleSavedSocialPost(id);
+    }
+  }
+
+  void _sharePost() async {
+    if (widget.userPost != null) {
+      await ShareHelper.sharePost(
+        title: title,
+        description: description,
+        url: url,
+        localImagePath: widget.userPost!.imagePath,
+        localVideoPath: widget.userPost!.videoPath,
+      );
+    } else if (widget.postModel != null) {
+      await ShareHelper.sharePost(
+        title: title,
+        description: description,
+        url: url,
+        assetPath: widget.postModel!.mediaAssetPath,
+      );
+    }
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    String normalized = urlString.trim();
+    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      normalized = 'https://$normalized';
+    }
+    final Uri parseUrl = Uri.parse(normalized);
+    try {
+      if (!await launchUrl(parseUrl, mode: LaunchMode.externalApplication)) {
+        debugPrint("Could not launch $parseUrl");
+      }
+    } catch (e) {
+      debugPrint("Error launching url: $e");
     }
   }
 
@@ -157,20 +207,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               )
                             : (widget.postModel?.mediaAssetPath != null &&
                                     widget.postModel!.mediaAssetPath.isNotEmpty
-                                ? (widget.postModel!.mediaAssetPath == 'assets/images/outfit.png' ||
-                                        widget.postModel!.mediaAssetPath == 'assets/images/jacket.png' ||
-                                        widget.postModel!.mediaAssetPath == 'assets/images/meme.png'
-                                    ? Container(
-                                        color: const Color(0xFF2A2A2E),
-                                        child: const Center(
-                                          child: Icon(Icons.image_outlined,
-                                              color: Colors.white24, size: 48),
-                                        ),
-                                      )
-                                    : Image.asset(
-                                        widget.postModel!.mediaAssetPath,
-                                        fit: BoxFit.cover,
-                                      ))
+                                ? Image.asset(
+                                    widget.postModel!.mediaAssetPath,
+                                    fit: BoxFit.cover,
+                                  )
                                 : Container(
                                     color: const Color(0xFF2A2A2E),
                                     child: const Center(
@@ -288,34 +328,30 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
                         // ── Description (Inter Light w300, Silver) ────────────
                         if (description.isNotEmpty) ...[
-                          Text(
-                            description,
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFFAEAEB2),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w300,
-                              height: 1.5,
-                            ),
-                          ),
+                          _buildDescriptionBlocks(description, charStyles),
                           const SizedBox(height: 16),
                         ],
 
                         // ── URL Chip (Grey, rounded box) ─────────────────────
                         if (url != null && url!.isNotEmpty) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2C2C2E),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              url!,
-                              style: GoogleFonts.inter(
-                                color: const Color(0xFF8E8E93),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
+                          GestureDetector(
+                            onTap: () => _launchUrl(url!),
+                            behavior: HitTestBehavior.opaque,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2C2C2E),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              overflow: TextOverflow.ellipsis,
+                              child: Text(
+                                url!,
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF8E8E93),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -332,21 +368,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           children: [
                             // Likes
                             GestureDetector(
-                              onTap: () => setState(() {
-                                _liked = !_liked;
-                                _likes += _liked ? 1 : -1;
-                              }),
+                              onTap: () => PostStore.instance.toggleLikedPost(id),
                               behavior: HitTestBehavior.opaque,
                               child: Row(
                                 children: [
-                                  Icon(
-                                    _liked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
-                                    color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
-                                    size: 22,
+                                  BouncingIcon(
+                                    trigger: _liked,
+                                    child: Icon(
+                                      _liked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
+                                      color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
+                                      size: 22,
+                                    ),
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    _format(_likes),
+                                    _format(_liked ? _likes + 1 : _likes),
                                     style: GoogleFonts.inter(
                                       color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
                                       fontSize: 14,
@@ -364,10 +400,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               behavior: HitTestBehavior.opaque,
                               child: Row(
                                 children: [
-                                  Icon(
-                                    isSaved ? Icons.bookmark : Icons.bookmark_border,
-                                    color: isSaved ? const Color(0xFFBF5AF2) : const Color(0xFFAEAEB2),
-                                    size: 22,
+                                  BouncingIcon(
+                                    trigger: isSaved,
+                                    child: Icon(
+                                      isSaved ? Icons.bookmark : Icons.bookmark_border,
+                                      color: isSaved ? const Color(0xFFBF5AF2) : const Color(0xFFAEAEB2),
+                                      size: 22,
+                                    ),
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
@@ -384,27 +423,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             const SizedBox(width: 24),
 
                             // Shares
-                            Row(
-                              children: [
-                                Transform(
-                                  alignment: Alignment.center,
-                                  transform: Matrix4.rotationY(math.pi),
-                                  child: const Icon(
-                                    Icons.reply,
-                                    color: Color(0xFFAEAEB2),
-                                    size: 24,
+                            GestureDetector(
+                              onTap: _sharePost,
+                              behavior: HitTestBehavior.opaque,
+                              child: Row(
+                                children: [
+                                  Transform(
+                                    alignment: Alignment.center,
+                                    transform: Matrix4.rotationY(math.pi),
+                                    child: const Icon(
+                                      Icons.reply,
+                                      color: Color(0xFFAEAEB2),
+                                      size: 24,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _format(_shares),
-                                  style: GoogleFonts.inter(
-                                    color: const Color(0xFFAEAEB2),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _format(_shares),
+                                    style: GoogleFonts.inter(
+                                      color: const Color(0xFFAEAEB2),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -415,6 +458,933 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // Block parsing and building helpers
+  Widget _buildDescriptionBlocks(String desc, List<RichStyle>? styles) {
+    final blocks = parseBody(desc);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: List.generate(blocks.length, (idx) {
+        final block = blocks[idx];
+        final sliceStyles = getSlice(styles, block.startIndex, block.endIndex);
+        
+        switch (block.type) {
+          case BlockType.checklist:
+            return _buildChecklistItemBlock(block, sliceStyles);
+          case BlockType.document:
+            return _buildDocumentBlock(block.meta?['name'] ?? 'Document.pdf');
+          case BlockType.contact:
+            return _buildContactBlock(block.meta?['details'] ?? 'Alex Rivers (+1 555-0199)');
+          case BlockType.audio:
+            return AudioPlayerBlock(durationText: block.meta?['duration'] ?? '0:45 min');
+          case BlockType.code:
+            return _buildCodeBlock(block.text, block.meta?['lang'] ?? 'dart');
+          case BlockType.text:
+          default:
+            if (block.text.trim().isEmpty) {
+              return const SizedBox(height: 8);
+            }
+            final isBullet = block.text.trim().startsWith('•') || block.text.trim().startsWith('-');
+            return Padding(
+              padding: EdgeInsets.only(bottom: 6, left: isBullet ? 12.0 : 0.0),
+              child: RichTextController.buildRichText(
+                block.text,
+                sliceStyles,
+                defaultStyle: GoogleFonts.inter(
+                  color: const Color(0xFFAEAEB2),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w300,
+                  height: 1.5,
+                ),
+              ),
+            );
+        }
+      }),
+    );
+  }
+
+  List<RichStyle>? getSlice(List<RichStyle>? styles, int start, int end) {
+    if (styles == null || styles.isEmpty) return null;
+    if (start < 0 || end > styles.length || start > end) return null;
+    return styles.sublist(start, end);
+  }
+
+  Widget _buildChecklistItemBlock(ContentBlock block, List<RichStyle>? sliceStyles) {
+    final bool isTodo = block.text.contains('To-do item:');
+    final String cleanText = block.text.replaceAll('To-do item:', '').trim();
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => _toggleChecklistBlock(block),
+            child: Container(
+              margin: const EdgeInsets.only(top: 2, right: 10),
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: block.isChecked 
+                  ? (isTodo ? const Color(0xFFBF5AF2) : const Color(0xFF6B9BF7)) 
+                  : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: block.isChecked 
+                    ? Colors.transparent 
+                    : const Color(0xFF8E8E93), 
+                  width: 1.5
+                ),
+              ),
+              child: block.isChecked 
+                ? const Icon(Icons.check, color: Colors.black, size: 12) 
+                : null,
+            ),
+          ),
+          if (isTodo) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              margin: const EdgeInsets.only(right: 6, top: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFFBF5AF2).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: const Color(0xFFBF5AF2).withOpacity(0.3), width: 0.5),
+              ),
+              child: Text(
+                'TO-DO',
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFBF5AF2),
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+          Expanded(
+            child: Opacity(
+              opacity: block.isChecked ? 0.45 : 1.0,
+              child: RichTextController.buildRichText(
+                cleanText,
+                sliceStyles != null && sliceStyles.length > (block.text.length - cleanText.length)
+                    ? sliceStyles.sublist(sliceStyles.length - cleanText.length)
+                    : sliceStyles,
+                defaultStyle: GoogleFonts.inter(
+                  color: const Color(0xFFAEAEB2),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w300,
+                  decoration: block.isChecked ? TextDecoration.lineThrough : TextDecoration.none,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleChecklistBlock(ContentBlock block) {
+    final currentText = description;
+    final int targetPos = block.startIndex;
+    if (targetPos + 3 <= currentText.length) {
+      final prefix = currentText.substring(targetPos, targetPos + 3);
+      String newPrefix = '';
+      if (prefix == '[ ]') {
+        newPrefix = '[x]';
+      } else if (prefix == '[x]' || prefix == '[X]') {
+        newPrefix = '[ ]';
+      }
+      
+      if (newPrefix.isNotEmpty) {
+        final newText = currentText.replaceRange(targetPos, targetPos + 3, newPrefix);
+        if (widget.userPost != null) {
+          PostStore.instance.updatePostText(widget.userPost!.id, newText, widget.userPost!.charStyles);
+        }
+      }
+    }
+  }
+
+  Widget _buildDocumentBlock(String docName) {
+    String type = docName.split('.').last.toUpperCase();
+    IconData icon = Icons.description_outlined;
+    Color color = const Color(0xFF8E8E93);
+    if (type == 'PDF') {
+      icon = Icons.picture_as_pdf_outlined;
+      color = Colors.redAccent;
+    } else if (type == 'DOC' || type == 'DOCX') {
+      icon = Icons.description_outlined;
+      color = const Color(0xFF6B9BF7);
+    } else if (type == 'XLS' || type == 'XLSX') {
+      icon = Icons.table_chart_outlined;
+      color = Colors.greenAccent;
+    } else if (type == 'ZIP' || type == 'RAR') {
+      icon = Icons.folder_zip_outlined;
+      color = Colors.amberAccent;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: GestureDetector(
+        onTap: () => _openDocumentReader(docName),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white12, width: 0.5),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      docName,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$type Attachment • Tap to view',
+                      style: GoogleFonts.inter(
+                        color: Colors.white30,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white38, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDocumentReader(String docName) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF111216),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext ctx) {
+        double currentZoom = 100.0;
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return FractionallySizedBox(
+              heightFactor: 0.9,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    color: const Color(0xFF1C1C1E),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            docName,
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
+                          onPressed: () {
+                            if (currentZoom > 50) {
+                              setModalState(() => currentZoom -= 25);
+                            }
+                          },
+                        ),
+                        Text(
+                          '${currentZoom.toInt()}%',
+                          style: GoogleFonts.robotoMono(color: Colors.white70, fontSize: 13),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline, color: Colors.white70, size: 20),
+                          onPressed: () {
+                            if (currentZoom < 200) {
+                              setModalState(() => currentZoom += 25);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black38,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            padding: EdgeInsets.all(24 * (currentZoom / 100)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  docName.toUpperCase(),
+                                  style: GoogleFonts.inter(
+                                    color: Colors.black,
+                                    fontSize: 18 * (currentZoom / 100),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Divider(color: Colors.black12, thickness: 1.5, height: 24 * (currentZoom / 100)),
+                                Text(
+                                  'MEMORIA VAULT FILE\nClassification: Confidential\n\n'
+                                  'This document is stored as a reference attachment within the Memoria vault.\n\n'
+                                  'Security Guidelines:\n'
+                                  '• Local files are encrypted via local keys.\n'
+                                  '• External transmission requires user authentication.\n\n'
+                                  'Notes:\n'
+                                  'Ensure documents are classified properly and backups are updated.',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.black.withValues(alpha: 0.85),
+                                    fontSize: 13 * (currentZoom / 100),
+                                    height: 1.6,
+                                  ),
+                                ),
+                                const SizedBox(height: 80),
+                                Center(
+                                  child: Text(
+                                    '- Page 1 of 1 -',
+                                    style: GoogleFonts.inter(color: Colors.black38, fontSize: 10 * (currentZoom / 100)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildContactBlock(String contactDetails) {
+    final match = RegExp(r'^([^\(]+)(?:\((.+)\))?$').firstMatch(contactDetails);
+    String name = contactDetails;
+    String phone = 'No number';
+    if (match != null) {
+      name = match.group(1)!.trim();
+      phone = (match.group(2) ?? '').trim();
+    }
+    
+    final String initial = name.isNotEmpty ? name[0].toUpperCase() : 'C';
+
+    void performCall() async {
+      final cleanPhone = phone.replaceAll(RegExp(r'[^\d\+]'), '');
+      final Uri telUri = Uri.parse('tel:$cleanPhone');
+      try {
+        if (!await launchUrl(telUri)) {
+          debugPrint("Could not launch tel:$cleanPhone");
+        }
+      } catch (e) {
+        debugPrint("Error making call: $e");
+      }
+    }
+
+    void performMessage() async {
+      final cleanPhone = phone.replaceAll(RegExp(r'[^\d\+]'), '');
+      final Uri smsUri = Uri.parse('sms:$cleanPhone');
+      try {
+        if (!await launchUrl(smsUri)) {
+          debugPrint("Could not launch sms:$cleanPhone");
+        }
+      } catch (e) {
+        debugPrint("Error sending message: $e");
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFFBF5AF2), Color(0xFF6B9BF7)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    phone,
+                    style: GoogleFonts.inter(
+                      color: Colors.white30,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.phone_outlined, color: Color(0xFF6B9BF7), size: 20),
+              onPressed: performCall,
+            ),
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFBF5AF2), size: 20),
+              onPressed: performMessage,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCodeBlock(String code, String lang) {
+    void copyCode() {
+      Clipboard.setData(ClipboardData(text: code));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 1),
+          backgroundColor: const Color(0xFF2C2C2E),
+          content: Text(
+            'Copied to Clipboard!',
+            style: GoogleFonts.inter(color: Colors.white),
+          ),
+        ),
+      );
+    }
+
+    TextSpan highlightCode(String rawCode) {
+      final keywords = RegExp(r'\b(class|import|void|final|const|return|if|else|var|let|function|def|int|double|String|bool|Map|List|static|override)\b');
+      final comments = RegExp(r'(//.*|#.*)');
+      final strings = RegExp(r'(\u0022[^\u0022]*\u0022|\u0027[^\u0027]*\u0027)');
+      
+      final List<TextSpan> spans = [];
+      final lines = rawCode.split('\n');
+      
+      for (int i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        int currentPos = 0;
+        
+        final List<RegExpMatch> matches = [];
+        matches.addAll(keywords.allMatches(line));
+        matches.addAll(comments.allMatches(line));
+        matches.addAll(strings.allMatches(line));
+        matches.sort((a, b) => a.start.compareTo(b.start));
+        
+        final List<RegExpMatch> cleanMatches = [];
+        int lastEnd = 0;
+        for (final match in matches) {
+          if (match.start >= lastEnd) {
+            cleanMatches.add(match);
+            lastEnd = match.end;
+          }
+        }
+
+        for (final match in cleanMatches) {
+          if (match.start > currentPos) {
+            spans.add(TextSpan(text: line.substring(currentPos, match.start), style: const TextStyle(color: Color(0xFFDCDCAA))));
+          }
+          
+          final textMatch = line.substring(match.start, match.end);
+          Color c = Colors.white;
+          if (keywords.hasMatch(textMatch)) {
+            c = const Color(0xFF569CD6);
+          } else if (comments.hasMatch(textMatch)) {
+            c = const Color(0xFF6A9955);
+          } else if (strings.hasMatch(textMatch)) {
+            c = const Color(0xFFCE9178);
+          }
+          spans.add(TextSpan(text: textMatch, style: TextStyle(color: c)));
+          currentPos = match.end;
+        }
+        
+        if (currentPos < line.length) {
+          spans.add(TextSpan(text: line.substring(currentPos), style: const TextStyle(color: Color(0xFFDCDCAA))));
+        }
+        
+        if (i < lines.length - 1) {
+          spans.add(const TextSpan(text: '\n'));
+        }
+      }
+      return TextSpan(children: spans);
+    }
+
+    final lines = code.split('\n');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white10, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF2D2D2D),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  ...List.generate(3, (idx) {
+                    final color = idx == 0 ? Colors.redAccent : (idx == 1 ? Colors.amberAccent : Colors.greenAccent);
+                    return Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.8),
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }),
+                  const SizedBox(width: 8),
+                  Text(
+                    lang.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: Colors.white60,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: copyCode,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.copy, color: Colors.white60, size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Copy',
+                          style: GoogleFonts.inter(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(lines.length, (index) {
+                      return SizedBox(
+                        height: 18,
+                        child: Text(
+                          '${index + 1}',
+                          style: GoogleFonts.robotoMono(
+                            color: Colors.white24,
+                            fontSize: 12,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: SelectableText.rich(
+                        highlightCode(code),
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Additional Classes
+enum BlockType { text, checklist, document, contact, audio, code }
+
+class ContentBlock {
+  final BlockType type;
+  final String text;
+  final bool isChecked;
+  final Map<String, String>? meta;
+  final int startIndex;
+  final int endIndex;
+
+  ContentBlock({
+    required this.type,
+    required this.text,
+    this.isChecked = false,
+    this.meta,
+    required this.startIndex,
+    required this.endIndex,
+  });
+}
+
+List<ContentBlock> parseBody(String body) {
+  final List<ContentBlock> blocks = [];
+  final List<String> lines = body.split('\n');
+  
+  bool inCodeBlock = false;
+  String codeLanguage = '';
+  List<String> codeLines = [];
+  int codeStartIndex = 0;
+  
+  int currentCharIndex = 0;
+  
+  for (int i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final int lineStart = currentCharIndex;
+    final int lineEnd = currentCharIndex + line.length;
+    
+    if (line.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        blocks.add(ContentBlock(
+          type: BlockType.code,
+          text: codeLines.join('\n'),
+          meta: {'lang': codeLanguage},
+          startIndex: codeStartIndex,
+          endIndex: lineEnd,
+        ));
+        inCodeBlock = false;
+        codeLines = [];
+      } else {
+        inCodeBlock = true;
+        codeStartIndex = lineStart;
+        codeLanguage = line.trim().substring(3).trim();
+        if (codeLanguage.isEmpty) codeLanguage = 'code';
+      }
+      currentCharIndex += line.length + 1;
+      continue;
+    }
+    
+    if (inCodeBlock) {
+      codeLines.add(line);
+      currentCharIndex += line.length + 1;
+      continue;
+    }
+    
+    final checklistMatch = RegExp(r'^\[([ xX])\]\s*(.*)$').firstMatch(line);
+    if (checklistMatch != null) {
+      final String checkChar = checklistMatch.group(1)!;
+      final String content = checklistMatch.group(2)!;
+      final bool isChecked = checkChar.toLowerCase() == 'x';
+      
+      blocks.add(ContentBlock(
+        type: BlockType.checklist,
+        text: content,
+        isChecked: isChecked,
+        startIndex: lineStart,
+        endIndex: lineEnd,
+      ));
+      currentCharIndex += line.length + 1;
+      continue;
+    }
+    
+    final docMatch = RegExp(r'^\[Document:\s*([^\]]+)\]$').firstMatch(line);
+    if (docMatch != null) {
+      final String docName = docMatch.group(1)!;
+      blocks.add(ContentBlock(
+        type: BlockType.document,
+        text: line,
+        meta: {'name': docName},
+        startIndex: lineStart,
+        endIndex: lineEnd,
+      ));
+      currentCharIndex += line.length + 1;
+      continue;
+    }
+    
+    final contactMatch = RegExp(r'^\[Contact:\s*([^\]]+)\]$').firstMatch(line);
+    if (contactMatch != null) {
+      final String contactDetails = contactMatch.group(1)!;
+      blocks.add(ContentBlock(
+        type: BlockType.contact,
+        text: line,
+        meta: {'details': contactDetails},
+        startIndex: lineStart,
+        endIndex: lineEnd,
+      ));
+      currentCharIndex += line.length + 1;
+      continue;
+    }
+    
+    final audioMatch = RegExp(r'^\[(?:Audio Recording|Audio):\s*([^\]]+)\]$').firstMatch(line);
+    if (audioMatch != null) {
+      final String audioDetails = audioMatch.group(1)!;
+      blocks.add(ContentBlock(
+        type: BlockType.audio,
+        text: line,
+        meta: {'duration': audioDetails},
+        startIndex: lineStart,
+        endIndex: lineEnd,
+      ));
+      currentCharIndex += line.length + 1;
+      continue;
+    }
+    
+    blocks.add(ContentBlock(
+      type: BlockType.text,
+      text: line,
+      startIndex: lineStart,
+      endIndex: lineEnd,
+    ));
+    currentCharIndex += line.length + 1;
+  }
+  
+  if (inCodeBlock) {
+    blocks.add(ContentBlock(
+      type: BlockType.code,
+      text: codeLines.join('\n'),
+      meta: {'lang': codeLanguage},
+      startIndex: codeStartIndex,
+      endIndex: currentCharIndex,
+    ));
+  }
+  
+  return blocks;
+}
+
+class AudioPlayerBlock extends StatefulWidget {
+  final String durationText;
+  const AudioPlayerBlock({super.key, required this.durationText});
+
+  @override
+  State<AudioPlayerBlock> createState() => _AudioPlayerBlockState();
+}
+
+class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
+  bool _isPlaying = false;
+  int _elapsedSeconds = 0;
+  int _totalSeconds = 45;
+  Timer? _playbackTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    final cleanText = widget.durationText.replaceAll('min', '').trim();
+    final parts = cleanText.split(':');
+    if (parts.length == 2) {
+      final int m = int.tryParse(parts[0]) ?? 0;
+      final int s = int.tryParse(parts[1]) ?? 45;
+      _totalSeconds = (m * 60) + s;
+    }
+  }
+
+  @override
+  void dispose() {
+    _playbackTimer?.cancel();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    if (_isPlaying) {
+      _playbackTimer?.cancel();
+      setState(() => _isPlaying = false);
+    } else {
+      setState(() => _isPlaying = true);
+      _playbackTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (_elapsedSeconds >= _totalSeconds) {
+          _playbackTimer?.cancel();
+          setState(() {
+            _isPlaying = false;
+            _elapsedSeconds = 0;
+          });
+        } else {
+          setState(() {
+            _elapsedSeconds++;
+          });
+        }
+      });
+    }
+  }
+
+  String _formatDuration(int sec) {
+    final int m = sec ~/ 60;
+    final int s = sec % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double percent = _totalSeconds > 0 ? (_elapsedSeconds / _totalSeconds) : 0.0;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: _togglePlay,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _isPlaying ? Icons.pause : Icons.play_arrow,
+                  color: Colors.black,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Audio Note',
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        '${_formatDuration(_elapsedSeconds)} / ${_formatDuration(_totalSeconds)}',
+                        style: GoogleFonts.robotoMono(color: Colors.white30, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final barCount = (width / 6).floor() > 0 ? (width / 6).floor() : 1;
+                      return SizedBox(
+                        height: 24,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: List.generate(barCount, (index) {
+                            final double progressPercent = index / barCount;
+                            final bool isFilled = progressPercent <= percent;
+                            final double heightVal = 4.0 + (1.0 + math.sin(index.toDouble() * 0.5)) * 8.0;
+                            
+                            return Container(
+                              width: 3,
+                              height: heightVal,
+                              decoration: BoxDecoration(
+                                color: isFilled 
+                                    ? const Color(0xFF6B9BF7) 
+                                    : Colors.white12,
+                                borderRadius: BorderRadius.circular(1.5),
+                              ),
+                            );
+                          }),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/translation_manager.dart';
+import '../utils/notification_manager.dart';
+import '../models/notification_model.dart';
 
 /// Fixed header bar rendered above the scrollable feed.
 ///
@@ -14,10 +16,14 @@ class FeedHeader extends StatelessWidget {
   /// Called on every search query change.
   final ValueChanged<String>? onSearchChanged;
 
+  /// Called when the search field is tapped.
+  final VoidCallback? onSearchTap;
+
   const FeedHeader({
     super.key,
     this.onMenuTap,
     this.onSearchChanged,
+    this.onSearchTap,
   });
 
   @override
@@ -45,23 +51,30 @@ class FeedHeader extends StatelessWidget {
           GestureDetector(
             onTap: onMenuTap ?? () {},
             behavior: HitTestBehavior.opaque,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.menu, color: Colors.white, size: 26),
-                Positioned(
-                  right: -1,
-                  top: -1,
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFF1744),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
+            child: ValueListenableBuilder<List<NotificationModel>>(
+              valueListenable: NotificationManager.instance.notificationsNotifier,
+              builder: (context, notificationsList, _) {
+                final bool hasUnread = notificationsList.any((n) => !n.isRead);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.menu, color: Colors.white, size: 26),
+                    if (hasUnread)
+                      Positioned(
+                        right: -1,
+                        top: -1,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF1744),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
 
@@ -88,6 +101,7 @@ class FeedHeader extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
+                      onTap: onSearchTap,
                       onChanged: onSearchChanged,
                       style: GoogleFonts.inter(
                         color: Colors.white,

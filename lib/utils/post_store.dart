@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
+import 'rich_text_controller.dart';
 
 /// A single user-created post (text + optional media file path).
 class UserPost {
   final String id;
   final String title;
   final String body;
+  final String? url;
 
   /// Absolute path to a local image file, or null if no image attached.
   final String? imagePath;
@@ -18,14 +20,19 @@ class UserPost {
 
   final DateTime createdAt;
 
+  /// Formatting character-by-character styles.
+  final List<RichStyle>? charStyles;
+
   UserPost({
     required this.id,
     required this.title,
     required this.body,
+    this.url,
     this.imagePath,
     this.videoPath,
     required this.savedInProfile,
     required this.createdAt,
+    this.charStyles,
   });
 }
 
@@ -56,6 +63,23 @@ class PostStore {
 
   Set<String> get savedSocialPostIds => savedSocialPostIdsNotifier.value;
 
+  /// Set of liked post IDs.
+  final ValueNotifier<Set<String>> likedPostIdsNotifier =
+      ValueNotifier<Set<String>>({});
+
+  Set<String> get likedPostIds => likedPostIdsNotifier.value;
+
+  /// Toggles the liked status of a post.
+  void toggleLikedPost(String postId) {
+    final current = Set<String>.from(likedPostIds);
+    if (current.contains(postId)) {
+      current.remove(postId);
+    } else {
+      current.add(postId);
+    }
+    likedPostIdsNotifier.value = current;
+  }
+
   /// Adds a post and notifies all listeners.
   void addPost(UserPost post) {
     postsNotifier.value = [post, ...postsNotifier.value];
@@ -69,10 +93,32 @@ class PostStore {
           id: post.id,
           title: post.title,
           body: post.body,
+          url: post.url,
           imagePath: post.imagePath,
           videoPath: post.videoPath,
           savedInProfile: !post.savedInProfile,
           createdAt: post.createdAt,
+          charStyles: post.charStyles,
+        );
+      }
+      return post;
+    }).toList();
+  }
+
+  /// Updates the body text and styling of a post and notifies listeners.
+  void updatePostText(String postId, String newBody, List<RichStyle>? charStyles) {
+    postsNotifier.value = postsNotifier.value.map((post) {
+      if (post.id == postId) {
+        return UserPost(
+          id: post.id,
+          title: post.title,
+          body: newBody,
+          url: post.url,
+          imagePath: post.imagePath,
+          videoPath: post.videoPath,
+          savedInProfile: post.savedInProfile,
+          createdAt: post.createdAt,
+          charStyles: charStyles,
         );
       }
       return post;

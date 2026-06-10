@@ -52,8 +52,9 @@ class _AttachItem {
 
 class WritePostScreen extends StatefulWidget {
   final bool isSaveItem;
+  final Map<String, dynamic>? sharedData;
 
-  const WritePostScreen({super.key, this.isSaveItem = false});
+  const WritePostScreen({super.key, this.isSaveItem = false, this.sharedData});
 
   @override
   State<WritePostScreen> createState() => _WritePostScreenState();
@@ -79,6 +80,46 @@ class _WritePostScreenState extends State<WritePostScreen>
   // Attachments (real picks – shown as preview cards, not text)
   final List<_AttachItem> _attachedItems = [];
 
+  // Rich Save to Memoria variables
+  String? _sharedType;
+  String? _sharedFilePath;
+  String? _contactName;
+  String? _contactPhone;
+  String? _audioDuration;
+  final List<String> _checklistItemsList = [];
+  final List<bool> _checklistStatesList = [];
+
+  Future<void> _parseAndLoadVcf(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        final lines = await file.readAsLines();
+        String name = '';
+        String phone = '';
+        for (var line in lines) {
+          final trimLine = line.trim();
+          if (trimLine.startsWith('FN:')) {
+            name = trimLine.substring(3).trim();
+          } else if (trimLine.startsWith('TEL;') || trimLine.startsWith('TEL:')) {
+            final colonIdx = trimLine.indexOf(':');
+            if (colonIdx != -1) {
+              phone = trimLine.substring(colonIdx + 1).trim();
+            }
+          }
+        }
+        if (name.isEmpty) {
+          name = file.uri.pathSegments.last.replaceAll('.vcf', '');
+        }
+        setState(() {
+          _contactName = name;
+          _contactPhone = phone;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error parsing VCF: $e");
+    }
+  }
+
   // Plus menu animation controllers
   late AnimationController _plusMenuController;
   late Animation<double> _plusMenuOpacity;
@@ -90,6 +131,70 @@ class _WritePostScreenState extends State<WritePostScreen>
   void initState() {
     super.initState();
     _saveInProfile = widget.isSaveItem;
+
+    if (widget.sharedData != null) {
+      _saveInProfile = true; // Shared content is private (Save an Item) by default
+      final data = widget.sharedData!;
+      final type = data['type'] as String?;
+      if (type == 'text') {
+        final text = data['text'] as String? ?? '';
+        if (text.startsWith('http://') || text.startsWith('https://')) {
+          _sharedType = 'link';
+          _urlController.text = text;
+          _titleController.text = 'Shared Link';
+        } else if (text.contains('[ ]') || text.contains('- [ ]')) {
+          _sharedType = 'checklist';
+          _titleController.text = 'Shared Checklist';
+          final lines = text.split('\n');
+          for (var line in lines) {
+            var itemText = line.trim();
+            if (itemText.startsWith('- [ ]')) {
+              itemText = itemText.substring(5).trim();
+            } else if (itemText.startsWith('[ ]')) {
+              itemText = itemText.substring(3).trim();
+            }
+            if (itemText.isNotEmpty) {
+              _checklistItemsList.add(itemText);
+              _checklistStatesList.add(false);
+            }
+          }
+        } else if (text.contains('```')) {
+          _sharedType = 'code';
+          _titleController.text = 'Shared Code';
+          _bodyController.text = text;
+        } else {
+          _sharedType = 'text';
+          _titleController.text = 'Shared Idea';
+          _bodyController.text = text;
+        }
+      } else if (type == 'image') {
+        _sharedType = 'image';
+        _pickedImagePath = data['filePath'] as String?;
+        _titleController.text = data['name'] as String? ?? 'Shared Image';
+      } else if (type == 'video') {
+        _sharedType = 'video';
+        _pickedVideoPath = data['filePath'] as String?;
+        _titleController.text = data['name'] as String? ?? 'Shared Video';
+      } else if (type == 'audio') {
+        _sharedType = 'audio';
+        _sharedFilePath = data['filePath'] as String?;
+        _audioDuration = '00:05';
+        _titleController.text = data['name'] as String? ?? 'Shared Audio';
+      } else if (type == 'document') {
+        final filePath = data['filePath'] as String? ?? '';
+        final lowerPath = filePath.toLowerCase();
+        if (lowerPath.endsWith('.vcf') || lowerPath.endsWith('.vcard')) {
+          _sharedType = 'contact';
+          _sharedFilePath = filePath;
+          _titleController.text = 'Shared Contact';
+          _parseAndLoadVcf(filePath);
+        } else {
+          _sharedType = 'document';
+          _sharedFilePath = filePath;
+          _titleController.text = data['name'] as String? ?? 'Shared Document';
+        }
+      }
+    }
 
     _plusMenuController = AnimationController(
       vsync: this,
@@ -1171,6 +1276,25 @@ class _WritePostScreenState extends State<WritePostScreen>
       }
     }
 
+    String? resolvedFilePath = _sharedFilePath;
+    String? resolvedContactName = _contactName;
+    String? resolvedContactPhone = _contactPhone;
+    String? resolvedDuration = _audioDuration;
+
+    if (_attachedItems.isNotEmpty) {
+      final first = _attachedItems.first;
+      if (first.type == _AttachType.document) {
+        resolvedFilePath = first.path;
+      } else if (first.type == _AttachType.contact) {
+        resolvedContactName = first.name;
+        resolvedContactPhone = first.phone;
+      } else if (first.type == _AttachType.audio) {
+        resolvedDuration = first.duration;
+      }
+    }
+
+    final String resolvedType = _getResolvedType();
+
     final post = UserPost(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: resolvedTitle.isEmpty ? 'Untitled' : resolvedTitle,
@@ -1183,6 +1307,13 @@ class _WritePostScreenState extends State<WritePostScreen>
       savedInProfile: _saveInProfile,
       createdAt: DateTime.now(),
       charStyles: List<RichStyle>.from(_bodyController.charStyles),
+      type: resolvedType,
+      filePath: resolvedFilePath,
+      contactName: resolvedContactName,
+      contactPhone: resolvedContactPhone,
+      duration: resolvedDuration,
+      checklistItems: _checklistItemsList.isNotEmpty ? _checklistItemsList : null,
+      checklistStates: _checklistStatesList.isNotEmpty ? _checklistStatesList : null,
     );
 
     PostStore.instance.addPost(post);
@@ -1191,6 +1322,21 @@ class _WritePostScreenState extends State<WritePostScreen>
       setState(() => _isPosting = false);
       Navigator.pop(context);
     }
+  }
+
+  String _getResolvedType() {
+    return _sharedType ?? (
+      _pickedImagePath != null ? 'image' : (
+      _pickedVideoPath != null ? 'video' : (
+      _attachedItems.isNotEmpty ? (
+        _attachedItems.first.type == _AttachType.document ? 'document' : (
+        _attachedItems.first.type == _AttachType.contact ? 'contact' : 'audio'
+      )) : (
+        _urlController.text.isNotEmpty ? 'link' : (
+        _checklistItemsList.isNotEmpty ? 'checklist' : (
+        _bodyController.text.contains('```') ? 'code' : 'text'
+      ))
+    ))));
   }
 
   void _showSnack(String msg) {
@@ -1202,10 +1348,418 @@ class _WritePostScreenState extends State<WritePostScreen>
     );
   }
 
+  Widget _buildAutomaticPreview() {
+    final String resolvedType = _getResolvedType();
+
+    if (resolvedType == 'image') {
+      final path = _pickedImagePath;
+      if (path == null) return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: path.startsWith('assets/')
+              ? Image.asset(path, fit: BoxFit.cover, width: double.infinity)
+              : Image.file(File(path), fit: BoxFit.cover, width: double.infinity),
+        ),
+      );
+    }
+
+    if (resolvedType == 'video') {
+      final path = _pickedVideoPath;
+      if (path == null) return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        height: 200,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              path.startsWith('assets/')
+                  ? RunningVideoPlayer(assetPath: path)
+                  : RunningVideoPlayer(file: File(path)),
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (resolvedType == 'document') {
+      final path = _sharedFilePath ?? (_attachedItems.isNotEmpty ? _attachedItems[0].path : null);
+      final name = path != null ? path.split('/').last.split('\\').last : 'document.pdf';
+      final isPdf = name.toLowerCase().endsWith('.pdf');
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: isPdf ? Colors.redAccent.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
+                color: isPdf ? Colors.redAccent : Colors.blue,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isPdf ? 'PDF Document' : 'Document File',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (resolvedType == 'contact') {
+      final name = _contactName ?? (_attachedItems.isNotEmpty ? _attachedItems[0].name : 'Unknown Contact');
+      final String phone = _contactPhone ?? (_attachedItems.isNotEmpty ? (_attachedItems[0].phone ?? '') : '');
+      final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF7B61FF), Color(0xFF4A90E2)],
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    phone.isNotEmpty ? phone : 'No phone number',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF6B9BF7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (resolvedType == 'audio') {
+      final dur = _audioDuration ?? (_attachedItems.isNotEmpty ? _attachedItems[0].duration : '00:05');
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.mic, color: Colors.redAccent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Audio Recording',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.play_circle_filled, color: Colors.redAccent, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 8),
+                          painter: WaveformPainter(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        dur ?? '00:05',
+                        style: GoogleFonts.robotoMono(color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (resolvedType == 'link') {
+      final url = _urlController.text;
+      final uri = Uri.tryParse(url);
+      final domain = uri?.host ?? 'link';
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.link_rounded, color: Colors.purpleAccent, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    url,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    domain,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (resolvedType == 'checklist') {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.checklist_rounded, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Checklist',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (int i = 0; i < _checklistItemsList.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _checklistStatesList[i] = !_checklistStatesList[i];
+                        });
+                      },
+                      child: Icon(
+                        _checklistStatesList[i] ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                        color: _checklistStatesList[i] ? Colors.greenAccent : const Color(0xFF7C7C81),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _checklistItemsList[i],
+                        style: GoogleFonts.inter(
+                          color: _checklistStatesList[i] ? const Color(0xFF7C7C81) : Colors.white,
+                          fontSize: 14,
+                          decoration: _checklistStatesList[i] ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.add_rounded, color: Color(0xFF7C7C81), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Add checklist item...',
+                      hintStyle: GoogleFonts.inter(color: const Color(0xFF7C7C81), fontSize: 13),
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    onSubmitted: (val) {
+                      if (val.trim().isNotEmpty) {
+                        setState(() {
+                          _checklistItemsList.add(val.trim());
+                          _checklistStatesList.add(false);
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (resolvedType == 'code') {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          _bodyController.text.isNotEmpty ? _bodyController.text : 'hello world',
+          style: const TextStyle(
+            fontFamily: 'Cascadia Code',
+            color: Color(0xFFB71C1C),
+            fontSize: 13,
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final resolvedType = _getResolvedType();
     return Scaffold(
       backgroundColor: Colors.black,
       resizeToAvoidBottomInset: true,
@@ -1225,16 +1779,24 @@ class _WritePostScreenState extends State<WritePostScreen>
           ),
         ),
         child: SafeArea(
+          top: false,
           child: Stack(
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // ── HEADER ─────────────────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.only(
-                        top: 10, bottom: 12, left: 8, right: 16),
+                  Container(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top > 0
+                          ? MediaQuery.of(context).padding.top
+                          : 10,
+                      bottom: 12,
+                      left: 8,
+                      right: 16,
+                    ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         IconButton(
                           onPressed: () => Navigator.pop(context),
@@ -1244,21 +1806,16 @@ class _WritePostScreenState extends State<WritePostScreen>
                           constraints: const BoxConstraints(),
                           splashRadius: 20,
                         ),
-                        const SizedBox(width: 8),
-                        if (!widget.isSaveItem) ...[
-                          Text(
-                            'Write a Post',
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.5,
-                            ),
+                        const SizedBox(width: 4),
+                        Text(
+                          widget.isSaveItem ? 'Save an Item' : 'Write a Post',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600,
                           ),
-                          const Spacer(),
-                        ] else ...[
-                          const Spacer(),
-                        ],
+                        ),
+                        const Spacer(),
                         _isPosting
                             ? const SizedBox(
                                 width: 20,
@@ -1278,10 +1835,10 @@ class _WritePostScreenState extends State<WritePostScreen>
                                         : _post),
                                 style: TextButton.styleFrom(
                                   backgroundColor: (!widget.isSaveItem &&
-                                          _pickedImagePath == null &&
-                                          _pickedVideoPath == null)
-                                      ? Colors.white.withValues(alpha: 0.3)
-                                      : Colors.white,
+                                            _pickedImagePath == null &&
+                                            _pickedVideoPath == null)
+                                        ? Colors.white.withValues(alpha: 0.3)
+                                        : Colors.white,
                                   foregroundColor: Colors.black,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 20, vertical: 8),
@@ -1316,15 +1873,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (widget.isSaveItem) ...[
-                            Text(
-                              'save an item',
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 36,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
+                            _buildAutomaticPreview(),
                             const SizedBox(height: 12),
                             TextField(
                               controller: _bodyController,
@@ -1333,11 +1882,17 @@ class _WritePostScreenState extends State<WritePostScreen>
                               textAlign: _bodyAlign,
                               keyboardType: TextInputType.multiline,
                               textCapitalization: TextCapitalization.sentences,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                              ),
+                              style: resolvedType == 'code'
+                                  ? const TextStyle(
+                                      fontFamily: 'Cascadia Code',
+                                      color: Color(0xFFB71C1C),
+                                      fontSize: 16,
+                                    )
+                                  : GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                    ),
                               decoration: InputDecoration(
                                 hintText: 'save anything.....',
                                 hintStyle: GoogleFonts.inter(
@@ -1383,11 +1938,17 @@ class _WritePostScreenState extends State<WritePostScreen>
                               textAlign: _bodyAlign,
                               keyboardType: TextInputType.multiline,
                               textCapitalization: TextCapitalization.sentences,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w300,
-                              ),
+                              style: resolvedType == 'code'
+                                  ? const TextStyle(
+                                      fontFamily: 'Cascadia Code',
+                                      color: Color(0xFFB71C1C),
+                                      fontSize: 16,
+                                    )
+                                  : GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w300,
+                                    ),
                               decoration: InputDecoration(
                                 hintText:
                                     'Share your saved item to all..(optional)',
@@ -1437,7 +1998,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                           _buildAttachmentPreviews(),
 
                           // ── Image preview ────────────────────────────────────
-                          if (_pickedImagePath != null) ...[
+                          if (!widget.isSaveItem && _pickedImagePath != null) ...[
                             const SizedBox(height: 20),
                             Stack(
                               children: [
@@ -1482,7 +2043,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                               ],
                             ),
                           ],
-                          if (_pickedVideoPath != null) ...[
+                          if (!widget.isSaveItem && _pickedVideoPath != null) ...[
                             const SizedBox(height: 20),
                             Stack(
                               children: [
@@ -1700,4 +2261,34 @@ class _WritePostScreenState extends State<WritePostScreen>
       ),
     );
   }
+}
+
+class WaveformPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.redAccent.withValues(alpha: 0.6)
+      ..style = PaintingStyle.fill;
+    final activePaint = Paint()
+      ..color = Colors.redAccent
+      ..style = PaintingStyle.fill;
+
+    final double barWidth = 3;
+    final double spacing = 2;
+    final int barCount = (size.width / (barWidth + spacing)).floor();
+    final double midY = size.height / 2;
+
+    for (int i = 0; i < barCount; i++) {
+      final h = 4.0 + (math.sin(i * 0.5) * 8.0).abs() + (i % 3 == 0 ? 6.0 : 0.0);
+      final x = i * (barWidth + spacing);
+      final rrect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, midY - h/2, barWidth, h),
+        const Radius.circular(1),
+      );
+      canvas.drawRRect(rrect, i < barCount * 0.35 ? activePaint : paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -181,7 +181,7 @@ class NotificationManager {
     _updateLauncherBadge();
 
     // 4. Start mock push notification loop (triggers every 25 seconds)
-    startSimulation();
+    // startSimulation();
   }
 
   /// Periodically simulates incoming actions from "friends"
@@ -244,6 +244,94 @@ class NotificationManager {
       id: rand.nextInt(100000),
       title: activity['username']!,
       body: activity['action']!,
+    );
+  }
+
+  /// Triggers a notification for a user action (like, share, save).
+  void triggerUserActionNotification({
+    required String action, // 'liked', 'shared', 'saved'
+    required String postTitle,
+    String? author,
+  }) async {
+    final rand = Random();
+    final String id = 'user-${DateTime.now().millisecondsSinceEpoch}';
+    
+    final displayAuthor = (author != null && author.isNotEmpty) ? author : 'a post';
+    
+    // Format presentation based on the action
+    String body = '';
+    String title = '';
+    Color avatarColor = Colors.blue;
+    String initial = '';
+
+    if (action == 'liked') {
+      title = 'Post Liked';
+      body = 'You liked $displayAuthor\'s post: "$postTitle"';
+      avatarColor = const Color(0xFFE24A6A); // Pinkish red
+      initial = 'L';
+    } else if (action == 'shared') {
+      title = 'Post Shared';
+      body = 'You shared $displayAuthor\'s post: "$postTitle"';
+      avatarColor = const Color(0xFF7B61FF); // Purple
+      initial = 'S';
+    } else if (action == 'saved') {
+      title = 'Post Saved';
+      body = 'You saved $displayAuthor\'s post: "$postTitle"';
+      avatarColor = const Color(0xFF2ECC71); // Green
+      initial = 'B';
+    }
+
+    final newNotif = NotificationModel(
+      id: id,
+      avatarAssetPath: 'assets/images/panda.png',
+      avatarInitial: initial,
+      avatarColor: avatarColor,
+      username: 'You',
+      previewText: body,
+      timestamp: 'now',
+      isRead: false,
+    );
+
+    // Prepend to notifications list
+    notificationsNotifier.value = [newNotif, ...notifications];
+    
+    _playNotificationSound();
+    
+    // Update dynamic badge indicators
+    _updateLauncherBadge();
+
+    // Show OS level local notification
+    await showLocalNotification(
+      id: rand.nextInt(100000),
+      title: title,
+      body: body,
+    );
+  }
+
+  /// Triggers a reminder notification for a vault item.
+  void triggerVaultReminderNotification(String title) async {
+    final rand = Random();
+    final String id = 'vault-${DateTime.now().millisecondsSinceEpoch}';
+    final newNotif = NotificationModel(
+      id: id,
+      avatarAssetPath: 'assets/images/panda.png',
+      avatarInitial: 'V',
+      avatarColor: const Color(0xFFF39C12),
+      username: 'Memoria Vault',
+      previewText: 'You added a new memory: "$title". Review it in Self Save.',
+      timestamp: 'now',
+      isRead: false,
+    );
+
+    // Prepend to notifications list
+    notificationsNotifier.value = [newNotif, ...notifications];
+    
+    _playNotificationSound();
+    _updateLauncherBadge();
+    await showLocalNotification(
+      id: rand.nextInt(100000),
+      title: 'Memoria Vault Reminder',
+      body: 'You added a new memory: "$title"',
     );
   }
 

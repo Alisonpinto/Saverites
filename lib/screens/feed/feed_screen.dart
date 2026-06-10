@@ -8,8 +8,8 @@ import '../../models/post_model.dart';
 import '../../screens/notifications/notification_screen.dart';
 import '../../screens/post_detail/post_detail_screen.dart';
 import '../../screens/profile/profile_screen.dart';
+import '../../screens/post/write_post_screen.dart';
 import '../../utils/post_store.dart';
-import '../../utils/share_helper.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/feed_header.dart';
 import '../../widgets/shimmer_container.dart';
@@ -44,6 +44,9 @@ class _FeedScreenState extends State<FeedScreen> {
     });
     // Listen for new posts to rebuild
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
+    
+    // Initialize share intent listener
+    _initShareIntentListener();
   }
 
   @override
@@ -56,6 +59,68 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _onPostsChanged() {
     if (mounted) setState(() {});
+  }
+
+  static const _shareChannel = MethodChannel('com.example.memoria_flutter/share_intent');
+
+  Future<void> _initShareIntentListener() async {
+    // 1. Listen for new intents when the app is already open (warm-start)
+    _shareChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onSharedIntent') {
+        final data = Map<String, dynamic>.from(call.arguments);
+        _handleSharedIntent(data);
+      }
+    });
+
+    // 2. Query the initial intent if the app was cold-started (cold-start)
+    try {
+      final initialData = await _shareChannel.invokeMethod('getSharedIntent');
+      if (initialData != null) {
+        final data = Map<String, dynamic>.from(initialData);
+        _handleSharedIntent(data);
+      }
+    } catch (e) {
+      debugPrint("Error fetching initial shared intent: $e");
+    }
+  }
+
+  void _handleSharedIntent(Map<String, dynamic> data) {
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            WritePostScreen(isSaveItem: true, sharedData: data),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.0, 0.08),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+          );
+          final fadeAnimation = Tween<double>(
+            begin: 0.0,
+            end: 1.0,
+          ).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeIn,
+            ),
+          );
+          return FadeTransition(
+            opacity: fadeAnimation,
+            child: SlideTransition(
+              position: slideAnimation,
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
   Future<void> _checkConnectivity() async {
@@ -75,10 +140,11 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userPosts = PostStore.instance.posts;
-    
-    // Merge user posts and predefined posts in a single chronological stream
-    final List<dynamic> allItems = [...userPosts, ..._shuffledPredefinedPosts];
+    final userPublicPosts = PostStore.instance.posts.where((p) => !p.savedInProfile).toList();
+    final List<dynamic> allItems = [
+      ...userPublicPosts,
+      ..._shuffledPredefinedPosts.where((p) => p.id == 'social-2'),
+    ];
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -119,23 +185,28 @@ class _FeedScreenState extends State<FeedScreen> {
                           child: ValueListenableBuilder<Set<String>>(
                             valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
                             builder: (context, savedSocialIds, _) {
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Left Column
-                                  Expanded(
-                                    child: Column(
-                                      children: _buildStaggeredList(allItems, left: true),
-                                    ),
+                              return Center(
+                                child: Container(
+                                  constraints: const BoxConstraints(maxWidth: 378),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Left Column
+                                      Expanded(
+                                        child: Column(
+                                          children: _buildStaggeredList(allItems, left: true),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      // Right Column
+                                      Expanded(
+                                        child: Column(
+                                          children: _buildStaggeredList(allItems, left: false),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 16),
-                                  // Right Column
-                                  Expanded(
-                                    child: Column(
-                                      children: _buildStaggeredList(allItems, left: false),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               );
                             },
                           ),
@@ -148,9 +219,14 @@ class _FeedScreenState extends State<FeedScreen> {
               showBottomNav: false,
               showBackButton: false,
             ),
-            const ProfileScreen(
+            ProfileScreen(
               showBottomNav: false,
-              showBackButton: false,
+              showBackButton: true,
+              onBackTap: () {
+                setState(() {
+                  _currentTab = 0;
+                });
+              },
             ),
           ],
         ),
@@ -216,35 +292,40 @@ class _FeedScreenState extends State<FeedScreen> {
     return SingleChildScrollView(
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              children: const [
-                ShimmerContainer(height: 220, baseColor: Color(0xFF2A2A2E)),
-                SizedBox(height: 16),
-                ShimmerContainer(height: 140, baseColor: Color(0xFF2A2A2E)),
-              ],
-            ),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 378),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  children: const [
+                    ShimmerContainer(height: 220, baseColor: Color(0xFF2A2A2E)),
+                    SizedBox(height: 16),
+                    ShimmerContainer(height: 140, baseColor: Color(0xFF2A2A2E)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  children: const [
+                    ShimmerContainer(height: 140, baseColor: Color(0xFF2A2A2E)),
+                    SizedBox(height: 16),
+                    ShimmerContainer(height: 220, baseColor: Color(0xFF2A2A2E)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              children: const [
-                ShimmerContainer(height: 140, baseColor: Color(0xFF2A2A2E)),
-                SizedBox(height: 16),
-                ShimmerContainer(height: 220, baseColor: Color(0xFF2A2A2E)),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildSearchPage() {
-    final userPosts = PostStore.instance.posts;
+    final userPosts = PostStore.instance.posts.where((p) => !p.savedInProfile).toList();
     final List<dynamic> allItems = [...userPosts, ..._shuffledPredefinedPosts];
 
     final filteredItems = allItems.where((item) {
@@ -387,21 +468,26 @@ class _FeedScreenState extends State<FeedScreen> {
                     : SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
                         padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                children: _buildStaggeredList(filteredItems, left: true),
-                              ),
+                        child: Center(
+                          child: Container(
+                            constraints: const BoxConstraints(maxWidth: 378),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    children: _buildStaggeredList(filteredItems, left: true),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    children: _buildStaggeredList(filteredItems, left: false),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                children: _buildStaggeredList(filteredItems, left: false),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
               ),
@@ -493,6 +579,65 @@ class _FeedPostTileState extends State<_FeedPostTile> {
       );
     }
 
+    void showPreviewDialog() {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          Widget media;
+          if (widget.item is UserPost) {
+            final post = widget.item as UserPost;
+            if (post.videoPath != null) {
+              media = RunningVideoPlayer(file: File(post.videoPath!));
+            } else if (post.imagePath != null) {
+              media = Image.file(File(post.imagePath!), fit: BoxFit.contain);
+            } else {
+              media = Container(
+                padding: const EdgeInsets.all(20),
+                color: const Color(0xFF1C1C1E),
+                child: Text(post.body, style: const TextStyle(color: Colors.white, fontSize: 16)),
+              );
+            }
+          } else {
+            final post = widget.item as PostModel;
+            if (post.mediaType == PostMediaType.video) {
+              media = RunningVideoPlayer(assetPath: post.mediaAssetPath);
+            } else {
+              media = Image.asset(post.mediaAssetPath, fit: BoxFit.contain);
+            }
+          }
+          
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(16),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.95),
+                      child: media,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
     if (showShimmer) {
       return ShimmerContainer(
         key: const ValueKey('shimmer'),
@@ -526,12 +671,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
             : _format(isSaved
                 ? (widget.item as PostModel).savesCount + 1
                 : (widget.item as PostModel).savesCount);
-        final shares = widget.item is UserPost ? '0' : _format((widget.item as PostModel).sharesCount);
-
         Widget mediaWidget;
-        Color? cardColor;
-        EdgeInsets? imagePadding;
-        BorderRadius? imageBorderRadius;
 
         if (widget.item is UserPost) {
           final post = widget.item as UserPost;
@@ -598,13 +738,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           if (post.mediaType == PostMediaType.video) {
             childWidget = RunningVideoPlayer(
               assetPath: post.mediaAssetPath,
-              height: widget.cardHeight - 44,
             );
           } else {
             childWidget = Image.asset(
               post.mediaAssetPath,
               fit: BoxFit.cover,
-              height: widget.cardHeight - 44,
               width: double.infinity,
             );
           }
@@ -657,47 +795,34 @@ class _FeedPostTileState extends State<_FeedPostTile> {
         }
 
 
-        return GestureDetector(
-          onTap: onTap,
-          child: FeedCard(
-            imageWidget: mediaWidget,
-            likes: likes,
-            bookmarks: bookmarks,
-            shares: shares,
-            cardColor: cardColor,
-            imagePadding: imagePadding,
-            imageBorderRadius: imageBorderRadius,
-            isLiked: isLiked,
-            isSaved: isSaved,
-            onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
-            onSaveTap: () {
-              if (widget.item is UserPost) {
-                PostStore.instance.toggleSavedInProfile(itemId);
-              } else {
-                PostStore.instance.toggleSavedSocialPost(itemId);
-              }
-            },
-            onShareTap: () async {
-              if (widget.item is UserPost) {
-                final post = widget.item as UserPost;
-                await ShareHelper.sharePost(
-                  title: post.title,
-                  description: post.body,
-                  url: post.url,
-                  localImagePath: post.imagePath,
-                  localVideoPath: post.videoPath,
-                );
-              } else {
-                final post = widget.item as PostModel;
-                await ShareHelper.sharePost(
-                  title: post.title ?? '',
-                  description: post.description,
-                  url: post.url,
-                  assetPath: post.mediaAssetPath,
-                );
-              }
-            },
-          ),
+        final item = widget.item;
+        final String titleText = item is UserPost ? item.title : (item as PostModel).title ?? '';
+        final String userText = item is UserPost ? 'gangster_vagas' : (item as PostModel).username ?? 'Unknown';
+        final String? avatarAsset = item is UserPost ? null : (item as PostModel).avatarAssetPath;
+        final String initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
+        final Color color = item is UserPost ? const Color(0xFF6B9BF7) : (item as PostModel).accentColor ?? const Color(0xFF7B61FF);
+
+        return FeedCard(
+          imageWidget: mediaWidget,
+          title: titleText,
+          username: userText,
+          avatarAssetPath: avatarAsset,
+          avatarInitial: initial,
+          avatarColor: color,
+          likes: likes,
+          bookmarks: bookmarks,
+          isLiked: isLiked,
+          isSaved: isSaved,
+          onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
+          onSaveTap: () {
+            if (widget.item is UserPost) {
+              PostStore.instance.toggleSavedInProfile(itemId);
+            } else {
+              PostStore.instance.toggleSavedSocialPost(itemId);
+            }
+          },
+          onCardTap: onTap,
+          onImageTap: showPreviewDialog,
         );
       },
     );

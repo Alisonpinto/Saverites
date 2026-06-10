@@ -122,6 +122,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         url: url,
         localImagePath: widget.userPost!.imagePath,
         localVideoPath: widget.userPost!.videoPath,
+        author: username,
       );
     } else if (widget.postModel != null) {
       await ShareHelper.sharePost(
@@ -129,6 +130,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         description: description,
         url: url,
         assetPath: widget.postModel!.mediaAssetPath,
+        author: username,
       );
     }
   }

@@ -229,6 +229,28 @@ class RichTextController extends TextEditingController {
     }
   }
 
+  List<bool> _getCodeBlockMask(String text) {
+    final List<bool> mask = List<bool>.filled(text.length, false);
+    int start = -1;
+    while (true) {
+      start = text.indexOf('```', start + 1);
+      if (start == -1) break;
+      int end = text.indexOf('```', start + 3);
+      if (end == -1) {
+        for (int i = start; i < text.length; i++) {
+          mask[i] = true;
+        }
+        break;
+      } else {
+        for (int i = start; i <= end + 2; i++) {
+          mask[i] = true;
+        }
+        start = end + 2;
+      }
+    }
+    return mask;
+  }
+
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
     if (text.isEmpty) {
@@ -236,6 +258,8 @@ class RichTextController extends TextEditingController {
     }
 
     _syncCharStylesLength();
+
+    final codeMask = _getCodeBlockMask(text);
 
     final List<TextSpan> children = [];
     TextStyle? lastStyle;
@@ -264,6 +288,13 @@ class RichTextController extends TextEditingController {
         backgroundColor: activeStyle.highlightColor ?? Colors.transparent,
       );
 
+      if (codeMask[i]) {
+        charStyle = charStyle.copyWith(
+          fontFamily: 'Cascadia Code',
+          color: const Color(0xFFB71C1C),
+        );
+      }
+
       if (lastStyle == null) {
         lastStyle = charStyle;
         currentChunk = text[i];
@@ -289,7 +320,8 @@ class RichTextController extends TextEditingController {
         s1.decoration == s2.decoration &&
         s1.fontSize == s2.fontSize &&
         s1.color == s2.color &&
-        s1.backgroundColor == s2.backgroundColor;
+        s1.backgroundColor == s2.backgroundColor &&
+        s1.fontFamily == s2.fontFamily;
   }
 
   /// Helper to build a RichText/TextSpan widget representing rich formatted text.
@@ -300,12 +332,42 @@ class RichTextController extends TextEditingController {
     int? maxLines,
     TextOverflow? overflow,
   }) {
+    final List<bool> codeMask = _getCodeBlockMaskStatic(text);
+
     if (charStyles == null || charStyles.isEmpty || charStyles.length != text.length) {
-      return Text(
-        text,
-        style: defaultStyle,
+      final List<TextSpan> children = [];
+      TextStyle? lastStyle;
+      String currentChunk = "";
+
+      for (int i = 0; i < text.length; i++) {
+        TextStyle charStyle = defaultStyle;
+        if (codeMask[i]) {
+          charStyle = defaultStyle.copyWith(
+            fontFamily: 'Cascadia Code',
+            color: const Color(0xFFB71C1C),
+          );
+        }
+
+        if (lastStyle == null) {
+          lastStyle = charStyle;
+          currentChunk = text[i];
+        } else if (lastStyle.fontFamily == charStyle.fontFamily &&
+                   lastStyle.color == charStyle.color) {
+          currentChunk += text[i];
+        } else {
+          children.add(TextSpan(text: currentChunk, style: lastStyle));
+          lastStyle = charStyle;
+          currentChunk = text[i];
+        }
+      }
+      if (currentChunk.isNotEmpty && lastStyle != null) {
+        children.add(TextSpan(text: currentChunk, style: lastStyle));
+      }
+
+      return RichText(
         maxLines: maxLines,
-        overflow: overflow,
+        overflow: overflow ?? TextOverflow.clip,
+        text: TextSpan(style: defaultStyle, children: children),
       );
     }
 
@@ -336,6 +398,13 @@ class RichTextController extends TextEditingController {
         backgroundColor: activeStyle.highlightColor ?? Colors.transparent,
       );
 
+      if (codeMask[i]) {
+        charStyle = charStyle.copyWith(
+          fontFamily: 'Cascadia Code',
+          color: const Color(0xFFB71C1C),
+        );
+      }
+
       if (lastStyle == null) {
         lastStyle = charStyle;
         currentChunk = text[i];
@@ -344,7 +413,8 @@ class RichTextController extends TextEditingController {
                  lastStyle.decoration == charStyle.decoration &&
                  lastStyle.fontSize == charStyle.fontSize &&
                  lastStyle.color == charStyle.color &&
-                 lastStyle.backgroundColor == charStyle.backgroundColor) {
+                 lastStyle.backgroundColor == charStyle.backgroundColor &&
+                 lastStyle.fontFamily == charStyle.fontFamily) {
         currentChunk += text[i];
       } else {
         children.add(TextSpan(text: currentChunk, style: lastStyle));
@@ -365,5 +435,27 @@ class RichTextController extends TextEditingController {
         children: children,
       ),
     );
+  }
+
+  static List<bool> _getCodeBlockMaskStatic(String text) {
+    final List<bool> mask = List<bool>.filled(text.length, false);
+    int start = -1;
+    while (true) {
+      start = text.indexOf('```', start + 1);
+      if (start == -1) break;
+      int end = text.indexOf('```', start + 3);
+      if (end == -1) {
+        for (int i = start; i < text.length; i++) {
+          mask[i] = true;
+        }
+        break;
+      } else {
+        for (int i = start; i <= end + 2; i++) {
+          mask[i] = true;
+        }
+        start = end + 2;
+      }
+    }
+    return mask;
   }
 }

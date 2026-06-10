@@ -6,6 +6,7 @@ import '../../models/notification_model.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/notification_tile.dart';
 import '../../utils/translation_manager.dart';
+import '../../utils/post_store.dart';
 
 import '../../utils/notification_manager.dart';
 import '../profile/profile_screen.dart';
@@ -33,6 +34,44 @@ class _NotificationScreenState extends State<NotificationScreen> {
     });
   }
 
+  Widget _buildVaultNotificationBanner() {
+    return ValueListenableBuilder<List<UserPost>>(
+      valueListenable: PostStore.instance.postsNotifier,
+      builder: (context, postsList, _) {
+        final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
+        if (savedUserPosts.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.security_rounded, color: Color(0xFF2ECC71), size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Vault Security: You have ${savedUserPosts.length} items saved privately. Only you can view them.',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFE5E5EA),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
@@ -55,6 +94,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   statusBarHeight: statusBarHeight,
                   showBackButton: widget.showBackButton,
                 ),
+
+                _buildVaultNotificationBanner(),
 
                 // ── Notification list ─────────────────────────────────────────
                 Expanded(

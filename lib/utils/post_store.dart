@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
 import 'rich_text_controller.dart';
+import 'notification_manager.dart';
 
 /// A single user-created post (text + optional media file path).
 class UserPost {
@@ -23,6 +24,15 @@ class UserPost {
   /// Formatting character-by-character styles.
   final List<RichStyle>? charStyles;
 
+  // New fields for Save to Memoria workflow:
+  final String? type;            // "image", "video", "document", "audio", "contact", "link", "text", "checklist", "code"
+  final String? filePath;        // local file path for document/audio/vcf
+  final String? contactName;     // contact full name
+  final String? contactPhone;    // contact phone number
+  final String? duration;        // audio duration
+  final List<String>? checklistItems; // checklist entries
+  final List<bool>? checklistStates;  // checkbox states
+
   UserPost({
     required this.id,
     required this.title,
@@ -33,6 +43,13 @@ class UserPost {
     required this.savedInProfile,
     required this.createdAt,
     this.charStyles,
+    this.type,
+    this.filePath,
+    this.contactName,
+    this.contactPhone,
+    this.duration,
+    this.checklistItems,
+    this.checklistStates,
   });
 }
 
@@ -52,14 +69,7 @@ class PostStore {
 
   /// Set of saved predefined post IDs.
   final ValueNotifier<Set<String>> savedSocialPostIdsNotifier =
-      ValueNotifier<Set<String>>({
-    'social-1',
-    'social-2',
-    'social-3',
-    'social-4',
-    'social-5',
-    'social-6',
-  });
+      ValueNotifier<Set<String>>({});
 
   Set<String> get savedSocialPostIds => savedSocialPostIdsNotifier.value;
 
@@ -72,23 +82,56 @@ class PostStore {
   /// Toggles the liked status of a post.
   void toggleLikedPost(String postId) {
     final current = Set<String>.from(likedPostIds);
+    bool isLiked = false;
     if (current.contains(postId)) {
       current.remove(postId);
     } else {
       current.add(postId);
+      isLiked = true;
     }
     likedPostIdsNotifier.value = current;
+
+    if (isLiked) {
+      final details = getPostDetails(postId);
+      NotificationManager.instance.triggerUserActionNotification(
+        action: 'liked',
+        postTitle: details['title']!,
+        author: details['author']!,
+      );
+    }
+  }
+
+  /// Helper to get post details (title and author) for notifications.
+  Map<String, String> getPostDetails(String postId) {
+    // 1. Search in predefinedPosts
+    for (final p in predefinedPosts) {
+      if (p.id == postId) {
+        return {'title': p.title ?? 'Untitled Post', 'author': p.username ?? 'someone'};
+      }
+    }
+    // 2. Search in user posts
+    for (final p in posts) {
+      if (p.id == postId) {
+        return {'title': p.title, 'author': 'You'};
+      }
+    }
+    return {'title': 'Untitled Post', 'author': 'someone'};
   }
 
   /// Adds a post and notifies all listeners.
   void addPost(UserPost post) {
     postsNotifier.value = [post, ...postsNotifier.value];
+    if (post.savedInProfile) {
+      NotificationManager.instance.triggerVaultReminderNotification(post.title);
+    }
   }
 
   /// Toggles the savedInProfile status of a post and notifies listeners.
   void toggleSavedInProfile(String postId) {
+    bool isSaved = false;
     postsNotifier.value = postsNotifier.value.map((post) {
       if (post.id == postId) {
+        isSaved = !post.savedInProfile;
         return UserPost(
           id: post.id,
           title: post.title,
@@ -99,10 +142,26 @@ class PostStore {
           savedInProfile: !post.savedInProfile,
           createdAt: post.createdAt,
           charStyles: post.charStyles,
+          type: post.type,
+          filePath: post.filePath,
+          contactName: post.contactName,
+          contactPhone: post.contactPhone,
+          duration: post.duration,
+          checklistItems: post.checklistItems,
+          checklistStates: post.checklistStates,
         );
       }
       return post;
     }).toList();
+
+    if (isSaved) {
+      final details = getPostDetails(postId);
+      NotificationManager.instance.triggerUserActionNotification(
+        action: 'saved',
+        postTitle: details['title']!,
+        author: details['author']!,
+      );
+    }
   }
 
   /// Updates the body text and styling of a post and notifies listeners.
@@ -119,6 +178,13 @@ class PostStore {
           savedInProfile: post.savedInProfile,
           createdAt: post.createdAt,
           charStyles: charStyles,
+          type: post.type,
+          filePath: post.filePath,
+          contactName: post.contactName,
+          contactPhone: post.contactPhone,
+          duration: post.duration,
+          checklistItems: post.checklistItems,
+          checklistStates: post.checklistStates,
         );
       }
       return post;
@@ -128,12 +194,23 @@ class PostStore {
   /// Toggles the saved status of a social post.
   void toggleSavedSocialPost(String postId) {
     final current = Set<String>.from(savedSocialPostIds);
+    bool isSaved = false;
     if (current.contains(postId)) {
       current.remove(postId);
     } else {
       current.add(postId);
+      isSaved = true;
     }
     savedSocialPostIdsNotifier.value = current;
+
+    if (isSaved) {
+      final details = getPostDetails(postId);
+      NotificationManager.instance.triggerUserActionNotification(
+        action: 'saved',
+        postTitle: details['title']!,
+        author: details['author']!,
+      );
+    }
   }
 
   /// The predefined posts imported from the Figma mock designs.
@@ -154,13 +231,13 @@ class PostStore {
     const PostModel(
       id: 'social-2',
       mediaAssetPath: 'assets/images/jacket.png',
-      likesCount: 1000,
-      savesCount: 1300,
+      likesCount: 6000,
+      savesCount: 9000,
       sharesCount: 100,
-      cardHeight: 150,
-      title: 'CLASSIC CHIC JACKET',
-      username: 'jawaan_ki_girlfriend',
-      avatarAssetPath: 'assets/images/google_logo.png',
+      cardHeight: 250,
+      title: 'check out my new...',
+      username: 'jawaan_ki_chokri',
+      avatarAssetPath: null,
       description: 'A premium neutral-toned utility jacket, perfect for transitional styling. Fits true to size with custom hardware details.',
       url: 'https://memoria.app/shop/jacket',
     ),

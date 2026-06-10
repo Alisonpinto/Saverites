@@ -16,7 +16,6 @@ import '../post/write_post_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../utils/post_store.dart';
 import '../post_detail/post_detail_screen.dart';
-import '../../utils/share_helper.dart';
 import '../../utils/rich_text_controller.dart';
 
 
@@ -30,6 +29,7 @@ class ProfileScreen extends StatefulWidget {
   final Color? avatarColor;
   final bool showBottomNav;
   final bool showBackButton;
+  final VoidCallback? onBackTap;
 
   const ProfileScreen({
     super.key,
@@ -39,6 +39,7 @@ class ProfileScreen extends StatefulWidget {
     this.avatarColor,
     this.showBottomNav = true,
     this.showBackButton = true,
+    this.onBackTap,
   });
 
   @override
@@ -53,6 +54,72 @@ class _ProfileScreenState extends State<ProfileScreen>
   double _scrollOffset = 0;
   bool _isOnline = true;
   Timer? _connectivityTimer;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _profileSearchQuery = "";
+  String _activeCategoryChip = "Recent";
+
+  String _getVaultReminder(List<UserPost> saves) {
+    if (saves.isEmpty) {
+      return "Start saving things you like to your vault.";
+    }
+    final docs = saves.where((p) => p.type == 'document').toList();
+    if (docs.isNotEmpty) {
+      return "You saved a document recently. Review it in Self Save.";
+    }
+    final checklists = saves.where((p) => p.type == 'checklist').toList();
+    if (checklists.isNotEmpty) {
+      return "Remember to check off items on your active checklist!";
+    }
+    final contacts = saves.where((p) => p.type == 'contact').toList();
+    if (contacts.isNotEmpty) {
+      return "You have saved contacts in your vault. Keep them secure.";
+    }
+    return "You've saved ${saves.length} private items. Keep organizing your thoughts!";
+  }
+
+  Widget _buildCategoryChips() {
+    final categories = ['Recent', 'Documents', 'Media', 'Contacts', 'Audio', 'Ideas'];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: categories.map((cat) {
+            final isSelected = _activeCategoryChip == cat;
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _activeCategoryChip = cat;
+                });
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected ? Colors.white : const Color(0xFF2D2D30),
+                    width: 1.0,
+                  ),
+                ),
+                child: Text(
+                  cat,
+                  style: GoogleFonts.inter(
+                    color: isSelected ? Colors.black : const Color(0xFF8E8E93),
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
 
   // ── FAB animation controllers ──────────────
   late AnimationController _fabController;
@@ -117,6 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     _connectivityTimer?.cancel();
     _fabController.dispose();
     _scrollController.dispose();
+    _searchController.dispose();
     PostStore.instance.postsNotifier.removeListener(_onPostsChanged);
     super.dispose();
   }
@@ -191,26 +259,36 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
 
                 SafeArea(
+                  top: false,
                   child: Column(
                     children: [
                       // Sticky Header Row (placed directly on gradient background)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 0, bottom: 12, left: 8, right: 16),
+                      Container(
+                        padding: EdgeInsets.only(
+                          top: MediaQuery.of(context).padding.top > 0
+                              ? MediaQuery.of(context).padding.top
+                              : 10,
+                          bottom: 12,
+                          left: 8,
+                          right: 16,
+                        ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            if (widget.showBackButton) ...[
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                                splashRadius: 20,
-                              ),
-                              const SizedBox(width: 4),
-                            ],
-                            if (!widget.showBackButton)
-                              const SizedBox(width: 12),
+                            IconButton(
+                              onPressed: () {
+                                if (widget.onBackTap != null) {
+                                  widget.onBackTap!();
+                                } else if (Navigator.of(context).canPop()) {
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                              padding: const EdgeInsets.all(8),
+                              constraints: const BoxConstraints(),
+                              splashRadius: 20,
+                            ),
+                            const SizedBox(width: 4),
                             Text(
                               'Profile',
                               style: GoogleFonts.inter(
@@ -379,7 +457,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                               // Search field (Only search field has rounded border)
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: _PremiumSearchBar(),
+                                child: _PremiumSearchBar(
+                                  controller: _searchController,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _profileSearchQuery = val;
+                                    });
+                                  },
+                                  onClear: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _profileSearchQuery = "";
+                                    });
+                                  },
+                                ),
                               ),
 
                               const SizedBox(height: 24),
@@ -392,6 +483,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   onTabChanged: (i) => setState(() => _activeTab = i),
                                 ),
                               ),
+
+                              if (_activeTab == 1) ...[
+                                const SizedBox(height: 16),
+                                _buildCategoryChips(),
+                              ],
 
                               const SizedBox(height: 18),
 
@@ -593,27 +689,38 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildProfileGrid() {
     final bool isMyProfile = widget.username == null || widget.username == 'gangster_vagas';
-    
+    final query = _profileSearchQuery.toLowerCase().trim();
+
     if (_activeTab == 0) {
       if (isMyProfile) {
         return ValueListenableBuilder<Set<String>>(
           valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
           builder: (context, savedSocialIds, _) {
-            return ValueListenableBuilder<List<UserPost>>(
-              valueListenable: PostStore.instance.postsNotifier,
-              builder: (context, postsList, _) {
-                final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
-                final savedPredefined = PostStore.predefinedPosts
-                    .where((p) => savedSocialIds.contains(p.id))
-                    .toList();
-                final allSaved = [...savedUserPosts, ...savedPredefined];
-                return _ProfileMasonryGrid(items: allSaved, isOnline: _isOnline);
-              },
-            );
+            var savedPredefined = PostStore.predefinedPosts
+                .where((p) => savedSocialIds.contains(p.id))
+                .toList();
+
+            if (query.isNotEmpty) {
+              savedPredefined = savedPredefined.where((p) {
+                return (p.title?.toLowerCase().contains(query) ?? false) ||
+                       (p.description?.toLowerCase().contains(query) ?? false) ||
+                       (p.username?.toLowerCase().contains(query) ?? false) ||
+                       (p.url?.toLowerCase().contains(query) ?? false);
+              }).toList();
+            }
+
+            return _ProfileMasonryGrid(items: savedPredefined, isOnline: _isOnline);
           },
         );
       } else {
-        final friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+        var friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+        if (query.isNotEmpty) {
+          friendPosts = friendPosts.where((p) {
+            return (p.title?.toLowerCase().contains(query) ?? false) ||
+                   (p.description?.toLowerCase().contains(query) ?? false) ||
+                   (p.url?.toLowerCase().contains(query) ?? false);
+          }).toList();
+        }
         return _ProfileMasonryGrid(items: friendPosts, isOnline: _isOnline);
       }
     } else {
@@ -621,12 +728,80 @@ class _ProfileScreenState extends State<ProfileScreen>
         return ValueListenableBuilder<List<UserPost>>(
           valueListenable: PostStore.instance.postsNotifier,
           builder: (context, postsList, _) {
-            final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
-            return _ProfileMasonryGrid(items: savedUserPosts, isOnline: _isOnline);
+            var savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
+
+            // 1. Filter by category chip
+            if (_activeCategoryChip == 'Documents') {
+              savedUserPosts = savedUserPosts.where((p) => p.type == 'document').toList();
+            } else if (_activeCategoryChip == 'Media') {
+              savedUserPosts = savedUserPosts.where((p) => p.type == 'image' || p.type == 'video').toList();
+            } else if (_activeCategoryChip == 'Contacts') {
+              savedUserPosts = savedUserPosts.where((p) => p.type == 'contact').toList();
+            } else if (_activeCategoryChip == 'Audio') {
+              savedUserPosts = savedUserPosts.where((p) => p.type == 'audio').toList();
+            } else if (_activeCategoryChip == 'Ideas') {
+              savedUserPosts = savedUserPosts.where((p) => p.type == 'text' || p.type == 'checklist' || p.type == 'code' || p.type == 'link').toList();
+            }
+
+            // 2. Filter by search query
+            if (query.isNotEmpty) {
+              savedUserPosts = savedUserPosts.where((p) {
+                return p.title.toLowerCase().contains(query) ||
+                       p.body.toLowerCase().contains(query) ||
+                       (p.contactName?.toLowerCase().contains(query) ?? false) ||
+                       (p.contactPhone?.toLowerCase().contains(query) ?? false) ||
+                       (p.filePath?.toLowerCase().contains(query) ?? false) ||
+                       (p.url?.toLowerCase().contains(query) ?? false);
+              }).toList();
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (savedUserPosts.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lightbulb_outline_rounded, color: Colors.amber, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _getVaultReminder(savedUserPosts),
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFFE5E5EA),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                _ProfileMasonryGrid(items: savedUserPosts, isOnline: _isOnline),
+              ],
+            );
           },
         );
       } else {
-        final friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+        var friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+        if (query.isNotEmpty) {
+          friendPosts = friendPosts.where((p) {
+            return (p.title?.toLowerCase().contains(query) ?? false) ||
+                   (p.description?.toLowerCase().contains(query) ?? false) ||
+                   (p.url?.toLowerCase().contains(query) ?? false);
+          }).toList();
+        }
         return _ProfileMasonryGrid(items: friendPosts, isOnline: _isOnline);
       }
     }
@@ -916,6 +1091,16 @@ class _AvatarPainter extends CustomPainter {
 //  Premium Search Bar
 // ─────────────────────────────────────────────
 class _PremiumSearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const _PremiumSearchBar({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -936,6 +1121,8 @@ class _PremiumSearchBar extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
+              controller: controller,
+              onChanged: onChanged,
               style: GoogleFonts.inter(
                 color: Colors.white,
                 fontSize: 14,
@@ -954,6 +1141,11 @@ class _PremiumSearchBar extends StatelessWidget {
               ),
             ),
           ),
+          if (controller.text.isNotEmpty)
+            GestureDetector(
+              onTap: onClear,
+              child: const Icon(Icons.close_rounded, color: Color(0xFF7C7C81), size: 18),
+            ),
         ],
       ),
     );
@@ -1046,16 +1238,43 @@ class _ProfileMasonryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return SizedBox(
-        height: 160,
+        height: 280,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.bookmark_border,
-                  color: Color(0xFF7C7C81), size: 40),
-              const SizedBox(height: 12),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1F),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF2E2E2F),
+                    width: 2.0,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.bookmark_outline_rounded,
+                    color: Color(0xFF7C7C81),
+                    size: 36,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
               Text(
-                'Nothing saved yet',
+                'No saved posts yet',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Start saving things you like',
                 style: GoogleFonts.inter(
                   color: const Color(0xFF7C7C81),
                   fontSize: 14,
@@ -1082,17 +1301,22 @@ class _ProfileMasonryGrid extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _ProfileMasonryColumn(items: left, isOnline: isOnline),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 378),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _ProfileMasonryColumn(items: left, isOnline: isOnline),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _ProfileMasonryColumn(items: right, isOnline: isOnline),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _ProfileMasonryColumn(items: right, isOnline: isOnline),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1179,6 +1403,353 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
     }
   }
 
+  String _truncateTitle(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return 'check out my new...';
+    final words = trimmed.split(RegExp(r'\s+'));
+    if (words.length > 5) {
+      return '${words.take(5).join(' ')}...';
+    }
+    return trimmed;
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.day}-${dt.month.toString().padLeft(2, '0')}-${dt.year}';
+  }
+
+  Widget _buildVaultPreviewWidget(UserPost post) {
+    final String resolvedType = post.type ?? (
+      post.imagePath != null ? 'image' : (
+      post.videoPath != null ? 'video' : (
+      post.url != null ? 'link' : (
+      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : (
+      post.body.contains('```') ? 'code' : 'text'
+    )))));
+
+    if (resolvedType == 'image') {
+      final path = post.imagePath;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: path != null
+            ? Image.file(
+                File(path),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 120,
+                  color: const Color(0xFF2A2A2E),
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white54, size: 28),
+                  ),
+                ),
+              )
+            : Container(
+                height: 120,
+                color: const Color(0xFF2A2A2E),
+                child: const Center(
+                  child: Icon(Icons.image_outlined, color: Colors.white54, size: 28),
+                ),
+              ),
+      );
+    } else if (resolvedType == 'video') {
+      final path = post.videoPath;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: path != null
+            ? SizedBox(
+                height: 120,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    RunningVideoPlayer(file: File(path)),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+                    ),
+                  ],
+                ),
+              )
+            : Container(
+                height: 120,
+                color: const Color(0xFF2A2A2E),
+                child: const Center(
+                  child: Icon(Icons.video_file_outlined, color: Colors.white54, size: 28),
+                ),
+              ),
+      );
+    } else if (resolvedType == 'document') {
+      final path = post.filePath;
+      final name = path != null ? path.split('/').last.split('\\').last : 'document.pdf';
+      final isPdf = name.toLowerCase().endsWith('.pdf');
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isPdf ? Colors.redAccent.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
+                color: isPdf ? Colors.redAccent : Colors.blue,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isPdf ? 'PDF' : 'DOC',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'contact') {
+      final name = post.contactName ?? 'Unknown';
+      final phone = post.contactPhone ?? 'No number';
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF8E8E93),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.black,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    phone,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF555555),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'audio') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.mic, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SizedBox(
+                height: 14,
+                child: CustomPaint(
+                  painter: MiniWaveformPainter(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'link') {
+      final url = post.url ?? '';
+      final domain = Uri.tryParse(url)?.host ?? 'link';
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.link_rounded, color: Colors.purpleAccent, size: 16),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    url,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    domain,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'checklist') {
+      final itemsList = post.checklistItems ?? [];
+      return Container(
+        padding: const EdgeInsets.all(12),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < math.min(itemsList.length, 5); i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        itemsList[i],
+                        style: GoogleFonts.inter(
+                          color: Colors.black,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'code') {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          post.body.trim().isNotEmpty ? post.body.trim() : 'hello world',
+          style: const TextStyle(
+            fontFamily: 'Cascadia Code',
+            color: Color(0xFFB71C1C),
+            fontSize: 11,
+          ),
+          maxLines: 6,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.topLeft,
+        child: RichTextController.buildRichText(
+          post.body,
+          post.charStyles,
+          defaultStyle: GoogleFonts.inter(
+            color: const Color(0xFFAEAEB2),
+            fontSize: 11,
+            fontWeight: FontWeight.w300,
+          ),
+          maxLines: 5,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final showShimmer = !widget.isOnline || _showShimmer;
@@ -1204,6 +1775,65 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
       );
     }
 
+    void showPreviewDialog() {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          Widget media;
+          if (widget.item is UserPost) {
+            final post = widget.item as UserPost;
+            if (post.videoPath != null) {
+              media = RunningVideoPlayer(file: File(post.videoPath!));
+            } else if (post.imagePath != null) {
+              media = Image.file(File(post.imagePath!), fit: BoxFit.contain);
+            } else {
+              media = Container(
+                padding: const EdgeInsets.all(20),
+                color: const Color(0xFF1C1C1E),
+                child: Text(post.body, style: const TextStyle(color: Colors.white, fontSize: 16)),
+              );
+            }
+          } else {
+            final post = widget.item as PostModel;
+            if (post.mediaType == PostMediaType.video) {
+              media = RunningVideoPlayer(assetPath: post.mediaAssetPath);
+            } else {
+              media = Image.asset(post.mediaAssetPath, fit: BoxFit.contain);
+            }
+          }
+          
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(16),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.95),
+                      child: media,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
     if (showShimmer) {
       return ShimmerContainer(
         key: const ValueKey('shimmer'),
@@ -1216,199 +1846,177 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
         ? (widget.item as UserPost).id
         : (widget.item as PostModel).id;
 
+    if (widget.item is UserPost) {
+      final post = widget.item as UserPost;
+      final previewWidget = _buildVaultPreviewWidget(post);
+      final truncatedTitle = _truncateTitle(post.title);
+      final String formattedDate = _formatDate(post.createdAt);
+
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF3A3A3B),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+                child: GestureDetector(
+                  onTap: showPreviewDialog,
+                  child: previewWidget,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  truncatedTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              if (post.body.isNotEmpty && post.type != 'code' && post.type != 'checklist')
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    post.body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFC7C7CC),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12, top: 8),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: Text(
+                    formattedDate,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFC7C7CC),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return AnimatedBuilder(
       animation: Listenable.merge([
         PostStore.instance.likedPostIdsNotifier,
-        widget.item is UserPost
-            ? PostStore.instance.postsNotifier
-            : PostStore.instance.savedSocialPostIdsNotifier,
+        PostStore.instance.savedSocialPostIdsNotifier,
       ]),
       builder: (context, _) {
         final isLiked = PostStore.instance.likedPostIds.contains(itemId);
-        final isSaved = widget.item is UserPost
-            ? PostStore.instance.posts
-                .firstWhere((p) => p.id == itemId, orElse: () => widget.item as UserPost)
-                .savedInProfile
-            : PostStore.instance.savedSocialPostIds.contains(itemId);
+        final isSaved = PostStore.instance.savedSocialPostIds.contains(itemId);
 
         final likes = isLiked ? '1' : '0';
-        final bookmarks = widget.item is UserPost
-            ? (isSaved ? '1' : '0')
-            : _format(isSaved
-                ? (widget.item as PostModel).savesCount + 1
-                : (widget.item as PostModel).savesCount);
-        final shares = widget.item is UserPost ? '0' : _format((widget.item as PostModel).sharesCount);
-
+        final bookmarks = _format(isSaved
+            ? (widget.item as PostModel).savesCount + 1
+            : (widget.item as PostModel).savesCount);
         Widget mediaWidget;
-        Color? cardColor;
-        EdgeInsets? imagePadding;
-        BorderRadius? imageBorderRadius;
 
-        if (widget.item is UserPost) {
-          final post = widget.item as UserPost;
-          if (post.videoPath != null) {
-            mediaWidget = RunningVideoPlayer(
-              file: File(post.videoPath!),
-            );
-          } else if (post.imagePath != null) {
-            mediaWidget = Image.file(
-              File(post.imagePath!),
-              fit: BoxFit.cover,
-              width: double.infinity,
-              errorBuilder: (context, error, stackTrace) => Container(
-                height: 150,
-                color: const Color(0xFF2A2A2E),
-                child: const Center(
-                  child: Icon(Icons.broken_image, color: Colors.white54, size: 32),
-                ),
-              ),
-            );
-          } else {
-            mediaWidget = Container(
-              height: 120,
-              padding: const EdgeInsets.all(12),
-              color: const Color(0xFF2A2A2E),
-              alignment: Alignment.topLeft,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    post.title.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: RichTextController.buildRichText(
-                      post.body,
-                      post.charStyles,
-                      defaultStyle: GoogleFonts.inter(
-                        color: const Color(0xFFAEAEB2),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w300,
-                      ),
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
+        final post = widget.item as PostModel;
+        
+        Widget childWidget;
+        if (post.mediaType == PostMediaType.video) {
+          childWidget = RunningVideoPlayer(
+            assetPath: post.mediaAssetPath,
+          );
         } else {
-          final post = widget.item as PostModel;
-          
-          // Removed custom border padding and accentColor backgrounds to enforce uniform layout
-          Widget childWidget;
-          if (post.mediaType == PostMediaType.video) {
-            childWidget = RunningVideoPlayer(
-              assetPath: post.mediaAssetPath,
-              height: cardHeight - 44,
-            );
-          } else {
-            childWidget = Image.asset(
-              post.mediaAssetPath,
-              fit: BoxFit.cover,
-              height: cardHeight - 44,
-              width: double.infinity,
-            );
-          }
-
-          if (post.id == 'social-1') {
-            mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildOutfitOverlay('Trend Huntss', true),
-              ],
-            );
-          } else if (post.id == 'social-8') {
-            mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildOutfitOverlay('Street Style', false),
-              ],
-            );
-          } else if (post.id == 'social-3') {
-            mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildMemeOverlay('rekha ji not so sanskari pics'),
-              ],
-            );
-          } else if (post.id == 'social-7') {
-            mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildMemeOverlay('flutter app look professional in 5 minutes'),
-              ],
-            );
-          } else if (post.id == 'social-4') {
-            mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildPandaOverlay('peace\nBRO!!'),
-              ],
-            );
-          } else if (post.id == 'social-6') {
-            mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildPandaOverlay('chill\nTIME'),
-              ],
-            );
-          } else {
-            mediaWidget = childWidget;
-          }
+          childWidget = Image.asset(
+            post.mediaAssetPath,
+            fit: BoxFit.cover,
+            width: double.infinity,
+          );
         }
 
+        if (post.id == 'social-1') {
+          mediaWidget = Stack(
+            children: [
+              childWidget,
+              _buildOutfitOverlay('Trend Huntss', true),
+            ],
+          );
+        } else if (post.id == 'social-8') {
+          mediaWidget = Stack(
+            children: [
+              childWidget,
+              _buildOutfitOverlay('Street Style', false),
+            ],
+          );
+        } else if (post.id == 'social-3') {
+          mediaWidget = Stack(
+            children: [
+              childWidget,
+              _buildMemeOverlay('rekha ji not so sanskari pics'),
+            ],
+          );
+        } else if (post.id == 'social-7') {
+          mediaWidget = Stack(
+            children: [
+              childWidget,
+              _buildMemeOverlay('flutter app look professional in 5 minutes'),
+            ],
+          );
+        } else if (post.id == 'social-4') {
+          mediaWidget = Stack(
+            children: [
+              childWidget,
+              _buildPandaOverlay('peace\nBRO!!'),
+            ],
+          );
+        } else if (post.id == 'social-6') {
+          mediaWidget = Stack(
+            children: [
+              childWidget,
+              _buildPandaOverlay('chill\nTIME'),
+            ],
+          );
+        } else {
+          mediaWidget = childWidget;
+        }
 
-        return GestureDetector(
-          onTap: onTap,
-          child: FeedCard(
-            imageWidget: mediaWidget,
-            likes: likes,
-            bookmarks: bookmarks,
-            shares: shares,
-            cardColor: cardColor,
-            imagePadding: imagePadding,
-            imageBorderRadius: imageBorderRadius,
-            isLiked: isLiked,
-            isSaved: isSaved,
-            onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
-            onSaveTap: () {
-              if (widget.item is UserPost) {
-                PostStore.instance.toggleSavedInProfile(itemId);
-              } else {
-                PostStore.instance.toggleSavedSocialPost(itemId);
-              }
-            },
-            onShareTap: () async {
-              if (widget.item is UserPost) {
-                final post = widget.item as UserPost;
-                await ShareHelper.sharePost(
-                  title: post.title,
-                  description: post.body,
-                  url: post.url,
-                  localImagePath: post.imagePath,
-                  localVideoPath: post.videoPath,
-                );
-              } else {
-                final post = widget.item as PostModel;
-                await ShareHelper.sharePost(
-                  title: post.title ?? '',
-                  description: post.description,
-                  url: post.url,
-                  assetPath: post.mediaAssetPath,
-                );
-              }
-            },
-          ),
+        final titleText = post.title ?? '';
+        final userText = post.username ?? 'Unknown';
+        final avatarAsset = post.avatarAssetPath;
+        final initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
+        final color = post.accentColor ?? const Color(0xFF7B61FF);
+
+        return FeedCard(
+          imageWidget: mediaWidget,
+          title: titleText,
+          username: userText,
+          avatarAssetPath: avatarAsset,
+          avatarInitial: initial,
+          avatarColor: color,
+          likes: likes,
+          bookmarks: bookmarks,
+          isLiked: isLiked,
+          isSaved: isSaved,
+          onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
+          onSaveTap: () => PostStore.instance.toggleSavedSocialPost(itemId),
+          onCardTap: onTap,
+          onImageTap: showPreviewDialog,
         );
       },
     );
@@ -1738,4 +2346,36 @@ class _FabActionState extends State<_FabAction> {
       ),
     );
   }
+}
+
+class MiniWaveformPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF8E8E93)
+      ..style = PaintingStyle.fill;
+    
+    const int barCount = 12;
+    const double spacing = 3.0;
+    final double totalSpacing = spacing * (barCount - 1);
+    final double barWidth = (size.width - totalSpacing) / barCount;
+    
+    final heights = [0.4, 0.6, 0.9, 0.5, 0.8, 0.3, 0.7, 0.5, 0.8, 0.4, 0.6, 0.3];
+    
+    for (int i = 0; i < barCount; i++) {
+      final double x = i * (barWidth + spacing);
+      final double h = size.height * heights[i % heights.length];
+      final double y = (size.height - h) / 2;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, barWidth, h),
+          const Radius.circular(1),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

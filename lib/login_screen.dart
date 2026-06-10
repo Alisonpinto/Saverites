@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/feed/feed_screen.dart';
 import 'utils/translation_manager.dart';
 
@@ -105,14 +106,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       SizedBox(height: topSpacer),
-                      // Logo — plain text, matching splash screen exactly
-                      Text(
-                        'memoria',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      // Logo — custom image matching splash screen exactly
+                      Image.asset(
+                        'assets/images/app_logo_memoria.png',
+                        height: 48,
+                        fit: BoxFit.contain,
                       ),
                       SizedBox(height: middleSpacer),
                       // Animated inputs, buttons, and footer
@@ -227,10 +225,13 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                     width: double.infinity,
                                     height: 48,
                                     child: TextButton(
-                                      onPressed: () {
+                                      onPressed: () async {
                                         if (_emailController.text == 'admin' &&
                                             _passwordController.text == 'admin') {
-                                          Navigator.of(context).pushReplacement(
+                                          final navigator = Navigator.of(context);
+                                          final prefs = await SharedPreferences.getInstance();
+                                          await prefs.setBool('isLoggedIn', true);
+                                          navigator.pushReplacement(
                                             PageRouteBuilder(
                                               pageBuilder: (context, animation, secondaryAnimation) =>
                                                   const FeedScreen(),

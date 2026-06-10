@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:share_plus/share_plus.dart';
+import 'notification_manager.dart';
 
 class ShareHelper {
   /// Shares a post natively.
@@ -18,6 +19,7 @@ class ShareHelper {
     String? localImagePath,
     String? localVideoPath,
     String? assetPath,
+    String? author,
   }) async {
     final bool hasUrl = url != null && url.trim().isNotEmpty;
 
@@ -73,30 +75,27 @@ class ShareHelper {
         }
       }
 
-      // Perform the share action using the new SharePlus API
+      // Perform the share action using the standard Share API
       if (filePathToShare != null) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [XFile(filePathToShare)],
-            text: shareText,
-          ),
+        await Share.shareXFiles(
+          [XFile(filePathToShare)],
+          text: shareText,
         );
       } else {
-        await SharePlus.instance.share(
-          ShareParams(
-            text: shareText,
-          ),
-        );
+        await Share.share(shareText);
       }
+
+      // Trigger user action notification
+      NotificationManager.instance.triggerUserActionNotification(
+        action: 'shared',
+        postTitle: title,
+        author: author,
+      );
     } catch (e) {
       debugPrint('Error sharing post natively: $e');
       // Graceful fallback to text-only share
       try {
-        await SharePlus.instance.share(
-          ShareParams(
-            text: shareText,
-          ),
-        );
+        await Share.share(shareText);
       } catch (fallbackError) {
         debugPrint('Fallback sharing also failed: $fallbackError');
       }

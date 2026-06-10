@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../login_screen.dart';
 import '../../utils/translation_manager.dart';
 
@@ -745,9 +746,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               icon: Icons.logout_outlined,
                               label: _t('logout'),
                               isDestructive: true,
-                              onTap: () {
+                              onTap: () async {
                                 final navigator = Navigator.of(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.setBool('isLoggedIn', false);
+                                scaffoldMessenger.showSnackBar(
                                   SnackBar(
                                     content: Text(
                                       _t('loggingOut'),

@@ -205,69 +205,72 @@ class FeedCard extends StatelessWidget {
             // SECTION 3 — ACTION FOOTER
             Padding(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Spacer(flex: 4),
-                  // Heart + Count
-                  _ActionButton(
-                    iconWidget: BouncingIcon(
-                      trigger: isLiked,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (child, animation) {
-                          return ScaleTransition(scale: animation, child: child);
-                        },
-                        child: Icon(
-                          isLiked ? Icons.favorite : Icons.favorite_border,
-                          key: ValueKey<bool>(isLiked),
-                          size: 22,
-                          color: isLiked ? const Color(0xFFE52E5E) : Colors.white,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // Heart + Count
+                    _ActionButton(
+                      iconWidget: BouncingIcon(
+                        trigger: isLiked,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          transitionBuilder: (child, animation) {
+                            return ScaleTransition(scale: animation, child: child);
+                          },
+                          child: Icon(
+                            isLiked ? Icons.favorite : Icons.favorite_border,
+                            key: ValueKey<bool>(isLiked),
+                            size: 22,
+                            color: isLiked ? const Color(0xFFE52E5E) : Colors.white,
+                          ),
                         ),
                       ),
+                      count: likes,
+                      onTap: onLikeTap,
                     ),
-                    count: likes,
-                    onTap: onLikeTap,
-                  ),
-                  const Spacer(flex: 3),
+                    const SizedBox(width: 12),
 
-                  // Share + Count
-                  _ActionButton(
-                    iconWidget: Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.rotationY(3.141592653589793),
-                      child: const Icon(
-                        Icons.reply,
-                        size: 22,
-                        color: Colors.white,
-                      ),
-                    ),
-                    count: shares,
-                    onTap: onShareTap,
-                  ),
-                  const Spacer(flex: 3),
-
-                  // Save + Count
-                  _ActionButton(
-                    iconWidget: BouncingIcon(
-                      trigger: isSaved,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (child, animation) {
-                          return ScaleTransition(scale: animation, child: child);
-                        },
-                        child: Icon(
-                          isSaved ? Icons.bookmark : Icons.bookmark_border,
-                          key: ValueKey<bool>(isSaved),
+                    // Share + Count
+                    _ActionButton(
+                      iconWidget: Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.rotationY(3.141592653589793),
+                        child: const Icon(
+                          Icons.reply,
                           size: 22,
-                          color: isSaved ? const Color(0xFFFFEE00) : Colors.white,
+                          color: Colors.white,
                         ),
                       ),
+                      count: shares,
+                      onTap: onShareTap,
                     ),
-                    count: bookmarks,
-                    onTap: onSaveTap,
-                  ),
-                ],
+                    const SizedBox(width: 12),
+
+                    // Save + Count
+                    _ActionButton(
+                      iconWidget: BouncingIcon(
+                        trigger: isSaved,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          transitionBuilder: (child, animation) {
+                            return ScaleTransition(scale: animation, child: child);
+                          },
+                          child: Icon(
+                            isSaved ? Icons.bookmark : Icons.bookmark_border,
+                            key: ValueKey<bool>(isSaved),
+                            size: 22,
+                            color: isSaved ? const Color(0xFFFFEE00) : Colors.white,
+                          ),
+                        ),
+                      ),
+                      count: bookmarks,
+                      onTap: onSaveTap,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

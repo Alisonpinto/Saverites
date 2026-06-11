@@ -1,6 +1,9 @@
 import 'dart:math' as math;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:io';
+import 'utils/post_store.dart';
 
 class SocialFeedPage extends StatefulWidget {
   const SocialFeedPage({super.key});
@@ -31,103 +34,106 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                   _buildHeader(context),
                   // Masonry Feed
                   Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Left Column
-                          Expanded(
-                            child: Column(
-                              children: [
-                                // Card 1: Outfit Card (Tall)
-                                _buildOutfitCard(
-                                  title: 'Trend Huntss',
-                                  imagePath: 'assets/images/outfit.png',
-                                  likes: '1k',
-                                  bookmarks: '1.3k',
-                                  shares: '100',
-                                  height: 270,
-                                  arrow: true,
-                                ),
-                                const SizedBox(height: 16),
-                                // Card 3: Meme Card (Medium)
-                                _buildMemeCard(
-                                  query: 'rekha ji not so sanskari pics',
-                                  likes: '1k',
-                                  bookmarks: '1.3k',
-                                  shares: '100',
-                                  height: 210,
-                                ),
-                                const SizedBox(height: 16),
-                                // Card 5: Second Jacket Card (Short)
-                                _buildJacketCard(
-                                  likes: '1.2k',
-                                  bookmarks: '850',
-                                  shares: '45',
-                                  height: 150,
-                                ),
-                                const SizedBox(height: 16),
-                                // Card 6: Second Panda Card (Tall)
-                                _buildPandaCard(
-                                  text: 'chill\nTIME',
-                                  borderColor: const Color(0xFF00B0FF),
-                                  likes: '920',
-                                  bookmarks: '1.1k',
-                                  shares: '60',
-                                  height: 250,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // Right Column
-                          Expanded(
-                            child: Column(
-                              children: [
-                                // Card 2: Jacket Card (Short)
-                                _buildJacketCard(
-                                  likes: '1k',
-                                  bookmarks: '1.3k',
-                                  shares: '100',
-                                  height: 150,
-                                ),
-                                const SizedBox(height: 16),
-                                // Card 4: Panda Card (Tall)
-                                _buildPandaCard(
-                                  text: 'peace\nBRO!!',
-                                  borderColor: const Color(0xFFE52E5E),
-                                  likes: '1k',
-                                  bookmarks: '1.3k',
-                                  shares: '100',
-                                  height: 250,
-                                ),
-                                const SizedBox(height: 16),
-                                // Card 7: Second Meme Card (Medium)
-                                _buildMemeCard(
-                                  query: 'flutter app look professional in 5 minutes',
-                                  likes: '800',
-                                  bookmarks: '500',
-                                  shares: '25',
-                                  height: 210,
-                                ),
-                                const SizedBox(height: 16),
-                                // Card 8: Second Outfit Card (Tall)
-                                _buildOutfitCard(
-                                  title: 'Street Style',
-                                  imagePath: 'assets/images/outfit.png',
-                                  likes: '1.5k',
-                                  bookmarks: '2k',
-                                  shares: '180',
-                                  height: 270,
-                                  arrow: false,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                    child: CustomScrollView(
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
                       ),
+                      slivers: [
+                        CupertinoSliverRefreshControl(
+                          onRefresh: () async {
+                            // Simulate network fetch
+                            await Future.delayed(const Duration(milliseconds: 1500));
+                          },
+                          builder: (context, refreshState, pulledExtent, refreshTriggerPullDistance, refreshIndicatorExtent) {
+                            double percentage = (pulledExtent / refreshTriggerPullDistance).clamp(0.0, 1.0);
+                            
+                            // Make it spin slightly if it's actively refreshing
+                            Widget logo = Image.asset(
+                              'assets/images/app_logo_memoria.png',
+                              width: 36,
+                              height: 36,
+                              color: Colors.white, // Applying white to ensure it fits the premium dark theme
+                            );
+                            
+                            if (refreshState == RefreshIndicatorMode.refresh) {
+                               // simple visual cue during refresh could just be the logo fully opaque
+                               percentage = 1.0;
+                            }
+
+                            return Center(
+                              child: Opacity(
+                                opacity: percentage,
+                                child: Transform.scale(
+                                  scale: 0.8 + (0.2 * percentage), // Small scale up effect
+                                  child: logo,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.all(20),
+                          sliver: SliverToBoxAdapter(
+                            child: ValueListenableBuilder<List<UserPost>>(
+                              valueListenable: PostStore.instance.postsNotifier,
+                              builder: (context, posts, child) {
+                                final leftColumn = <Widget>[];
+                                final rightColumn = <Widget>[];
+
+                                for (int i = 0; i < posts.length; i++) {
+                                  final post = posts[i];
+                                  final card = _buildUserPostCard(post);
+                                  if (i % 2 == 0) {
+                                    leftColumn.add(card);
+                                  } else {
+                                    rightColumn.add(card);
+                                  }
+                                }
+
+                                if (posts.isEmpty) {
+                                  return Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 100),
+                                      child: Text(
+                                        'No posts yet. Write a post to see it here!',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white54,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                final leftColWidgets = <Widget>[];
+                                for (var w in leftColumn) {
+                                  leftColWidgets.add(w);
+                                  leftColWidgets.add(const SizedBox(height: 24));
+                                }
+
+                                final rightColWidgets = <Widget>[];
+                                for (var w in rightColumn) {
+                                  rightColWidgets.add(w);
+                                  rightColWidgets.add(const SizedBox(height: 24));
+                                }
+
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(children: leftColWidgets),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Column(children: rightColWidgets),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -234,241 +240,47 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
     );
   }
 
-  // --- Outfit Card (Card 1 & 8) ---
-  Widget _buildOutfitCard({
-    required String title,
-    required String imagePath,
-    required String likes,
-    required String bookmarks,
-    required String shares,
-    required double height,
-    required bool arrow,
-  }) {
-    return FeedCard(
-      likes: likes,
-      bookmarks: bookmarks,
-      shares: shares,
-      imageWidget: Stack(
-        children: [
-          Image.asset(
-            imagePath,
-            fit: BoxFit.cover,
-            height: height,
-            width: double.infinity,
-          ),
-          // Serif Italic Text Overlay
-          Positioned.fill(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 18,
-                      fontStyle: FontStyle.italic,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  if (arrow) ...[
-                    const SizedBox(height: 6),
-                    CustomPaint(
-                      size: const Size(60, 30),
-                      painter: ArrowPainter(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // --- Dynamic User Post Card ---
+  Widget _buildUserPostCard(UserPost post) {
+    Widget imageWidget;
+    // Generate a somewhat varied height based on content length for masonry effect
+    double height = 150.0 + ((post.title.length + post.body.length) % 5) * 30.0;
+    height = height.clamp(150.0, 300.0);
 
-  // --- Jacket Card (Card 2 & 5) ---
-  Widget _buildJacketCard({
-    required String likes,
-    required String bookmarks,
-    required String shares,
-    required double height,
-  }) {
-    return FeedCard(
-      likes: likes,
-      bookmarks: bookmarks,
-      shares: shares,
-      imageWidget: Image.asset(
-        'assets/images/jacket.png',
+    if (post.imagePath != null && File(post.imagePath!).existsSync()) {
+      imageWidget = Image.file(
+        File(post.imagePath!),
         fit: BoxFit.cover,
         height: height,
         width: double.infinity,
-      ),
-    );
-  }
-
-  // --- Meme Card (Card 3 & 7) ---
-  Widget _buildMemeCard({
-    required String query,
-    required String likes,
-    required String bookmarks,
-    required String shares,
-    required double height,
-  }) {
-    return FeedCard(
-      likes: likes,
-      bookmarks: bookmarks,
-      shares: shares,
-      imageWidget: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Image.asset(
-            'assets/images/meme.png',
-            fit: BoxFit.cover,
-            height: height,
-            width: double.infinity,
-          ),
-          // Google search mockup overlay
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFF202124),
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Google brand header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Icon(Icons.menu, color: Color(0xFF9AA0A6), size: 10),
-                      Text(
-                        'Google',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.amber,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Mock search query
-                  Container(
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF303134),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.search, color: Color(0xFF9AA0A6), size: 10),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            query,
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 7.5,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const Icon(Icons.close, color: Color(0xFF9AA0A6), size: 10),
-                      ],
-                    ),
-                  ),
-                  // Tab list mock
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      _buildMiniTab('All', active: false),
-                      _buildMiniTab('Images', active: true),
-                      _buildMiniTab('News', active: false),
-                      _buildMiniTab('Videos', active: false),
-                    ],
-                  ),
-                ],
-              ),
+      );
+    } else {
+      imageWidget = Container(
+        height: height,
+        width: double.infinity,
+        color: const Color(0xFF2C2C2E),
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            post.body.isNotEmpty ? post.body : post.title,
+            style: GoogleFonts.inter(
+              color: Colors.white70,
+              fontSize: 14,
             ),
+            maxLines: 6,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniTab(String label, {required bool active}) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6.0),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-          color: active ? const Color(0xFF8AB4F8) : const Color(0xFF9AA0A6),
-          fontSize: 6.5,
-          fontWeight: active ? FontWeight.w600 : FontWeight.w400,
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  // --- Panda Card (Card 4 & 6) ---
-  Widget _buildPandaCard({
-    required String text,
-    required Color borderColor,
-    required String likes,
-    required String bookmarks,
-    required String shares,
-    required double height,
-  }) {
     return FeedCard(
-      likes: likes,
-      bookmarks: bookmarks,
-      shares: shares,
-      imageWidget: Stack(
-        children: [
-          Image.asset(
-            'assets/images/panda.png',
-            fit: BoxFit.cover,
-            height: height,
-            width: double.infinity,
-          ),
-          // Stylized handwriting text
-          Positioned(
-            right: 14,
-            top: 24,
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.architectsDaughter(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF18181A),
-                height: 1.15,
-              ),
-            ),
-          ),
-        ],
-      ),
+      title: post.title,
+      likes: '0',
+      bookmarks: '0',
+      shares: '0',
+      imageWidget: imageWidget,
     );
   }
 
@@ -553,9 +365,7 @@ class FeedCard extends StatelessWidget {
   final String likes;
   final String bookmarks;
   final String shares;
-  final Color? cardColor;
-  final EdgeInsets? imagePadding;
-  final BorderRadius? imageBorderRadius;
+  final String? title;
 
   const FeedCard({
     super.key,
@@ -563,139 +373,86 @@ class FeedCard extends StatelessWidget {
     required this.likes,
     required this.bookmarks,
     required this.shares,
-    this.cardColor,
-    this.imagePadding,
-    this.imageBorderRadius,
+    this.title,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Top Media Area (Touches left/right edges, no padding, top rounded to 10px)
-        ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(10),
-            topRight: Radius.circular(10),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E), // Apple Dark Mode Card Color
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-          child: imageWidget,
-        ),
-        // Bottom Action Strip (Height: 44px, background #E5E5E5, no gap, bottom rounded to 10px)
-        Container(
-          height: 44,
-          decoration: const BoxDecoration(
-            color: Color(0xFFE5E5E5),
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(10),
-              bottomRight: Radius.circular(10),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Large visual image area
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: imageWidget,
+          ),
+          // Content Area
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title != null) ...[
+                  Text(
+                    title!,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500, // Medium font weight
+                      color: Colors.white,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                // Cleaner icon row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildIconText(Icons.favorite_border, likes),
+                    _buildIconText(Icons.bookmark_border, bookmarks),
+                    _buildIconText(Icons.ios_share, shares),
+                  ],
+                ),
+              ],
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Likes Section
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.thumb_up_alt_outlined,
-                    size: 18,
-                    color: Color(0xFF7C7C81),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    likes,
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFF7C7C81),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              // Bookmarks Section
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.bookmark,
-                    size: 18,
-                    color: Color(0xFF7C7C81),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    bookmarks,
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFF7C7C81),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              // Share Section
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.rotationY(math.pi),
-                    child: const Icon(
-                      Icons.reply,
-                      size: 22,
-                      color: Color(0xFF7C7C81),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    shares,
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFF7C7C81),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIconText(IconData icon, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: const Color(0xFF8E8E93), // Apple standard gray
+        ),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: const Color(0xFF8E8E93),
           ),
         ),
       ],
     );
   }
-}
-
-// --- Arrow Painter for Card 1 ---
-class ArrowPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-
-    final path = Path()
-      ..moveTo(5.0, 10.0)
-      ..quadraticBezierTo(25.0, 25.0, 45.0, 12.0);
-
-    canvas.drawPath(path, paint);
-
-    // Arrowhead drawing
-    final arrowPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
-      ..style = PaintingStyle.fill;
-
-    final arrowPath = Path()
-      ..moveTo(45.0, 12.0)
-      ..lineTo(37.0, 10.0)
-      ..lineTo(42.0, 18.0)
-      ..close();
-
-    canvas.drawPath(arrowPath, arrowPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

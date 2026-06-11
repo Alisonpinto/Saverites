@@ -29,13 +29,10 @@ class AppBottomNavigation extends StatelessWidget {
       children: [
         // ── Main Navigation Bar ──────────────────────────────────────────
         Container(
+          width: double.infinity,
           height: 60 + bottomPadding,
           decoration: const BoxDecoration(
             color: Color(0xFF272729),
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(24),
-              bottomRight: Radius.circular(24),
-            ),
           ),
           padding: EdgeInsets.only(bottom: bottomPadding),
           child: Row(

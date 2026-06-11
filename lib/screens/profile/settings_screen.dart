@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../login_screen.dart';
 import '../../utils/translation_manager.dart';
 import '../../utils/notification_manager.dart';
@@ -41,6 +42,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
       _reminderInterval = prefs.getString('savedItemsReminderInterval') ?? 'Always';
     });
+  }
+
+  Future<void> _openLink(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint("Could not launch $url");
+    }
   }
 
   @override
@@ -476,88 +486,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildDevelopersContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoCard(
-          title: _t('devQ1'),
-          body: _t('devA1'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('devQ2'),
-          body: _t('devA2'),
-        ),
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
-  Widget _buildMemoriaContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoCard(
-          title: _t('memoriaQ1'),
-          body: _t('memoriaA1'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('memoriaQ2'),
-          body: _t('memoriaA2'),
-        ),
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
-  Widget _buildTermsContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoCard(
-          title: _t('termsQ1'),
-          body: _t('termsA1'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('termsQ2'),
-          body: _t('termsA2'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('termsQ3'),
-          body: _t('termsA3'),
-        ),
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
-  Widget _buildPrivacyContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoCard(
-          title: _t('privacyQ1'),
-          body: _t('privacyA1'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('privacyQ2'),
-          body: _t('privacyA2'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('privacyQ3'),
-          body: _t('privacyA3'),
-        ),
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
   Widget _buildInfoCard({required String title, required String body}) {
     return Container(
       decoration: BoxDecoration(
@@ -709,13 +637,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _buildRow(
                                   icon: Icons.people_outline_rounded,
                                   label: _t('aboutDevs'),
-                                  onTap: () => _navigateToDetail(_t('aboutDevs'), _buildDevelopersContent()),
+                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/about-developer'),
                                 ),
                                 _buildDivider(),
                                 _buildRow(
                                   icon: Icons.info_outline_rounded,
                                   label: _t('aboutMemoria'),
-                                  onTap: () => _navigateToDetail(_t('aboutMemoria'), _buildMemoriaContent()),
+                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/'),
                                 ),
                               ],
                             ),
@@ -737,13 +665,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _buildRow(
                                   icon: Icons.description_outlined,
                                   label: _t('terms'),
-                                  onTap: () => _navigateToDetail(_t('terms'), _buildTermsContent()),
+                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/terms-and-conditions'),
                                 ),
                                 _buildDivider(),
                                 _buildRow(
                                   icon: Icons.shield_outlined,
                                   label: _t('privacy'),
-                                  onTap: () => _navigateToDetail(_t('privacy'), _buildPrivacyContent()),
+                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/privacy-policy'),
                                 ),
                               ],
                             ),

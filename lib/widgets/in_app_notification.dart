@@ -32,7 +32,8 @@ class InAppNotificationHelper {
     final context = MyApp.navigatorKey.currentContext;
     if (context == null || !context.mounted) return;
 
-    final overlay = Overlay.of(context);
+    final overlay = MyApp.navigatorKey.currentState?.overlay;
+    if (overlay == null) return;
 
     // Cancel existing timer and remove previous banner if active
     _autoDismissTimer?.cancel();

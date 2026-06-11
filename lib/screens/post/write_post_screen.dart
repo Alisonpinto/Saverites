@@ -1258,7 +1258,7 @@ class _WritePostScreenState extends State<WritePostScreen>
     await Future.delayed(const Duration(milliseconds: 300));
 
     String resolvedTitle = title;
-    if (widget.isSaveItem) {
+    if (widget.isSaveItem && resolvedTitle.isEmpty) {
       final bodyLines = body.split('\n');
       if (bodyLines.isNotEmpty && bodyLines.first.trim().isNotEmpty) {
         resolvedTitle = bodyLines.first.trim();
@@ -1767,18 +1767,7 @@ class _WritePostScreenState extends State<WritePostScreen>
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF7C7C81),
-              Color(0xFF1A1A1B),
-              Color(0xFF000000),
-            ],
-            stops: [0.0, 0.24, 1.0],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+        color: Colors.black,
         child: SafeArea(
           top: false,
           child: Stack(
@@ -1882,25 +1871,25 @@ class _WritePostScreenState extends State<WritePostScreen>
                             textCapitalization: TextCapitalization.sentences,
                             style: GoogleFonts.inter(
                               color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
                             ),
                             decoration: InputDecoration(
                               hintText: 'Title',
                               hintStyle: GoogleFonts.inter(
-                                color: Colors.white.withValues(alpha: 0.35),
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF7C7C81),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w400,
                               ),
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.zero,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
 
                           if (widget.isSaveItem) ...[
                             _buildAutomaticPreview(),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 6),
                             TextField(
                               controller: _bodyController,
                               focusNode: _bodyFocusNode,
@@ -1948,7 +1937,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                                   : GoogleFonts.inter(
                                       color: Colors.white,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w300,
+                                      fontWeight: FontWeight.w400,
                                     ),
                               decoration: InputDecoration(
                                 hintText:
@@ -1956,14 +1945,13 @@ class _WritePostScreenState extends State<WritePostScreen>
                                 hintStyle: GoogleFonts.inter(
                                   color: const Color(0xFF7C7C81),
                                   fontSize: 16,
-                                  fontWeight: FontWeight.w300,
-                                  fontStyle: FontStyle.italic,
+                                  fontWeight: FontWeight.w400,
                                 ),
                                 border: InputBorder.none,
                                 contentPadding: EdgeInsets.zero,
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 10),
 
                             // Link input
                             TextField(
@@ -1971,7 +1959,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                               maxLines: 1,
                               keyboardType: TextInputType.url,
                               style: GoogleFonts.inter(
-                                color: const Color(0xFF6B9BF7),
+                                color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w400,
                               ),
@@ -1980,7 +1968,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                                 hintStyle: GoogleFonts.inter(
                                   color: const Color(0xFF7C7C81),
                                   fontSize: 16,
-                                  fontWeight: FontWeight.w300,
+                                  fontWeight: FontWeight.w400,
                                 ),
                                 prefixIcon: const Padding(
                                   padding: EdgeInsets.only(right: 8.0),
@@ -2169,69 +2157,6 @@ class _WritePostScreenState extends State<WritePostScreen>
                                         ? Colors.white
                                         : Colors.black,
                                     size: 24,
-                                  ),
-                                ),
-                              )
-                            else
-                              // Save in profile toggle
-                              GestureDetector(
-                                onTap: () => setState(
-                                    () => _saveInProfile = !_saveInProfile),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  decoration: BoxDecoration(
-                                    color: _saveInProfile
-                                        ? const Color(0xFF6B9BF7)
-                                        : const Color(0xFFE1E1E3),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'save in profile',
-                                        style: GoogleFonts.inter(
-                                          color: _saveInProfile
-                                              ? Colors.white
-                                              : Colors.black,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w400,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      AnimatedContainer(
-                                        duration:
-                                            const Duration(milliseconds: 200),
-                                        width: 32,
-                                        height: 18,
-                                        decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(9),
-                                          color: _saveInProfile
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.3)
-                                              : const Color(0xFF8E8E93),
-                                        ),
-                                        padding: const EdgeInsets.all(2),
-                                        child: AnimatedAlign(
-                                          duration: const Duration(
-                                              milliseconds: 200),
-                                          alignment: _saveInProfile
-                                              ? Alignment.centerRight
-                                              : Alignment.centerLeft,
-                                          child: Container(
-                                            width: 14,
-                                            height: 14,
-                                            decoration: const BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ),
                               ),

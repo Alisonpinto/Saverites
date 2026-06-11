@@ -26,26 +26,19 @@ class PremiumDrawer extends StatelessWidget {
     return Drawer(
       elevation: 0,
       backgroundColor: Colors.transparent,
-      width: MediaQuery.of(context).size.width * 0.8,
+      width: MediaQuery.of(context).size.width * 0.78, // ~75-80% of screen
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
-          topRight: Radius.circular(32),
-          bottomRight: Radius.circular(32),
+          topRight: Radius.circular(24),
+          bottomRight: Radius.circular(24),
         ),
       ),
       child: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF232325),
-              Color(0xFF161618),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          color: Color(0xFF121212), // Dark modern background (#121212)
           borderRadius: BorderRadius.only(
-            topRight: Radius.circular(32),
-            bottomRight: Radius.circular(32),
+            topRight: Radius.circular(24),
+            bottomRight: Radius.circular(24),
           ),
         ),
         child: SafeArea(
@@ -56,47 +49,44 @@ class PremiumDrawer extends StatelessWidget {
               Align(
                 alignment: Alignment.topLeft,
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 16, top: 12),
+                  padding: const EdgeInsets.only(left: 12, top: 12),
                   child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    icon: const Icon(Icons.close, color: Color(0xFFA0A0A5), size: 24),
                     onPressed: () => Navigator.of(context).pop(),
                     splashRadius: 24,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
 
               // ── Profile Header ──────────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFFFAF096).withValues(alpha: 0.15),
-                      Colors.transparent,
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    const AnimatedAvatar(size: 60),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        'gangster_vagas',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                  child: Row(
+                    children: [
+                      const AnimatedAvatar(size: 48), // Small circular avatar
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          'gangster_vagas',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600, // Username: 16px SemiBold
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
               // ── Navigation Items ───────────────────────────────────────────
               _DrawerItem(
@@ -109,15 +99,18 @@ class PremiumDrawer extends StatelessWidget {
                   onTabSelected(0);
                 },
               ),
+              const SizedBox(height: 4),
               _DrawerItem(
-                icon: Icons.save_outlined,
-                label: TranslationManager.t('saveItem'), // "Save an Item"
+                icon: Icons.bookmark_add_outlined, // Better icon for "Save Item"
+                activeIcon: Icons.bookmark_add,
+                label: TranslationManager.t('saveItem'),
                 selected: false,
                 onTap: () {
                   Navigator.of(context).pop();
                   onSaveItemTap();
                 },
               ),
+              const SizedBox(height: 4),
               _DrawerItem(
                 icon: Icons.person_outline,
                 activeIcon: Icons.person,
@@ -132,9 +125,13 @@ class PremiumDrawer extends StatelessWidget {
               const Spacer(),
 
               // ── Sticky Bottom Section ──────────────────────────────────────
-              const Divider(color: Colors.white10, height: 1, thickness: 0.5),
-              const SizedBox(height: 12),
-              _DrawerItem(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Divider(color: Colors.white.withValues(alpha: 0.08), height: 1, thickness: 1),
+              ),
+              const SizedBox(height: 16),
+              
+              _BottomDrawerItem(
                 icon: Icons.help_outline_rounded,
                 label: TranslationManager.t('helpSupport'),
                 onTap: () {
@@ -142,25 +139,26 @@ class PremiumDrawer extends StatelessWidget {
                   onHelpTap();
                 },
               ),
-              _DrawerItem(
+              _BottomDrawerItem(
                 icon: Icons.settings_outlined,
-                label: TranslationManager.t('title'), // "Settings"
+                label: TranslationManager.t('title'), // Translation for 'Settings'
                 onTap: () {
                   Navigator.of(context).pop();
                   onSettingsTap();
                 },
               ),
-              _DrawerItem(
+              const SizedBox(height: 4),
+              _BottomDrawerItem(
                 icon: Icons.logout_outlined,
                 label: TranslationManager.t('logout'),
-                textColor: const Color(0xFFEB4335),
-                iconColor: const Color(0xFFEB4335),
+                textColor: const Color(0xFFEB4335), // Simple red text
+                iconColor: const Color(0xFFEB4335), // Simple red icon
                 onTap: () {
                   Navigator.of(context).pop();
                   onLogoutTap();
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -169,14 +167,13 @@ class PremiumDrawer extends StatelessWidget {
   }
 }
 
-class _DrawerItem extends StatefulWidget {
+// Menu Items: 16px Medium, Icon 22px
+class _DrawerItem extends StatelessWidget {
   final IconData icon;
   final IconData? activeIcon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final Color? textColor;
-  final Color? iconColor;
 
   const _DrawerItem({
     required this.icon,
@@ -184,105 +181,115 @@ class _DrawerItem extends StatefulWidget {
     required this.label,
     this.selected = false,
     required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconToShow = selected ? (activeIcon ?? icon) : icon;
+    final color = selected ? Colors.white : const Color(0xFFA0A0A5);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          // Thin left accent indicator
+          Container(
+            width: 3,
+            height: 24,
+            decoration: BoxDecoration(
+              color: selected ? Colors.white : Colors.transparent,
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(3),
+                bottomRight: Radius.circular(3),
+              ),
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(8),
+                splashColor: Colors.white.withValues(alpha: 0.05),
+                highlightColor: Colors.white.withValues(alpha: 0.05),
+                hoverColor: Colors.white.withValues(alpha: 0.05),
+                child: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(iconToShow, size: 22, color: color),
+                      const SizedBox(width: 16),
+                      Text(
+                        label,
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500, // Medium font weight
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Bottom Items: 15px Medium, Icon 22px
+class _BottomDrawerItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? textColor;
+  final Color? iconColor;
+
+  const _BottomDrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
     this.textColor,
     this.iconColor,
   });
 
   @override
-  State<_DrawerItem> createState() => _DrawerItemState();
-}
-
-class _DrawerItemState extends State<_DrawerItem> with SingleTickerProviderStateMixin {
-  double _scale = 1.0;
-  bool _isHovered = false;
-  bool _isPressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final bool active = widget.selected;
-    final bool showHighlight = active || _isHovered || _isPressed;
-    final iconToShow = showHighlight ? (widget.activeIcon ?? widget.icon) : widget.icon;
-    final defaultColor = showHighlight ? Colors.white : const Color(0xFF8E8E93);
-    final finalIconColor = widget.iconColor ?? defaultColor;
-    final finalTextColor = widget.textColor ?? defaultColor;
+    final finalIconColor = iconColor ?? const Color(0xFFA0A0A5);
+    final finalTextColor = textColor ?? const Color(0xFFA0A0A5);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() {
-          _scale = 0.95;
-          _isPressed = true;
-        }),
-        onTapUp: (_) {
-          setState(() {
-            _scale = 1.0;
-            _isPressed = false;
-          });
-          widget.onTap();
-        },
-        onTapCancel: () => setState(() {
-          _scale = 1.0;
-          _isPressed = false;
-        }),
-        child: AnimatedScale(
-          scale: _scale,
-          duration: const Duration(milliseconds: 100),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            height: 54, // Large touch target
-            decoration: showHighlight
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFFFAF096).withValues(alpha: active ? 0.25 : 0.12),
-                        Colors.transparent,
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    border: Border(
-                      left: BorderSide(
-                        color: const Color(0xFFFAF096).withValues(alpha: active ? 1.0 : 0.5),
-                        width: active ? 4 : 3,
-                      ),
-                    ),
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFFFAF096).withValues(alpha: 0.08),
-                              blurRadius: 10,
-                              offset: const Offset(2, 2),
-                            ),
-                          ]
-                        : null,
-                  )
-                : null,
-            padding: EdgeInsets.only(
-              left: showHighlight ? 12.0 : 16.0,
-              right: 16.0,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(
-                  iconToShow,
-                  size: 24,
-                  color: finalIconColor,
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: Colors.white.withValues(alpha: 0.05),
+        highlightColor: Colors.white.withValues(alpha: 0.05),
+        hoverColor: Colors.white.withValues(alpha: 0.05),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: finalIconColor),
+              const SizedBox(width: 16),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 15, // 15px Medium
+                  fontWeight: FontWeight.w500,
+                  color: finalTextColor,
                 ),
-                const SizedBox(width: 16),
-                Text(
-                  widget.label,
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: showHighlight ? FontWeight.w600 : FontWeight.w500,
-                    color: finalTextColor,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -152,9 +152,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final double screenHeight = MediaQuery.of(context).size.height;
     final double statusBarHeight = MediaQuery.of(context).padding.top;
-    final double mediaHeight = screenHeight * 0.48;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -164,96 +162,133 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ),
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFF7C7C81),
-                Color(0xFF1A1A1B),
-                Color(0xFF000000),
-              ],
-              stops: [0.0, 0.24, 1.0],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-          child: Column(
-            children: [
-              // ── Media Area ──────────────────────────────────────────────────
-              Stack(
-                children: [
-                  SizedBox(
-                    height: mediaHeight,
-                    width: double.infinity,
-                    child: isVideo
-                        ? RunningVideoPlayer(
-                            file: widget.userPost?.videoPath != null
-                                ? File(widget.userPost!.videoPath!)
-                                : null,
-                            assetPath: widget.postModel?.mediaAssetPath,
-                            height: mediaHeight,
+        body: Stack(
+          children: [
+            // ── Background Media (InteractiveViewer) ────────────────────────
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 4.0,
+                child: isVideo
+                    ? RunningVideoPlayer(
+                        file: widget.userPost?.videoPath != null
+                            ? File(widget.userPost!.videoPath!)
+                            : null,
+                        assetPath: widget.postModel?.mediaAssetPath,
+                      )
+                    : (widget.userPost?.imagePath != null
+                        ? Image.file(
+                            File(widget.userPost!.imagePath!),
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: const Color(0xFF2A2A2E),
+                                child: const Center(
+                                  child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
+                                ),
+                              );
+                            },
                           )
-                        : (widget.userPost?.imagePath != null
-                            ? Image.file(
-                                File(widget.userPost!.imagePath!),
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: const Color(0xFF2A2A2E),
-                                    child: const Center(
-                                      child: Icon(Icons.broken_image,
-                                          color: Colors.white54, size: 48),
-                                    ),
-                                  );
-                                },
+                        : (widget.postModel?.mediaAssetPath != null && widget.postModel!.mediaAssetPath.isNotEmpty
+                            ? Image.asset(
+                                widget.postModel!.mediaAssetPath,
+                                fit: BoxFit.contain,
                               )
-                            : (widget.postModel?.mediaAssetPath != null &&
-                                    widget.postModel!.mediaAssetPath.isNotEmpty
-                                ? Image.asset(
-                                    widget.postModel!.mediaAssetPath,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Container(
-                                    color: const Color(0xFF2A2A2E),
-                                    child: const Center(
-                                      child: Icon(Icons.broken_image,
-                                          color: Colors.white54, size: 48),
-                                    ),
-                                  ))),
-                  ),
+                            : Container(
+                                color: const Color(0xFF2A2A2E),
+                                child: const Center(
+                                  child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
+                                ),
+                              ))),
+              ),
+            ),
 
-                  // Back button — plain white arrow overlay
-                  Positioned(
-                    top: statusBarHeight + 12,
-                    left: 16,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 26,
+            // ── Top Controls ────────────────────────────────────────────────
+            Positioned(
+              top: statusBarHeight + 12,
+              left: 16,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+                ),
+              ),
+            ),
+            Positioned(
+              top: statusBarHeight + 12,
+              right: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white, size: 26),
+                  color: const Color(0xFF2C2C2E),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    if (value == 'report') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Post reported. Our team will review it.',
+                            style: GoogleFonts.inter(color: Colors.white),
+                          ),
+                          backgroundColor: const Color(0xFFEB4335),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
+                      );
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                    PopupMenuItem<String>(
+                      value: 'report',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.flag_outlined, color: Colors.redAccent, size: 20),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Report Post',
+                            style: GoogleFonts.inter(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
 
-              // ── Bottom info card (Solid Black, Figma design spec) ───────────
-              Expanded(
-                child: Container(
-                  width: double.infinity,
+            // ── Bottom Info Panel (DraggableScrollableSheet) ────────────────
+            DraggableScrollableSheet(
+              initialChildSize: 0.40,
+              minChildSize: 0.15,
+              maxChildSize: 0.85,
+              builder: (BuildContext context, ScrollController scrollController) {
+                return Container(
                   decoration: const BoxDecoration(
                     color: Colors.black,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(28),
                       topRight: Radius.circular(28),
                     ),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black54, blurRadius: 20, offset: Offset(0, -5)),
+                    ],
                   ),
                   child: SingleChildScrollView(
+                    controller: scrollController,
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                     child: Column(
@@ -377,7 +412,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                   BouncingIcon(
                                     trigger: _liked,
                                     child: Icon(
-                                      _liked ? Icons.thumb_up_alt : Icons.thumb_up_alt_outlined,
+                                      _liked ? Icons.favorite : Icons.favorite_border,
                                       color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
                                       size: 22,
                                     ),
@@ -456,10 +491,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       ],
                     ),
                   ),
-                ),
-              ),
-            ],
-          ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

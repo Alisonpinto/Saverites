@@ -16,6 +16,7 @@ import 'settings_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../utils/post_store.dart';
 import '../post_detail/post_detail_screen.dart';
+import 'save_item_preview_screen.dart';
 import '../../utils/rich_text_controller.dart';
 
 
@@ -57,6 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   final TextEditingController _searchController = TextEditingController();
   String _profileSearchQuery = "";
   String _activeCategoryChip = "Recent";
+  bool _isPrivate = false;
 
   String _getVaultReminder(List<UserPost> saves) {
     if (saves.isEmpty) {
@@ -427,6 +429,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 child: _PremiumTabBar(
                                   activeTab: _activeTab,
                                   onTabChanged: (i) => setState(() => _activeTab = i),
+                                  isPrivate: _isPrivate,
+                                  onPrivateChanged: (val) => setState(() => _isPrivate = val),
                                 ),
                               ),
 
@@ -525,7 +529,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return ValueListenableBuilder<List<UserPost>>(
           valueListenable: PostStore.instance.postsNotifier,
           builder: (context, postsList, _) {
-            var savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
+            var savedUserPosts = postsList.toList();
 
             // 1. Filter by category chip
             if (_activeCategoryChip == 'Documents') {
@@ -683,64 +687,89 @@ class _PremiumSearchBar extends StatelessWidget {
 class _PremiumTabBar extends StatelessWidget {
   final int activeTab;
   final ValueChanged<int> onTabChanged;
+  final bool isPrivate;
+  final ValueChanged<bool> onPrivateChanged;
 
-  const _PremiumTabBar({required this.activeTab, required this.onTabChanged});
+  const _PremiumTabBar({
+    required this.activeTab,
+    required this.onTabChanged,
+    required this.isPrivate,
+    required this.onPrivateChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     const tabs = ['Social save', 'Self save'];
-    return Row(
-      children: [
-        for (int i = 0; i < tabs.length; i++) ...[
-          _TabChip(
-            label: tabs[i],
-            isActive: activeTab == i,
-            onTap: () => onTabChanged(i),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          for (int i = 0; i < tabs.length; i++) ...[
+            _TabButton(
+              label: tabs[i],
+              isActive: activeTab == i,
+              onTap: () => onTabChanged(i),
+            ),
+            const SizedBox(width: 10),
+          ],
+          _TabButton(
+            label: 'Private',
+            icon: isPrivate ? Icons.lock_rounded : Icons.lock_outline_rounded,
+            isActive: isPrivate,
+            onTap: () => onPrivateChanged(!isPrivate),
           ),
-          if (i < tabs.length - 1) const SizedBox(width: 24),
         ],
-      ],
+      ),
     );
   }
 }
 
-class _TabChip extends StatelessWidget {
+class _TabButton extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final IconData? icon;
 
-  const _TabChip({required this.label, required this.isActive, required this.onTap});
+  const _TabButton({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedSwitcher(
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        child: Column(
-          key: ValueKey(isActive),
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? Colors.white : const Color(0xFF333335),
+            width: 1.0,
+          ),
+        ),
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 14,
+                color: isActive ? Colors.black : const Color(0xFF7C7C81),
+              ),
+              const SizedBox(width: 6),
+            ],
             Text(
               label,
               style: GoogleFonts.inter(
-                color: isActive ? Colors.white : const Color(0xFF7C7C81),
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                letterSpacing: -0.1,
-              ),
-            ),
-            const SizedBox(height: 5),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              height: 2,
-              width: isActive ? 52.0 : 0.0,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(2),
+                color: isActive ? Colors.black : const Color(0xFF7C7C81),
+                fontSize: 13,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],
@@ -1286,7 +1315,7 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
         PageRouteBuilder(
           pageBuilder: (context, _, _) {
             if (widget.item is UserPost) {
-              return PostDetailScreen(userPost: widget.item as UserPost);
+              return SaveItemPreviewScreen(post: widget.item as UserPost);
             } else {
               return PostDetailScreen(postModel: widget.item as PostModel);
             }
@@ -1391,7 +1420,7 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
               Padding(
                 padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
                 child: GestureDetector(
-                  onTap: showPreviewDialog,
+                  onTap: onTap,
                   child: previewWidget,
                 ),
               ),

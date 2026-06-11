@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -11,8 +10,9 @@ import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/shimmer_container.dart';
 import '../../widgets/feed_card.dart';
 import '../../widgets/running_video_player.dart';
+import '../../widgets/animated_avatar.dart';
+import '../../utils/share_helper.dart';
 import 'settings_screen.dart';
-import '../post/write_post_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../utils/post_store.dart';
 import '../post_detail/post_detail_screen.dart';
@@ -49,7 +49,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with TickerProviderStateMixin {
   int _activeTab = 0;
-  bool _fabExpanded = false;
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0;
   bool _isOnline = true;
@@ -121,47 +120,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── FAB animation controllers ──────────────
-  late AnimationController _fabController;
-  late Animation<double> _fabRotation;
-  late Animation<double> _fab1SlideY;
-  late Animation<double> _fab2SlideY;
-  late Animation<double> _fab1Opacity;
-  late Animation<double> _fab2Opacity;
-  late Animation<double> _fab1Scale;
-  late Animation<double> _fab2Scale;
-
   // Mock saves are now reactively queried from the central PostStore.instance
 
   @override
   void initState() {
     super.initState();
-    _fabController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    );
-
-    _fabRotation = Tween<double>(begin: 0, end: 0.125).animate(
-      CurvedAnimation(parent: _fabController, curve: Curves.easeInOutCubic),
-    );
-    _fab1SlideY = Tween<double>(begin: 24, end: 0).animate(
-      CurvedAnimation(parent: _fabController, curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic)),
-    );
-    _fab2SlideY = Tween<double>(begin: 24, end: 0).animate(
-      CurvedAnimation(parent: _fabController, curve: const Interval(0.1, 0.9, curve: Curves.easeOutCubic)),
-    );
-    _fab1Opacity = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _fabController, curve: const Interval(0.0, 0.6)),
-    );
-    _fab2Opacity = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _fabController, curve: const Interval(0.1, 0.7)),
-    );
-    _fab1Scale = Tween<double>(begin: 0.9, end: 1.0).animate(
-      CurvedAnimation(parent: _fabController, curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic)),
-    );
-    _fab2Scale = Tween<double>(begin: 0.9, end: 1.0).animate(
-      CurvedAnimation(parent: _fabController, curve: const Interval(0.1, 0.9, curve: Curves.easeOutCubic)),
-    );
 
     _scrollController.addListener(() {
       if (mounted) setState(() => _scrollOffset = _scrollController.offset);
@@ -182,7 +145,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     _connectivityTimer?.cancel();
-    _fabController.dispose();
     _scrollController.dispose();
     _searchController.dispose();
     PostStore.instance.postsNotifier.removeListener(_onPostsChanged);
@@ -204,22 +166,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           _isOnline = false;
         });
       }
-    }
-  }
-
-  void _toggleFab() {
-    setState(() => _fabExpanded = !_fabExpanded);
-    if (_fabExpanded) {
-      _fabController.forward();
-    } else {
-      _fabController.reverse();
-    }
-  }
-
-  void _closeFab() {
-    if (_fabExpanded) {
-      setState(() => _fabExpanded = false);
-      _fabController.reverse();
     }
   }
 
@@ -332,7 +278,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const SizedBox(height: 32),
+                              const SizedBox(height: 8),
 
                               // Avatar + Profile Details Row
                               Padding(
@@ -369,7 +315,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                       )
                                                     : null,
                                               )
-                                            : const _AnimatedAvatar(size: 130),
+                                            : const AnimatedAvatar(size: 130),
                                       ),
                                     ),
                                     const SizedBox(width: 20),
@@ -502,173 +448,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ],
                   ),
                 ),
-
-                // ── Blur overlay ──────────────────────────────────
-                Positioned.fill(
-                  child: IgnorePointer(
-                    ignoring: !_fabExpanded,
-                    child: AnimatedOpacity(
-                      opacity: _fabExpanded ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 240),
-                      child: GestureDetector(
-                        onTap: _closeFab,
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            color: Colors.black.withValues(alpha: 0.18),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── FAB overlay ───────────────────────────────────
-                Positioned(
-                  right: 20,
-                  bottom: 20,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Action: Write a Post
-                      AnimatedBuilder(
-                        animation: _fabController,
-                        builder: (ctx, ab) => IgnorePointer(
-                          ignoring: !_fabExpanded,
-                          child: Opacity(
-                            opacity: _fab1Opacity.value,
-                            child: Transform.translate(
-                              offset: Offset(0, _fab1SlideY.value),
-                              child: Transform.scale(
-                                scale: _fab1Scale.value,
-                                child: _FabAction(
-                                  label: 'Write a Post',
-                                  icon: Icons.article_outlined,
-                                  onTap: () {
-                                    _closeFab();
-                                    Navigator.push(
-                                      context,
-                                      PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) => const WritePostScreen(),
-                                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                          final slideAnimation = Tween<Offset>(
-                                            begin: const Offset(0.0, 0.08),
-                                            end: Offset.zero,
-                                          ).animate(
-                                            CurvedAnimation(
-                                              parent: animation,
-                                              curve: Curves.easeOutCubic,
-                                            ),
-                                          );
-                                          final fadeAnimation = Tween<double>(
-                                            begin: 0.0,
-                                            end: 1.0,
-                                          ).animate(
-                                            CurvedAnimation(
-                                              parent: animation,
-                                              curve: Curves.easeIn,
-                                            ),
-                                          );
-                                          return FadeTransition(
-                                            opacity: fadeAnimation,
-                                            child: SlideTransition(
-                                              position: slideAnimation,
-                                              child: child,
-                                            ),
-                                          );
-                                        },
-                                        transitionDuration: const Duration(milliseconds: 400),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Action: Save a Item
-                      AnimatedBuilder(
-                        animation: _fabController,
-                        builder: (ctx, wb) => IgnorePointer(
-                          ignoring: !_fabExpanded,
-                          child: Opacity(
-                            opacity: _fab2Opacity.value,
-                            child: Transform.translate(
-                              offset: Offset(0, _fab2SlideY.value),
-                              child: Transform.scale(
-                                scale: _fab2Scale.value,
-                                child: _FabAction(
-                                  label: 'Save a Item',
-                                  icon: Icons.save_outlined,
-                                  onTap: () {
-                                    _closeFab();
-                                    Navigator.push(
-                                      context,
-                                      PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) => const WritePostScreen(isSaveItem: true),
-                                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                          final slideAnimation = Tween<Offset>(
-                                            begin: const Offset(0.0, 0.08),
-                                            end: Offset.zero,
-                                          ).animate(
-                                            CurvedAnimation(
-                                              parent: animation,
-                                              curve: Curves.easeOutCubic,
-                                            ),
-                                          );
-                                          final fadeAnimation = Tween<double>(
-                                            begin: 0.0,
-                                            end: 1.0,
-                                          ).animate(
-                                            CurvedAnimation(
-                                              parent: animation,
-                                              curve: Curves.easeIn,
-                                            ),
-                                          );
-                                          return FadeTransition(
-                                            opacity: fadeAnimation,
-                                            child: SlideTransition(
-                                              position: slideAnimation,
-                                              child: child,
-                                            ),
-                                          );
-                                        },
-                                        transitionDuration: const Duration(milliseconds: 400),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // FAB main button
-                      AnimatedBuilder(
-                        animation: _fabRotation,
-                        builder: (_, child) => Transform.rotate(
-                          angle: _fabRotation.value * 2 * math.pi,
-                          child: child,
-                        ),
-                        child: GestureDetector(
-                          onTap: _toggleFab,
-                          child: _FloatingFab(expanded: _fabExpanded),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
             bottomNavigationBar: widget.showBottomNav
                 ? AppBottomNavigation(
                     currentIndex: 3,
+                    isAddMenuOpen: false,
+                    onAddTap: () {},
                     onTabChanged: (index) {
                       if (index == 2) {
                         Navigator.pushReplacement(
@@ -696,20 +482,31 @@ class _ProfileScreenState extends State<ProfileScreen>
         return ValueListenableBuilder<Set<String>>(
           valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
           builder: (context, savedSocialIds, _) {
-            var savedPredefined = PostStore.predefinedPosts
+            final savedPredefined = PostStore.predefinedPosts
                 .where((p) => savedSocialIds.contains(p.id))
                 .toList();
+            final savedPublicUserPosts = PostStore.instance.posts
+                .where((p) => !p.savedInProfile && savedSocialIds.contains(p.id))
+                .toList();
+            var savedSocial = [...savedPredefined, ...savedPublicUserPosts];
 
             if (query.isNotEmpty) {
-              savedPredefined = savedPredefined.where((p) {
-                return (p.title?.toLowerCase().contains(query) ?? false) ||
-                       (p.description?.toLowerCase().contains(query) ?? false) ||
-                       (p.username?.toLowerCase().contains(query) ?? false) ||
-                       (p.url?.toLowerCase().contains(query) ?? false);
+              savedSocial = savedSocial.where((item) {
+                if (item is UserPost) {
+                  return item.title.toLowerCase().contains(query) ||
+                         item.body.toLowerCase().contains(query) ||
+                         (item.url?.toLowerCase().contains(query) ?? false);
+                } else if (item is PostModel) {
+                  return (item.title?.toLowerCase().contains(query) ?? false) ||
+                         (item.description?.toLowerCase().contains(query) ?? false) ||
+                         (item.username?.toLowerCase().contains(query) ?? false) ||
+                         (item.url?.toLowerCase().contains(query) ?? false);
+                }
+                return false;
               }).toList();
             }
 
-            return _ProfileMasonryGrid(items: savedPredefined, isOnline: _isOnline);
+            return _ProfileMasonryGrid(items: savedSocial, isOnline: _isOnline);
           },
         );
       } else {
@@ -813,279 +610,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 // _PremiumProfileInfo is now inlined inside the top card — kept as no-op placeholder
 
 
-// ─────────────────────────────────────────────
-//  Animated Illustrated Avatar
-//  Open Peeps-inspired minimal SVG avatar
-//  with continuously animating hair
-// ─────────────────────────────────────────────
-class _AnimatedAvatar extends StatefulWidget {
-  final double size;
-  const _AnimatedAvatar({this.size = 88});
-
-  @override
-  State<_AnimatedAvatar> createState() => _AnimatedAvatarState();
-}
-
-class _AnimatedAvatarState extends State<_AnimatedAvatar>
-    with TickerProviderStateMixin {
-  late AnimationController _hairController;
-  late AnimationController _floatController;
-  late Animation<double> _hairSwayAnim;
-  late Animation<double> _hairBreathAnim;
-  late Animation<double> _floatAnim;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Hair sway: gentle left-right, period 3.5s
-    _hairController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3500),
-    )..repeat(reverse: true);
-
-    _hairSwayAnim = Tween<double>(begin: -0.04, end: 0.04).animate(
-      CurvedAnimation(parent: _hairController, curve: Curves.easeInOutSine),
-    );
-
-    _hairBreathAnim = Tween<double>(begin: 0.98, end: 1.02).animate(
-      CurvedAnimation(parent: _hairController, curve: Curves.easeInOutSine),
-    );
-
-    // Floating: tiny vertical bob, period 4s
-    _floatController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 4000),
-    )..repeat(reverse: true);
-
-    _floatAnim = Tween<double>(begin: 0, end: -5).animate(
-      CurvedAnimation(parent: _floatController, curve: Curves.easeInOutSine),
-    );
-  }
-
-  @override
-  void dispose() {
-    _hairController.dispose();
-    _floatController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_hairController, _floatController]),
-      builder: (ctx, xb) {
-        return Transform.translate(
-          offset: Offset(0, _floatAnim.value),
-          child: SizedBox(
-            width: widget.size,
-            height: widget.size,
-            child: CustomPaint(
-              painter: _AvatarPainter(
-                hairSway: _hairSwayAnim.value,
-                hairBreath: _hairBreathAnim.value,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AvatarPainter extends CustomPainter {
-  final double hairSway;
-  final double hairBreath;
-
-  const _AvatarPainter({
-    required this.hairSway,
-    required this.hairBreath,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-
-    // ── Outline paint ────────────────────────────
-    final outlinePaint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final fillPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    final skinPaint = Paint()
-      ..color = const Color(0xFFF5E6D3)
-      ..style = PaintingStyle.fill;
-
-    final hairPaint = Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.fill;
-
-    // ── Body (shirt) ─────────────────────────────
-    final bodyRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(cx, cy + 36),
-        width: 54,
-        height: 36,
-      ),
-      const Radius.circular(18),
-    );
-    canvas.drawRRect(bodyRect, fillPaint);
-    canvas.drawRRect(bodyRect, outlinePaint);
-
-    // ── Neck ─────────────────────────────────────
-    final neckPath = Path()
-      ..moveTo(cx - 8, cy + 20)
-      ..lineTo(cx + 8, cy + 20)
-      ..lineTo(cx + 7, cy + 28)
-      ..lineTo(cx - 7, cy + 28)
-      ..close();
-    canvas.drawPath(neckPath, skinPaint);
-
-    // ── Head (face) ──────────────────────────────
-    final headCenter = Offset(cx, cy + 4);
-    const headRadius = 24.0;
-
-    canvas.drawCircle(headCenter, headRadius, skinPaint);
-    canvas.drawCircle(headCenter, headRadius, outlinePaint);
-
-    // ── Eyes ─────────────────────────────────────
-    final eyePaint = Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.fill;
-
-    // Left eye
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx - 8, cy + 2), width: 5, height: 6),
-      eyePaint,
-    );
-    // Right eye
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx + 8, cy + 2), width: 5, height: 6),
-      eyePaint,
-    );
-
-    // Eye highlights
-    final highlightPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(cx - 6.5, cy + 1), 1.2, highlightPaint);
-    canvas.drawCircle(Offset(cx + 9.5, cy + 1), 1.2, highlightPaint);
-
-    // ── Eyebrows ──────────────────────────────────
-    final browPaint = Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(
-      Offset(cx - 11, cy - 5),
-      Offset(cx - 5, cy - 6.5),
-      browPaint,
-    );
-    canvas.drawLine(
-      Offset(cx + 5, cy - 6.5),
-      Offset(cx + 11, cy - 5),
-      browPaint,
-    );
-
-    // ── Nose ─────────────────────────────────────
-    final nosePaint = Paint()
-      ..color = const Color(0xFFD4A574)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCenter(center: Offset(cx, cy + 8), width: 8, height: 5),
-      0,
-      math.pi,
-      false,
-      nosePaint,
-    );
-
-    // ── Mouth (small smile) ───────────────────────
-    final mouthPaint = Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round;
-
-    final mouthPath = Path()
-      ..moveTo(cx - 6, cy + 14)
-      ..quadraticBezierTo(cx, cy + 18, cx + 6, cy + 14);
-    canvas.drawPath(mouthPath, mouthPaint);
-
-    // ── Hair (animated) ───────────────────────────
-    canvas.save();
-    // Pivot animation at crown of head
-    canvas.translate(cx, cy - 18);
-    canvas.rotate(hairSway);
-    canvas.scale(hairBreath, hairBreath);
-    canvas.translate(-cx, -(cy - 18));
-
-    // Main hair blob (curly top)
-    final hairPath = Path();
-    hairPath.moveTo(cx - 20, cy - 5);
-    // Left side sweep
-    hairPath.cubicTo(
-      cx - 28, cy - 18,
-      cx - 24, cy - 36,
-      cx - 10, cy - 34,
-    );
-    // Top center wave
-    hairPath.cubicTo(
-      cx - 4, cy - 40,
-      cx + 4, cy - 40,
-      cx + 10, cy - 34,
-    );
-    // Right side sweep
-    hairPath.cubicTo(
-      cx + 24, cy - 36,
-      cx + 28, cy - 18,
-      cx + 20, cy - 5,
-    );
-    // Close back along head
-    hairPath.cubicTo(
-      cx + 14, cy - 8,
-      cx - 14, cy - 8,
-      cx - 20, cy - 5,
-    );
-    hairPath.close();
-
-    canvas.drawPath(hairPath, hairPaint);
-    canvas.drawPath(hairPath, outlinePaint);
-
-    // Small strand detail on right
-    final strandPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..strokeCap = StrokeCap.round;
-    final strand = Path()
-      ..moveTo(cx + 16, cy - 28)
-      ..cubicTo(cx + 20, cy - 24, cx + 22, cy - 16, cx + 19, cy - 8);
-    canvas.drawPath(strand, strandPaint);
-
-    canvas.restore();
-
-    // ── Ears ─────────────────────────────────────
-    canvas.drawCircle(Offset(cx - 24, cy + 4), 5.5, skinPaint);
-    canvas.drawCircle(Offset(cx - 24, cy + 4), 5.5, outlinePaint);
-    canvas.drawCircle(Offset(cx + 24, cy + 4), 5.5, skinPaint);
-    canvas.drawCircle(Offset(cx + 24, cy + 4), 5.5, outlinePaint);
-  }
-
-  @override
-  bool shouldRepaint(_AvatarPainter old) =>
-      old.hairSway != hairSway || old.hairBreath != hairBreath;
-}
+// Removed _AnimatedAvatar definition as it was moved to animated_avatar.dart
 
 // ─────────────────────────────────────────────
 //  Premium Search Bar
@@ -1303,7 +828,7 @@ class _ProfileMasonryGrid extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 378),
+          constraints: const BoxConstraints(maxWidth: 500),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1846,7 +1371,7 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
         ? (widget.item as UserPost).id
         : (widget.item as PostModel).id;
 
-    if (widget.item is UserPost) {
+    if (widget.item is UserPost && (widget.item as UserPost).savedInProfile) {
       final post = widget.item as UserPost;
       final previewWidget = _buildVaultPreviewWidget(post);
       final truncatedTitle = _truncateTitle(post.title);
@@ -1930,77 +1455,130 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
         final isSaved = PostStore.instance.savedSocialPostIds.contains(itemId);
 
         final likes = isLiked ? '1' : '0';
-        final bookmarks = _format(isSaved
-            ? (widget.item as PostModel).savesCount + 1
-            : (widget.item as PostModel).savesCount);
+        final bookmarks = widget.item is UserPost
+            ? (isSaved ? '1' : '0')
+            : _format(isSaved
+                ? (widget.item as PostModel).savesCount + 1
+                : (widget.item as PostModel).savesCount);
         Widget mediaWidget;
 
-        final post = widget.item as PostModel;
-        
-        Widget childWidget;
-        if (post.mediaType == PostMediaType.video) {
-          childWidget = RunningVideoPlayer(
-            assetPath: post.mediaAssetPath,
-          );
+        if (widget.item is UserPost) {
+          final post = widget.item as UserPost;
+          if (post.videoPath != null) {
+            mediaWidget = RunningVideoPlayer(
+              file: File(post.videoPath!),
+            );
+          } else if (post.imagePath != null) {
+            mediaWidget = Image.file(
+              File(post.imagePath!),
+              fit: BoxFit.cover,
+              width: double.infinity,
+            );
+          } else {
+            mediaWidget = Container(
+              height: 120,
+              padding: const EdgeInsets.all(12),
+              color: const Color(0xFF2A2A2E),
+              alignment: Alignment.topLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    post.title.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: Text(
+                      post.body,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFAEAEB2),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
         } else {
-          childWidget = Image.asset(
-            post.mediaAssetPath,
-            fit: BoxFit.cover,
-            width: double.infinity,
-          );
+          final post = widget.item as PostModel;
+          Widget childWidget;
+          if (post.mediaType == PostMediaType.video) {
+            childWidget = RunningVideoPlayer(
+              assetPath: post.mediaAssetPath,
+            );
+          } else {
+            childWidget = Image.asset(
+              post.mediaAssetPath,
+              fit: BoxFit.cover,
+              width: double.infinity,
+            );
+          }
+
+          if (post.id == 'social-1') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildOutfitOverlay('Trend Huntss', true),
+              ],
+            );
+          } else if (post.id == 'social-8') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildOutfitOverlay('Street Style', false),
+              ],
+            );
+          } else if (post.id == 'social-3') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildMemeOverlay('rekha ji not so sanskari pics'),
+              ],
+            );
+          } else if (post.id == 'social-7') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildMemeOverlay('flutter app look professional in 5 minutes'),
+              ],
+            );
+          } else if (post.id == 'social-4') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildPandaOverlay('peace\nBRO!!'),
+              ],
+            );
+          } else if (post.id == 'social-6') {
+            mediaWidget = Stack(
+              children: [
+                childWidget,
+                _buildPandaOverlay('chill\nTIME'),
+              ],
+            );
+          } else {
+            mediaWidget = childWidget;
+          }
         }
 
-        if (post.id == 'social-1') {
-          mediaWidget = Stack(
-            children: [
-              childWidget,
-              _buildOutfitOverlay('Trend Huntss', true),
-            ],
-          );
-        } else if (post.id == 'social-8') {
-          mediaWidget = Stack(
-            children: [
-              childWidget,
-              _buildOutfitOverlay('Street Style', false),
-            ],
-          );
-        } else if (post.id == 'social-3') {
-          mediaWidget = Stack(
-            children: [
-              childWidget,
-              _buildMemeOverlay('rekha ji not so sanskari pics'),
-            ],
-          );
-        } else if (post.id == 'social-7') {
-          mediaWidget = Stack(
-            children: [
-              childWidget,
-              _buildMemeOverlay('flutter app look professional in 5 minutes'),
-            ],
-          );
-        } else if (post.id == 'social-4') {
-          mediaWidget = Stack(
-            children: [
-              childWidget,
-              _buildPandaOverlay('peace\nBRO!!'),
-            ],
-          );
-        } else if (post.id == 'social-6') {
-          mediaWidget = Stack(
-            children: [
-              childWidget,
-              _buildPandaOverlay('chill\nTIME'),
-            ],
-          );
-        } else {
-          mediaWidget = childWidget;
-        }
-
-        final titleText = post.title ?? '';
-        final userText = post.username ?? 'Unknown';
-        final avatarAsset = post.avatarAssetPath;
+        final titleText = widget.item is UserPost ? (widget.item as UserPost).title : (widget.item as PostModel).title ?? '';
+        final userText = widget.item is UserPost ? 'gangster_vagas' : (widget.item as PostModel).username ?? 'Unknown';
+        final avatarAsset = widget.item is UserPost ? null : (widget.item as PostModel).avatarAssetPath;
         final initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
-        final color = post.accentColor ?? const Color(0xFF7B61FF);
+        final color = widget.item is UserPost ? const Color(0xFF6B9BF7) : (widget.item as PostModel).accentColor ?? const Color(0xFF7B61FF);
+        final sharesText = widget.item is UserPost ? '0' : _format((widget.item as PostModel).sharesCount);
 
         return FeedCard(
           imageWidget: mediaWidget,
@@ -2011,10 +1589,33 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
           avatarColor: color,
           likes: likes,
           bookmarks: bookmarks,
+          shares: sharesText,
           isLiked: isLiked,
           isSaved: isSaved,
           onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
           onSaveTap: () => PostStore.instance.toggleSavedSocialPost(itemId),
+          onShareTap: () async {
+            if (widget.item is UserPost) {
+              final post = widget.item as UserPost;
+              await ShareHelper.sharePost(
+                title: post.title,
+                description: post.body,
+                url: post.url,
+                localImagePath: post.imagePath,
+                localVideoPath: post.videoPath,
+                author: 'You',
+              );
+            } else {
+              final post = widget.item as PostModel;
+              await ShareHelper.sharePost(
+                title: post.title ?? '',
+                description: post.description,
+                url: post.url,
+                assetPath: post.mediaAssetPath,
+                author: post.username ?? 'Unknown',
+              );
+            }
+          },
           onCardTap: onTap,
           onImageTap: showPreviewDialog,
         );
@@ -2198,155 +1799,7 @@ class ArrowPainter2 extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// ─────────────────────────────────────────────
-//  FAB Components
-// ─────────────────────────────────────────────
-class _FloatingFab extends StatefulWidget {
-  final bool expanded;
 
-  const _FloatingFab({required this.expanded});
-
-  @override
-  State<_FloatingFab> createState() => _FloatingFabState();
-}
-
-class _FloatingFabState extends State<_FloatingFab>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _idleController;
-  late Animation<double> _idleFloat;
-
-  @override
-  void initState() {
-    super.initState();
-    _idleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    )..repeat(reverse: true);
-
-    _idleFloat = Tween<double>(begin: 0, end: -3.5).animate(
-      CurvedAnimation(parent: _idleController, curve: Curves.easeInOutSine),
-    );
-  }
-
-  @override
-  void dispose() {
-    _idleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _idleFloat,
-      builder: (_, child) => Transform.translate(
-        offset: Offset(0, _idleFloat.value),
-        child: child,
-      ),
-      child: Container(
-        width: 54,
-        height: 54,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: const Icon(
-          Icons.add_rounded,
-          color: Colors.black,
-          size: 28,
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  FAB Action row: label pill + white circle icon
-// ─────────────────────────────────────────────
-class _FabAction extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _FabAction({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  State<_FabAction> createState() => _FabActionState();
-}
-
-class _FabActionState extends State<_FabAction> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3A3A3C),
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.20),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Text(
-                widget.label,
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.1,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Icon(widget.icon, color: Colors.black, size: 22),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class MiniWaveformPainter extends CustomPainter {
   @override

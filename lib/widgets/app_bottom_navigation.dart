@@ -1,73 +1,110 @@
 import 'package:flutter/material.dart';
-import '../utils/notification_manager.dart';
-import '../models/notification_model.dart';
 
-/// Full-width bottom navigation bar.
+/// Full-width bottom navigation bar with a centered Add button.
 ///
-/// Designed to sit flush at the device bottom (no gap, no border-radius).
+/// Designed to sit flush at the device bottom with a premium yellow FAB.
 /// Safe-area padding is applied manually so the bar never overlaps the
 /// home indicator on notched / gesture-nav devices.
-///
-/// Tabs: Home · Search · Notifications · Bookmarks.
 class AppBottomNavigation extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTabChanged;
+  final VoidCallback onAddTap;
+  final bool isAddMenuOpen;
 
   const AppBottomNavigation({
     super.key,
     required this.currentIndex,
     required this.onTabChanged,
+    required this.onAddTap,
+    required this.isAddMenuOpen,
   });
 
   @override
   Widget build(BuildContext context) {
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    return Container(
-      color: const Color(0xFF272729),
-      // Add safe-area bottom padding so content sits above the home indicator.
-      padding: EdgeInsets.only(bottom: bottomPadding),
-      child: SizedBox(
-        height: 60,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _NavIcon(
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home,
-              index: 0,
-              currentIndex: currentIndex,
-              onTap: onTabChanged,
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.bottomCenter,
+      children: [
+        // ── Main Navigation Bar ──────────────────────────────────────────
+        Container(
+          height: 60 + bottomPadding,
+          decoration: const BoxDecoration(
+            color: Color(0xFF272729),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
             ),
-            _NavIcon(
-              icon: Icons.search,
-              activeIcon: Icons.search,
-              index: 1,
-              currentIndex: currentIndex,
-              onTap: onTabChanged,
-            ),
-            ValueListenableBuilder<List<NotificationModel>>(
-              valueListenable: NotificationManager.instance.notificationsNotifier,
-              builder: (context, notificationsList, _) {
-                final int unreadCount = notificationsList.where((n) => !n.isRead).length;
-                return _NotificationIcon(
-                  index: 2,
+          ),
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          child: Row(
+            children: [
+              // Home Tab
+              Expanded(
+                child: _NavIcon(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home,
+                  index: 0,
                   currentIndex: currentIndex,
                   onTap: onTabChanged,
-                  badge: unreadCount > 0 ? unreadCount.toString() : null,
-                );
-              },
-            ),
-            _NavIcon(
-              icon: Icons.person_outline,
-              activeIcon: Icons.person,
-              index: 3,
-              currentIndex: currentIndex,
-              onTap: onTabChanged,
-            ),
-          ],
+                ),
+              ),
+              
+              // Spacer for the center FAB
+              const SizedBox(width: 80),
+              
+              // Profile Tab
+              Expanded(
+                child: _NavIcon(
+                  icon: Icons.person_outline,
+                  activeIcon: Icons.person,
+                  index: 3,
+                  currentIndex: currentIndex,
+                  onTap: onTabChanged,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
+
+        // ── Centered Floating Add Button ─────────────────────────────────
+        Positioned(
+          top: -20, // Overflow the bar top
+          child: GestureDetector(
+            onTap: onAddTap,
+            child: AnimatedScale(
+              scale: isAddMenuOpen ? 1.08 : 1.0,
+              duration: const Duration(milliseconds: 150),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAF096),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFAF096).withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: AnimatedRotation(
+                  turns: isAddMenuOpen ? 0.125 : 0.0, // 45 degrees rotation to look like an X
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutBack,
+                  child: const Icon(
+                    Icons.add,
+                    color: Colors.black,
+                    size: 28,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -98,70 +135,6 @@ class _NavIcon extends StatelessWidget {
         active ? activeIcon : icon,
         color: active ? Colors.white : const Color(0xFF8E8E93),
         size: 26,
-      ),
-    );
-  }
-}
-
-class _NotificationIcon extends StatelessWidget {
-  final int index;
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final String? badge;
-
-  const _NotificationIcon({
-    required this.index,
-    required this.currentIndex,
-    required this.onTap,
-    this.badge,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool active = index == currentIndex;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: Stack(
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          children: [
-            Icon(
-              active
-                  ? Icons.notifications
-                  : Icons.notifications_none_outlined,
-              color: active ? Colors.white : const Color(0xFF8E8E93),
-              size: 26,
-            ),
-            if (badge != null)
-              Positioned(
-                right: 6,
-                top: 6,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFF1744),
-                    shape: BoxShape.circle,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 14,
-                    minHeight: 14,
-                  ),
-                  child: Text(
-                    badge!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }

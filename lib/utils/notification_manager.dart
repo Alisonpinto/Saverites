@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_model.dart';
+import '../widgets/in_app_notification.dart';
+import 'post_store.dart';
 
 class NotificationManager {
   NotificationManager._();
@@ -127,6 +130,7 @@ class NotificationManager {
   int get unreadCount => notifications.where((n) => !n.isRead).length;
 
   Timer? _simulationTimer;
+  Timer? _reminderTimer;
 
   /// Initialize local notification plugins and set the initial launcher icon badge count.
   Future<void> init() async {
@@ -180,7 +184,10 @@ class NotificationManager {
     // 3. Set the initial launcher badge count
     _updateLauncherBadge();
 
-    // 4. Start mock push notification loop (triggers every 25 seconds)
+    // 4. Start periodic reminder check timer (runs every 10 seconds)
+    _startReminderTimer();
+
+    // 5. Start mock push notification loop (triggers every 25 seconds)
     // startSimulation();
   }
 
@@ -206,6 +213,10 @@ class NotificationManager {
 
   void _playNotificationSound() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('notificationsEnabled') ?? true;
+      if (!enabled) return;
+
       // Stop any currently playing sound first to avoid overlap
       await _soundPlayer.stop();
       // Play the bundled asset sound at full volume
@@ -306,6 +317,40 @@ class NotificationManager {
       title: title,
       body: body,
     );
+
+    // Trigger custom in-app push notification banner
+    if (action == 'saved') {
+      String? localImagePath;
+      String? assetImagePath;
+
+      // Find post media
+      for (final p in PostStore.instance.posts) {
+        if (p.title == postTitle) {
+          localImagePath = p.imagePath;
+          break;
+        }
+      }
+      if (localImagePath == null) {
+        for (final p in PostStore.predefinedPosts) {
+          if (p.title == postTitle) {
+            assetImagePath = p.mediaAssetPath;
+            break;
+          }
+        }
+      }
+
+      InAppNotificationHelper.show(
+        body: body,
+        imagePath: localImagePath,
+        assetImagePath: assetImagePath,
+        showMedia: true,
+      );
+    } else if (action == 'liked' || action == 'shared') {
+      InAppNotificationHelper.show(
+        body: body,
+        showMedia: false,
+      );
+    }
   }
 
   /// Triggers a reminder notification for a vault item.
@@ -341,6 +386,14 @@ class NotificationManager {
     required String title,
     required String body,
   }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('notificationsEnabled') ?? true;
+      if (!enabled) return;
+    } catch (e) {
+      debugPrint("Error reading notification setting: $e");
+    }
+
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'memoria_notifications_silent',
       'Memoria Notifications',
@@ -389,6 +442,115 @@ class NotificationManager {
     }).toList();
 
     _updateLauncherBadge();
+  }
+
+  void _startReminderTimer() {
+    _reminderTimer?.cancel();
+    _reminderTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      checkAndTriggerSavedItemsReminder();
+    });
+  }
+
+  Future<void> triggerSavedItemsCheck() async {
+    await checkAndTriggerSavedItemsReminder();
+  }
+
+  Future<void> checkAndTriggerSavedItemsReminder() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('notificationsEnabled') ?? true;
+      if (!enabled) return;
+
+      final interval = prefs.getString('savedItemsReminderInterval') ?? 'Always';
+      if (interval == 'Never') return;
+
+      // Check if there are any saved items
+      final savedPredefinedCount = PostStore.instance.savedSocialPostIds.length;
+      final savedUserPosts = PostStore.instance.posts.where((p) => p.savedInProfile).toList();
+      final totalSaved = savedPredefinedCount + savedUserPosts.length;
+
+      if (totalSaved == 0) return;
+
+      // Get the last reminder timestamp
+      final lastReminderMs = prefs.getInt('lastSavedItemsReminderTimestamp') ?? 0;
+      final lastReminder = DateTime.fromMillisecondsSinceEpoch(lastReminderMs);
+      final now = DateTime.now();
+
+      Duration checkDuration;
+      if (interval == 'Always') {
+        checkDuration = const Duration(seconds: 45); // periodic checking for testing
+      } else if (interval == '2 Days') {
+        checkDuration = const Duration(days: 2);
+      } else if (interval == '1 Week') {
+        checkDuration = const Duration(days: 7);
+      } else if (interval == '1 Month') {
+        checkDuration = const Duration(days: 30);
+      } else {
+        return;
+      }
+
+      if (now.difference(lastReminder) >= checkDuration) {
+        // Record the timestamp
+        await prefs.setInt('lastSavedItemsReminderTimestamp', now.millisecondsSinceEpoch);
+
+        // Pick a random saved item title if available
+        String title = "your saved items";
+        String? localImagePath;
+        String? assetImagePath;
+
+        if (savedUserPosts.isNotEmpty && (savedPredefinedCount == 0 || Random().nextBool())) {
+          final rand = Random();
+          final post = savedUserPosts[rand.nextInt(savedUserPosts.length)];
+          title = '"${post.title}"';
+          localImagePath = post.imagePath;
+        } else if (PostStore.instance.savedSocialPostIds.isNotEmpty) {
+          final socialSaves = PostStore.predefinedPosts
+              .where((p) => PostStore.instance.savedSocialPostIds.contains(p.id))
+              .toList();
+          if (socialSaves.isNotEmpty) {
+            final rand = Random();
+            final post = socialSaves[rand.nextInt(socialSaves.length)];
+            title = '"${post.title ?? 'Untitled'}"';
+            assetImagePath = post.mediaAssetPath;
+          }
+        }
+
+        final body = 'Remember to review your saved item: $title';
+        final String notifId = 'reminder-${now.millisecondsSinceEpoch}';
+        
+        final newNotif = NotificationModel(
+          id: notifId,
+          avatarAssetPath: 'assets/images/panda.png',
+          avatarInitial: 'R',
+          avatarColor: const Color(0xFFFF9500),
+          username: 'Memoria Reminder',
+          previewText: body,
+          timestamp: 'now',
+          isRead: false,
+        );
+
+        // Prepend to notifications list
+        notificationsNotifier.value = [newNotif, ...notifications];
+        
+        _playNotificationSound();
+        _updateLauncherBadge();
+
+        await showLocalNotification(
+          id: Random().nextInt(100000),
+          title: 'Saved Items Reminder',
+          body: body,
+        );
+
+        await InAppNotificationHelper.show(
+          body: body,
+          imagePath: localImagePath,
+          assetImagePath: assetImagePath,
+          showMedia: true,
+        );
+      }
+    } catch (e) {
+      debugPrint("Error running saved items reminder check: $e");
+    }
   }
 
   void _updateLauncherBadge() async {

@@ -19,11 +19,15 @@ class FeedHeader extends StatelessWidget {
   /// Called when the search field is tapped.
   final VoidCallback? onSearchTap;
 
+  /// Called when the notification icon is tapped.
+  final VoidCallback? onNotificationTap;
+
   const FeedHeader({
     super.key,
     this.onMenuTap,
     this.onSearchChanged,
     this.onSearchTap,
+    this.onNotificationTap,
   });
 
   @override
@@ -47,35 +51,11 @@ class FeedHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ── Hamburger + notification dot ────────────────────────────────
+          // ── Hamburger Menu Icon ─────────────────────────────────────────
           GestureDetector(
             onTap: onMenuTap ?? () {},
             behavior: HitTestBehavior.opaque,
-            child: ValueListenableBuilder<List<NotificationModel>>(
-              valueListenable: NotificationManager.instance.notificationsNotifier,
-              builder: (context, notificationsList, _) {
-                final bool hasUnread = notificationsList.any((n) => !n.isRead);
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.menu, color: Colors.white, size: 26),
-                    if (hasUnread)
-                      Positioned(
-                        right: -1,
-                        top: -1,
-                        child: Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFF1744),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
+            child: const Icon(Icons.menu, color: Colors.white, size: 26),
           ),
 
           const SizedBox(width: 14),
@@ -122,6 +102,39 @@ class FeedHeader extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+
+          const SizedBox(width: 14),
+
+          // ── Notifications Icon with Badge ───────────────────────────────
+          GestureDetector(
+            onTap: onNotificationTap ?? () {},
+            behavior: HitTestBehavior.opaque,
+            child: ValueListenableBuilder<List<NotificationModel>>(
+              valueListenable: NotificationManager.instance.notificationsNotifier,
+              builder: (context, notificationsList, _) {
+                final bool hasUnread = notificationsList.any((n) => !n.isRead);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.notifications_none_outlined, color: Colors.white, size: 26),
+                    if (hasUnread)
+                      Positioned(
+                        right: 2,
+                        top: 2,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF1744),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ],

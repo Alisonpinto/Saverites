@@ -3,18 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/post_model.dart';
 import '../../screens/notifications/notification_screen.dart';
 import '../../screens/post_detail/post_detail_screen.dart';
 import '../../screens/profile/profile_screen.dart';
+import '../../screens/profile/settings_screen.dart';
 import '../../screens/post/write_post_screen.dart';
+import '../../login_screen.dart';
 import '../../utils/post_store.dart';
+import '../../utils/share_helper.dart';
+import '../../utils/translation_manager.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/feed_header.dart';
 import '../../widgets/shimmer_container.dart';
 import '../../widgets/feed_card.dart';
 import '../../widgets/running_video_player.dart';
+import '../../widgets/premium_drawer.dart';
 import '../../utils/rich_text_controller.dart';
 
 class FeedScreen extends StatefulWidget {
@@ -25,6 +31,7 @@ class FeedScreen extends StatefulWidget {
 }
 
 class _FeedScreenState extends State<FeedScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentTab = 0;
   bool _isOnline = true;
   Timer? _connectivityTimer;
@@ -33,6 +40,7 @@ class _FeedScreenState extends State<FeedScreen> {
   bool _isRefreshing = false;
   final _searchController = TextEditingController();
   String _searchQuery = "";
+  bool _isAddMenuOpen = false;
 
   @override
   void initState() {
@@ -143,7 +151,7 @@ class _FeedScreenState extends State<FeedScreen> {
     final userPublicPosts = PostStore.instance.posts.where((p) => !p.savedInProfile).toList();
     final List<dynamic> allItems = [
       ...userPublicPosts,
-      ..._shuffledPredefinedPosts.where((p) => p.id == 'social-2'),
+      ..._shuffledPredefinedPosts,
     ];
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -153,92 +161,406 @@ class _FeedScreenState extends State<FeedScreen> {
         systemNavigationBarDividerColor: Colors.transparent,
       ),
       child: Scaffold(
+        key: _scaffoldKey,
+        drawerScrimColor: Colors.black.withValues(alpha: 0.4),
         backgroundColor: const Color(0xFF121212),
-        body: IndexedStack(
-          index: _currentTab,
+        drawer: PremiumDrawer(
+          currentTab: _currentTab,
+          onTabSelected: (index) {
+            setState(() {
+              _currentTab = index;
+            });
+          },
+          onSaveItemTap: () {
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => const WritePostScreen(isSaveItem: true),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  final slideAnimation = Tween<Offset>(
+                    begin: const Offset(0.0, 0.08),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+                  final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeIn));
+                  return FadeTransition(opacity: fadeAnimation, child: SlideTransition(position: slideAnimation, child: child));
+                },
+                transitionDuration: const Duration(milliseconds: 400),
+              ),
+            );
+          },
+          onHelpTap: () {
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => DetailInfoScreen(
+                  title: TranslationManager.t('helpSupport'),
+                  content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildHelpInfoCard(title: TranslationManager.t('helpQ1'), body: TranslationManager.t('helpA1')),
+                      const SizedBox(height: 16),
+                      _buildHelpInfoCard(title: TranslationManager.t('helpQ2'), body: TranslationManager.t('helpA2')),
+                      const SizedBox(height: 16),
+                      _buildHelpInfoCard(title: TranslationManager.t('helpQ3'), body: TranslationManager.t('helpA3')),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  final slideAnimation = Tween<Offset>(begin: const Offset(0.0, 0.05), end: Offset.zero).animate(
+                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                  );
+                  final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeIn));
+                  return FadeTransition(opacity: fadeAnimation, child: SlideTransition(position: slideAnimation, child: child));
+                },
+                transitionDuration: const Duration(milliseconds: 600),
+              ),
+            );
+          },
+          onSettingsTap: () {
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (ctx, anim, x) => const SettingsScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(
+                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                    ),
+                    child: child,
+                  ),
+                ),
+                transitionDuration: const Duration(milliseconds: 450),
+              ),
+            );
+          },
+          onLogoutTap: () async {
+            final navigator = Navigator.of(context);
+            final scaffoldMessenger = ScaffoldMessenger.of(context);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('isLoggedIn', false);
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  TranslationManager.t('loggingOut'),
+                  style: GoogleFonts.inter(color: Colors.white),
+                ),
+                backgroundColor: const Color(0xFFEB4335),
+                duration: const Duration(milliseconds: 800),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            );
+            Future.delayed(const Duration(milliseconds: 800), () {
+              navigator.pushAndRemoveUntil(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+                      CurvedAnimation(parent: animation, curve: Curves.easeIn),
+                    );
+                    return FadeTransition(opacity: fadeAnimation, child: child);
+                  },
+                  transitionDuration: const Duration(milliseconds: 500),
+                ),
+                (route) => false,
+              );
+            });
+          },
+        ),
+        body: Stack(
           children: [
-            Column(
+            IndexedStack(
+              index: _currentTab,
               children: [
-                FeedHeader(
-                  onMenuTap: () {
-                    setState(() => _currentTab = 2);
-                  },
-                  onSearchTap: () {
+                Column(
+                  children: [
+                    FeedHeader(
+                      onMenuTap: () {
+                        _scaffoldKey.currentState?.openDrawer();
+                      },
+                      onSearchTap: () {
+                        setState(() {
+                          _currentTab = 1;
+                        });
+                      },
+                      onSearchChanged: (query) {
+                        setState(() {
+                          _currentTab = 1;
+                          _searchQuery = query;
+                          _searchController.text = query;
+                        });
+                      },
+                      onNotificationTap: () {
+                        setState(() {
+                          _currentTab = 2;
+                        });
+                      },
+                    ),
+                    Expanded(
+                      child: _isRefreshing
+                          ? _buildShimmerGrid()
+                          : SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.all(16),
+                              child: ValueListenableBuilder<Set<String>>(
+                                valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
+                                builder: (context, savedSocialIds, _) {
+                                  return Center(
+                                    child: Container(
+                                      constraints: const BoxConstraints(maxWidth: 500),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          // Left Column
+                                          Expanded(
+                                            child: Column(
+                                              children: _buildStaggeredList(allItems, left: true),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          // Right Column
+                                          Expanded(
+                                            child: Column(
+                                              children: _buildStaggeredList(allItems, left: false),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+                _buildSearchPage(),
+                NotificationScreen(
+                  showBottomNav: false,
+                  showBackButton: true,
+                  onBackTap: () {
                     setState(() {
-                      _currentTab = 1;
-                    });
-                  },
-                  onSearchChanged: (query) {
-                    setState(() {
-                      _currentTab = 1;
-                      _searchQuery = query;
-                      _searchController.text = query;
+                      _currentTab = 0;
                     });
                   },
                 ),
-                Expanded(
-                  child: _isRefreshing
-                      ? _buildShimmerGrid()
-                      : SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.all(16),
-                          child: ValueListenableBuilder<Set<String>>(
-                            valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
-                            builder: (context, savedSocialIds, _) {
-                              return Center(
-                                child: Container(
-                                  constraints: const BoxConstraints(maxWidth: 378),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Left Column
-                                      Expanded(
-                                        child: Column(
-                                          children: _buildStaggeredList(allItems, left: true),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      // Right Column
-                                      Expanded(
-                                        child: Column(
-                                          children: _buildStaggeredList(allItems, left: false),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                ProfileScreen(
+                  showBottomNav: false,
+                  showBackButton: true,
+                  onBackTap: () {
+                    setState(() {
+                      _currentTab = 0;
+                    });
+                  },
                 ),
               ],
             ),
-            _buildSearchPage(),
-            const NotificationScreen(
-              showBottomNav: false,
-              showBackButton: false,
+            // Background Dimming Scrim
+            IgnorePointer(
+              ignoring: !_isAddMenuOpen,
+              child: AnimatedOpacity(
+                opacity: _isAddMenuOpen ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 250),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isAddMenuOpen = false;
+                    });
+                  },
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
             ),
-            ProfileScreen(
-              showBottomNav: false,
-              showBackButton: true,
-              onBackTap: () {
-                setState(() {
-                  _currentTab = 0;
-                });
-              },
+            // Premium Horizontal Fanned-Out Add Menu Popup
+            Positioned(
+              bottom: 60 + MediaQuery.of(context).padding.bottom + 16,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                ignoring: !_isAddMenuOpen,
+                child: Center(
+                  child: SizedBox(
+                    width: 280,
+                    height: 110,
+                    child: Stack(
+                      alignment: Alignment.bottomCenter,
+                      children: [
+                        // Left Option: Write a Post
+                        AnimatedAlign(
+                          duration: _isAddMenuOpen ? const Duration(milliseconds: 350) : const Duration(milliseconds: 250),
+                          curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeInOutCubic,
+                          alignment: _isAddMenuOpen ? const Alignment(-0.65, -0.6) : Alignment.bottomCenter,
+                          child: AnimatedScale(
+                            scale: _isAddMenuOpen ? 1.0 : 0.0,
+                            duration: _isAddMenuOpen ? const Duration(milliseconds: 300) : const Duration(milliseconds: 200),
+                            curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeIn,
+                            child: _buildCircularAddOption(
+                              icon: Icons.edit_outlined,
+                              label: 'Write Post',
+                              onTap: () => _navigateToWritePost(isSaveItem: false),
+                              isOpen: _isAddMenuOpen,
+                              isLeft: true,
+                            ),
+                          ),
+                        ),
+                        // Right Option: Save an Item
+                        AnimatedAlign(
+                          duration: _isAddMenuOpen ? const Duration(milliseconds: 350) : const Duration(milliseconds: 250),
+                          curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeInOutCubic,
+                          alignment: _isAddMenuOpen ? const Alignment(0.65, -0.6) : Alignment.bottomCenter,
+                          child: AnimatedScale(
+                            scale: _isAddMenuOpen ? 1.0 : 0.0,
+                            duration: _isAddMenuOpen ? const Duration(milliseconds: 300) : const Duration(milliseconds: 200),
+                            curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeIn,
+                            child: _buildCircularAddOption(
+                              icon: Icons.bookmark_border_rounded,
+                              label: 'Save Item',
+                              onTap: () => _navigateToWritePost(isSaveItem: true),
+                              isOpen: _isAddMenuOpen,
+                              isLeft: false,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
         bottomNavigationBar: AppBottomNavigation(
           currentIndex: _currentTab,
+          isAddMenuOpen: _isAddMenuOpen,
           onTabChanged: (index) {
+            if (_isAddMenuOpen) {
+              setState(() => _isAddMenuOpen = false);
+            }
             if (index == 0 && _currentTab == 0) {
               _refreshFeed();
             }
             setState(() => _currentTab = index);
           },
+          onAddTap: () {
+            setState(() {
+              _isAddMenuOpen = !_isAddMenuOpen;
+            });
+          },
         ),
+      ),
+    );
+  }
+
+  Widget _buildCircularAddOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required bool isOpen,
+    required bool isLeft,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedRotation(
+          turns: isOpen ? 0.0 : (isLeft ? -0.25 : 0.25),
+          duration: isOpen ? const Duration(milliseconds: 350) : const Duration(milliseconds: 200),
+          curve: isOpen ? Curves.easeOutBack : Curves.easeInOutCubic,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              customBorder: const CircleBorder(),
+              highlightColor: const Color(0xFFFAF096).withValues(alpha: 0.2),
+              splashColor: const Color(0xFFFAF096).withValues(alpha: 0.35),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF272729),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    width: 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            shadows: [
+              const Shadow(
+                color: Colors.black,
+                blurRadius: 4,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _navigateToWritePost({required bool isSaveItem}) {
+    setState(() {
+      _isAddMenuOpen = false;
+    });
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            WritePostScreen(isSaveItem: isSaveItem),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.0, 0.08),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+          );
+          final fadeAnimation = Tween<double>(
+            begin: 0.0,
+            end: 1.0,
+          ).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeIn,
+            ),
+          );
+          return FadeTransition(
+            opacity: fadeAnimation,
+            child: SlideTransition(
+              position: slideAnimation,
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
@@ -294,7 +616,7 @@ class _FeedScreenState extends State<FeedScreen> {
       padding: const EdgeInsets.all(16),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 378),
+          constraints: const BoxConstraints(maxWidth: 500),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -470,7 +792,7 @@ class _FeedScreenState extends State<FeedScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Center(
                           child: Container(
-                            constraints: const BoxConstraints(maxWidth: 378),
+                            constraints: const BoxConstraints(maxWidth: 500),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -494,6 +816,39 @@ class _FeedScreenState extends State<FeedScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHelpInfoCard({required String title, required String body}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF333333),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: GoogleFonts.inter(
+              color: const Color(0xFFC0BEBB),
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -653,17 +1008,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
     return AnimatedBuilder(
       animation: Listenable.merge([
         PostStore.instance.likedPostIdsNotifier,
-        widget.item is UserPost
-            ? PostStore.instance.postsNotifier
-            : PostStore.instance.savedSocialPostIdsNotifier,
+        PostStore.instance.savedSocialPostIdsNotifier,
       ]),
       builder: (context, _) {
         final isLiked = PostStore.instance.likedPostIds.contains(itemId);
-        final isSaved = widget.item is UserPost
-            ? PostStore.instance.posts
-                .firstWhere((p) => p.id == itemId, orElse: () => widget.item as UserPost)
-                .savedInProfile
-            : PostStore.instance.savedSocialPostIds.contains(itemId);
+        final isSaved = PostStore.instance.savedSocialPostIds.contains(itemId);
 
         final likes = isLiked ? '1' : '0';
         final bookmarks = widget.item is UserPost
@@ -682,7 +1031,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           } else if (post.imagePath != null) {
             mediaWidget = Image.file(
               File(post.imagePath!),
-              fit: BoxFit.cover,
+              fit: BoxFit.fitWidth,
               width: double.infinity,
               errorBuilder: (context, error, stackTrace) => Container(
                 height: 150,
@@ -742,7 +1091,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           } else {
             childWidget = Image.asset(
               post.mediaAssetPath,
-              fit: BoxFit.cover,
+              fit: BoxFit.fitWidth,
               width: double.infinity,
             );
           }
@@ -801,6 +1150,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
         final String? avatarAsset = item is UserPost ? null : (item as PostModel).avatarAssetPath;
         final String initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
         final Color color = item is UserPost ? const Color(0xFF6B9BF7) : (item as PostModel).accentColor ?? const Color(0xFF7B61FF);
+        final String sharesText = item is UserPost ? '0' : _format((item as PostModel).sharesCount);
 
         return FeedCard(
           imageWidget: mediaWidget,
@@ -811,14 +1161,31 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           avatarColor: color,
           likes: likes,
           bookmarks: bookmarks,
+          shares: sharesText,
           isLiked: isLiked,
           isSaved: isSaved,
           onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
           onSaveTap: () {
-            if (widget.item is UserPost) {
-              PostStore.instance.toggleSavedInProfile(itemId);
+            PostStore.instance.toggleSavedSocialPost(itemId);
+          },
+          onShareTap: () async {
+            if (item is UserPost) {
+              await ShareHelper.sharePost(
+                title: item.title,
+                description: item.body,
+                url: item.url,
+                localImagePath: item.imagePath,
+                localVideoPath: item.videoPath,
+                author: 'You',
+              );
             } else {
-              PostStore.instance.toggleSavedSocialPost(itemId);
+              await ShareHelper.sharePost(
+                title: (item as PostModel).title ?? '',
+                description: item.description,
+                url: item.url,
+                assetPath: item.mediaAssetPath,
+                author: item.username ?? 'Unknown',
+              );
             }
           },
           onCardTap: onTap,

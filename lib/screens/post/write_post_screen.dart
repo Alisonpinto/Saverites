@@ -1356,6 +1356,7 @@ class _WritePostScreenState extends State<WritePostScreen>
       if (path == null) return const SizedBox.shrink();
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
+        height: 200,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.white12, width: 0.5),
@@ -1363,8 +1364,8 @@ class _WritePostScreenState extends State<WritePostScreen>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: path.startsWith('assets/')
-              ? Image.asset(path, fit: BoxFit.cover, width: double.infinity)
-              : Image.file(File(path), fit: BoxFit.cover, width: double.infinity),
+              ? Image.asset(path, fit: BoxFit.cover, width: double.infinity, height: 200)
+              : Image.file(File(path), fit: BoxFit.cover, width: double.infinity, height: 200),
         ),
       );
     }
@@ -1872,6 +1873,31 @@ class _WritePostScreenState extends State<WritePostScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Always show Title input at the top
+                          TextField(
+                            controller: _titleController,
+                            focusNode: _titleFocusNode,
+                            maxLines: null,
+                            keyboardType: TextInputType.multiline,
+                            textCapitalization: TextCapitalization.sentences,
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Title',
+                              hintStyle: GoogleFonts.inter(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
                           if (widget.isSaveItem) ...[
                             _buildAutomaticPreview(),
                             const SizedBox(height: 12),
@@ -1905,31 +1931,6 @@ class _WritePostScreenState extends State<WritePostScreen>
                               ),
                             ),
                           ] else ...[
-                            // Title input
-                            TextField(
-                              controller: _titleController,
-                              focusNode: _titleFocusNode,
-                              maxLines: null,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization: TextCapitalization.sentences,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Title',
-                                hintStyle: GoogleFonts.inter(
-                                  color: Colors.white.withValues(alpha: 0.35),
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
                             // Body input
                             TextField(
                               controller: _bodyController,

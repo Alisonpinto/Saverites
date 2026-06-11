@@ -14,11 +14,13 @@ import '../profile/profile_screen.dart';
 class NotificationScreen extends StatefulWidget {
   final bool showBottomNav;
   final bool showBackButton;
+  final VoidCallback? onBackTap;
 
   const NotificationScreen({
     super.key,
     this.showBottomNav = true,
     this.showBackButton = true,
+    this.onBackTap,
   });
 
   @override
@@ -93,6 +95,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 _NotificationHeader(
                   statusBarHeight: statusBarHeight,
                   showBackButton: widget.showBackButton,
+                  onBackTap: widget.onBackTap,
                 ),
 
                 _buildVaultNotificationBanner(),
@@ -139,6 +142,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
             bottomNavigationBar: widget.showBottomNav
                 ? AppBottomNavigation(
                     currentIndex: 2,
+                    isAddMenuOpen: false,
+                    onAddTap: () {},
                     onTabChanged: (index) {
                       if (index == 3) {
                         Navigator.pushReplacement(
@@ -163,10 +168,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
 class _NotificationHeader extends StatelessWidget {
   final double statusBarHeight;
   final bool showBackButton;
+  final VoidCallback? onBackTap;
 
   const _NotificationHeader({
     required this.statusBarHeight,
     required this.showBackButton,
+    this.onBackTap,
   });
 
   @override
@@ -175,7 +182,7 @@ class _NotificationHeader extends StatelessWidget {
       color: const Color(0xFF121212),
       padding: EdgeInsets.only(
         top: statusBarHeight > 0 ? statusBarHeight : 10,
-        bottom: 0,
+        bottom: 12,
         left: 8,
         right: 16,
       ),
@@ -185,7 +192,13 @@ class _NotificationHeader extends StatelessWidget {
           // Back arrow
           if (showBackButton) ...[
             IconButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                if (onBackTap != null) {
+                  onBackTap!();
+                } else if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+              },
               icon: const Icon(
                 Icons.arrow_back,
                 color: Colors.white,
@@ -193,6 +206,7 @@ class _NotificationHeader extends StatelessWidget {
               ),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(),
+              splashRadius: 20,
             ),
             const SizedBox(width: 4),
           ],
@@ -202,7 +216,7 @@ class _NotificationHeader extends StatelessWidget {
             TranslationManager.t('notification'),
             style: GoogleFonts.inter(
               color: Colors.white,
-              fontSize: 18,
+              fontSize: 24,
               fontWeight: FontWeight.w600,
             ),
           ),

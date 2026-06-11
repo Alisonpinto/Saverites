@@ -73,7 +73,7 @@ class TranslationManager {
       'selfSave': 'Self save',
       'nothingSaved': 'Nothing saved yet',
       'writePost': 'Write a Post',
-      'saveItem': 'Save a Item',
+      'saveItem': 'Save an Item',
       // Notification Screen
       'notification': 'Notification',
       'postedMemory': 'Posted a memory',

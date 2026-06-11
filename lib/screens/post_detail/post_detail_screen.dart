@@ -486,7 +486,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           case BlockType.code:
             return _buildCodeBlock(block.text, block.meta?['lang'] ?? 'dart');
           case BlockType.text:
-          default:
             if (block.text.trim().isEmpty) {
               return const SizedBox(height: 8);
             }
@@ -552,9 +551,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               margin: const EdgeInsets.only(right: 6, top: 1),
               decoration: BoxDecoration(
-                color: const Color(0xFFBF5AF2).withOpacity(0.15),
+                color: const Color(0xFFBF5AF2).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: const Color(0xFFBF5AF2).withOpacity(0.3), width: 0.5),
+                border: Border.all(color: const Color(0xFFBF5AF2).withValues(alpha: 0.3), width: 0.5),
               ),
               child: Text(
                 'TO-DO',
@@ -644,7 +643,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 24),
@@ -1024,7 +1023,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       height: 8,
                       margin: const EdgeInsets.only(right: 6),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.8),
+                        color: color.withValues(alpha: 0.8),
                         shape: BoxShape.circle,
                       ),
                     );

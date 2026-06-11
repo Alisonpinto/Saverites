@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../login_screen.dart';
 import '../../utils/translation_manager.dart';
+import '../../utils/notification_manager.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,10 +15,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   String _currentLanguage = 'English';
+  String _reminderInterval = 'Always';
   final TextEditingController _feedbackController = TextEditingController();
   int _charCount = 0;
-
-
 
   // Helper to translate keys dynamically with fallback to English
   String _t(String key) {
@@ -27,10 +27,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _feedbackController.addListener(() {
       setState(() {
         _charCount = _feedbackController.text.length;
       });
+    });
+  }
+
+  void _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
+      _reminderInterval = prefs.getString('savedItemsReminderInterval') ?? 'Always';
     });
   }
 
@@ -120,12 +129,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Custom premium toggle switch: White track, black thumb
   Widget _buildCustomToggle() {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
+        final newValue = !_notificationsEnabled;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('notificationsEnabled', newValue);
         setState(() {
-          _notificationsEnabled = !_notificationsEnabled;
+          _notificationsEnabled = newValue;
         });
       },
       behavior: HitTestBehavior.opaque,
@@ -665,6 +676,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   value: _currentLanguage,
                                   onTap: () => _showLanguageSelector(context),
                                 ),
+                                _buildDivider(),
+                                _buildRow(
+                                  icon: Icons.timer_outlined,
+                                  label: 'Saved Items Reminder',
+                                  value: _reminderInterval,
+                                  onTap: () => _showReminderIntervalSelector(context),
+                                ),
                               ],
                             ),
                           ),
@@ -913,6 +931,128 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _showReminderIntervalSelector(BuildContext context) {
+    final List<String> intervals = ['Always', '2 Days', '1 Week', '1 Month', 'Never'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF121212),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(30),
+              topRight: Radius.circular(30),
+            ),
+          ),
+          padding: EdgeInsets.only(
+            top: 24,
+            left: 24,
+            right: 24,
+            bottom: MediaQuery.of(context).padding.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Saved Items Reminder',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Color(0xFF7C7C81), size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF333333),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int i = 0; i < intervals.length; i++) ...[
+                      _buildReminderOption(context, intervals[i]),
+                      if (i < intervals.length - 1) _buildDivider(),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReminderOption(BuildContext context, String value) {
+    final isSelected = _reminderInterval == value;
+    return InkWell(
+      onTap: () async {
+        Navigator.pop(context);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('savedItemsReminderInterval', value);
+        if (value != 'Never') {
+          await prefs.setInt('lastSavedItemsReminderTimestamp', 0);
+        }
+        setState(() {
+          _reminderInterval = value;
+        });
+
+        // Trigger immediate check
+        await NotificationManager.instance.triggerSavedItemsCheck();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Reminder interval set to $value',
+                style: GoogleFonts.inter(color: Colors.white),
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              value,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check, color: Colors.white, size: 20),
+          ],
+        ),
+      ),
     );
   }
 }

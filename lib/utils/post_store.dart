@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
+import '../widgets/in_app_notification.dart';
 import 'rich_text_controller.dart';
 import 'notification_manager.dart';
 
@@ -123,6 +124,11 @@ class PostStore {
     postsNotifier.value = [post, ...postsNotifier.value];
     if (post.savedInProfile) {
       NotificationManager.instance.triggerVaultReminderNotification(post.title);
+      InAppNotificationHelper.show(
+        body: post.title,
+        imagePath: post.imagePath,
+        showMedia: true,
+      );
     }
   }
 

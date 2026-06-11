@@ -56,6 +56,59 @@ class _BouncingIconState extends State<BouncingIcon> with SingleTickerProviderSt
   }
 }
 
+/// A stateful action button that scales down slightly on press for premium micro-interaction.
+class _ActionButton extends StatefulWidget {
+  final Widget iconWidget;
+  final String count;
+  final VoidCallback? onTap;
+
+  const _ActionButton({
+    required this.iconWidget,
+    required this.count,
+    this.onTap,
+  });
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  double _scale = 1.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _scale = 0.9),
+      onTapUp: (_) {
+        setState(() => _scale = 1.0);
+        widget.onTap?.call();
+      },
+      onTapCancel: () => setState(() => _scale = 1.0),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 100),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            widget.iconWidget,
+            const SizedBox(width: 4),
+            Text(
+              widget.count,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A reusable premium card styled for the Memoria masonry layout.
 class FeedCard extends StatelessWidget {
   final Widget imageWidget;
@@ -66,10 +119,12 @@ class FeedCard extends StatelessWidget {
   final Color avatarColor;
   final String likes;
   final String bookmarks;
+  final String shares;
   final bool isLiked;
   final bool isSaved;
   final VoidCallback? onLikeTap;
   final VoidCallback? onSaveTap;
+  final VoidCallback? onShareTap;
   final VoidCallback? onCardTap;
   final VoidCallback? onImageTap;
 
@@ -77,23 +132,25 @@ class FeedCard extends StatelessWidget {
     super.key,
     required this.imageWidget,
     required this.title,
-    required this.username,
+    this.username = '',
     this.avatarAssetPath,
-    required this.avatarInitial,
-    required this.avatarColor,
+    this.avatarInitial = '?',
+    this.avatarColor = Colors.grey,
     required this.likes,
     required this.bookmarks,
+    required this.shares,
     this.isLiked = false,
     this.isSaved = false,
     this.onLikeTap,
     this.onSaveTap,
+    this.onShareTap,
     this.onCardTap,
     this.onImageTap,
   });
 
-  String _truncateTitle(String text) {
+  String _formatTitle(String text) {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return 'check out my new...';
+    if (trimmed.isEmpty) return '';
     final words = trimmed.split(RegExp(r'\s+'));
     if (words.length > 5) {
       return '${words.take(5).join(' ')}...';
@@ -106,7 +163,7 @@ class FeedCard extends StatelessWidget {
     return GestureDetector(
       onTap: onCardTap,
       child: Container(
-        width: 181,
+        // Removed fixed width: 181 to make the card fully responsive to column constraints
         decoration: BoxDecoration(
           color: const Color(0xFF3A3A3B),
           borderRadius: BorderRadius.circular(10),
@@ -116,23 +173,23 @@ class FeedCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // SECTION 1 — MEDIA
-            Padding(
-              padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
-              child: GestureDetector(
-                onTap: onImageTap ?? onCardTap,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: imageWidget,
+            GestureDetector(
+              onTap: onImageTap ?? onCardTap,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
                 ),
+                child: imageWidget,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             
             // SECTION 2 — TITLE
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                _truncateTitle(title),
+                _formatTitle(title),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
@@ -143,133 +200,72 @@ class FeedCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
             
             // SECTION 3 — ACTION FOOTER
             Padding(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Left: Avatar + Username in a capsule
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.only(left: 4, right: 8, top: 4, bottom: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF292929), // Premium profile pill
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 38,
-                            height: 38,
-                            child: CircleAvatar(
-                              radius: 19, // 38x38 Circle
-                              backgroundImage: avatarAssetPath != null
-                                  ? AssetImage(avatarAssetPath!)
-                                  : null,
-                              backgroundColor: avatarColor,
-                              child: avatarAssetPath == null
-                                  ? Text(
-                                      avatarInitial,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              username,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
+                  const Spacer(flex: 4),
+                  // Heart + Count
+                  _ActionButton(
+                    iconWidget: BouncingIcon(
+                      trigger: isLiked,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, animation) {
+                          return ScaleTransition(scale: animation, child: child);
+                        },
+                        child: Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          key: ValueKey<bool>(isLiked),
+                          size: 22,
+                          color: isLiked ? const Color(0xFFE52E5E) : Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  
-                  // Center: Like icon (Outline heart, white) + count
-                  GestureDetector(
+                    count: likes,
                     onTap: onLikeTap,
-                    behavior: HitTestBehavior.opaque,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        BouncingIcon(
-                          trigger: isLiked,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            transitionBuilder: (child, animation) {
-                              return ScaleTransition(scale: animation, child: child);
-                            },
-                            child: Icon(
-                              isLiked ? Icons.favorite : Icons.favorite_border,
-                              key: ValueKey<bool>(isLiked),
-                              size: 28,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          likes,
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  const SizedBox(width: 8),
-                  
-                  // Right: Save icon (Yellow Bookmark) + count
-                  GestureDetector(
-                    onTap: onSaveTap,
-                    behavior: HitTestBehavior.opaque,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        BouncingIcon(
-                          trigger: isSaved,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            transitionBuilder: (child, animation) {
-                              return ScaleTransition(scale: animation, child: child);
-                            },
-                            child: Icon(
-                              isSaved ? Icons.bookmark : Icons.bookmark_border,
-                              key: ValueKey<bool>(isSaved),
-                              size: 28,
-                              color: isSaved ? const Color(0xFFFFEE00) : Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          bookmarks,
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                  const Spacer(flex: 3),
+
+                  // Share + Count
+                  _ActionButton(
+                    iconWidget: Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.rotationY(3.141592653589793),
+                      child: const Icon(
+                        Icons.reply,
+                        size: 22,
+                        color: Colors.white,
+                      ),
                     ),
+                    count: shares,
+                    onTap: onShareTap,
+                  ),
+                  const Spacer(flex: 3),
+
+                  // Save + Count
+                  _ActionButton(
+                    iconWidget: BouncingIcon(
+                      trigger: isSaved,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, animation) {
+                          return ScaleTransition(scale: animation, child: child);
+                        },
+                        child: Icon(
+                          isSaved ? Icons.bookmark : Icons.bookmark_border,
+                          key: ValueKey<bool>(isSaved),
+                          size: 22,
+                          color: isSaved ? const Color(0xFFFFEE00) : Colors.white,
+                        ),
+                      ),
+                    ),
+                    count: bookmarks,
+                    onTap: onSaveTap,
                   ),
                 ],
               ),

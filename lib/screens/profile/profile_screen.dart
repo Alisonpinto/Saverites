@@ -11,6 +11,9 @@ import '../../widgets/shimmer_container.dart';
 import '../../widgets/feed_card.dart';
 import '../../widgets/running_video_player.dart';
 import '../../widgets/animated_avatar.dart';
+import 'package:fluttermoji/fluttermoji.dart';
+import '../../utils/user_store.dart';
+import '../../avatar_setup_screen.dart';
 import '../../utils/share_helper.dart';
 import 'settings_screen.dart';
 import '../notifications/notification_screen.dart';
@@ -59,6 +62,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _profileSearchQuery = "";
   String _activeCategoryChip = "Recent";
   bool _isPrivate = false;
+
+  bool get _isMyProfile {
+    final currentUser = UserStore.instance.currentUser;
+    return widget.username == null ||
+        widget.username == 'gangster_vagas' ||
+        (currentUser != null && widget.username == currentUser.userId);
+  }
 
   String _getVaultReminder(List<UserPost> saves) {
     if (saves.isEmpty) {
@@ -293,31 +303,75 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       child: SizedBox(
                                         width: 130,
                                         height: 130,
-                                        child: widget.avatarAssetPath != null || widget.avatarInitial != null
-                                            ? Container(
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: widget.avatarColor ?? const Color(0xFF7B61FF),
-                                                  image: widget.avatarAssetPath != null
-                                                      ? DecorationImage(
-                                                          image: AssetImage(widget.avatarAssetPath!),
-                                                          fit: BoxFit.cover,
-                                                        )
-                                                      : null,
-                                                ),
-                                                alignment: Alignment.center,
-                                                child: widget.avatarAssetPath == null && widget.avatarInitial != null
-                                                    ? Text(
-                                                        widget.avatarInitial!.toUpperCase(),
-                                                        style: GoogleFonts.inter(
-                                                          color: Colors.white,
-                                                          fontSize: 48,
-                                                          fontWeight: FontWeight.bold,
+                                        child: _isMyProfile
+                                            ? GestureDetector(
+                                                onTap: () async {
+                                                  await Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) => const AvatarSetupScreen(isFromProfile: true),
+                                                    ),
+                                                  );
+                                                  if (mounted) setState(() {});
+                                                },
+                                                child: MouseRegion(
+                                                  cursor: SystemMouseCursors.click,
+                                                  child: Tooltip(
+                                                    message: 'Customize Avatar',
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        gradient: const LinearGradient(
+                                                          colors: [
+                                                            Color(0xFF7B61FF),
+                                                            Color(0xFFFF6B9D),
+                                                          ],
+                                                          begin: Alignment.topLeft,
+                                                          end: Alignment.bottomRight,
                                                         ),
-                                                      )
-                                                    : null,
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                            color: const Color(0xFF7B61FF).withValues(alpha: 0.35),
+                                                            blurRadius: 20,
+                                                            spreadRadius: 2,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      child: ClipOval(
+                                                        child: FluttermojiCircleAvatar(
+                                                          radius: 65,
+                                                          backgroundColor: Colors.transparent,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                               )
-                                            : const AnimatedAvatar(size: 130),
+                                            : (widget.avatarAssetPath != null || widget.avatarInitial != null)
+                                                ? Container(
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: widget.avatarColor ?? const Color(0xFF7B61FF),
+                                                      image: widget.avatarAssetPath != null
+                                                          ? DecorationImage(
+                                                              image: AssetImage(widget.avatarAssetPath!),
+                                                              fit: BoxFit.cover,
+                                                            )
+                                                          : null,
+                                                    ),
+                                                    alignment: Alignment.center,
+                                                    child: widget.avatarAssetPath == null && widget.avatarInitial != null
+                                                        ? Text(
+                                                            widget.avatarInitial!.toUpperCase(),
+                                                            style: GoogleFonts.inter(
+                                                              color: Colors.white,
+                                                              fontSize: 48,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          )
+                                                        : null,
+                                                  )
+                                                : const AnimatedAvatar(size: 130),
                                       ),
                                     ),
                                     const SizedBox(width: 20),
@@ -326,12 +380,23 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            widget.username ?? 'gangster_vagas',
+                                            _isMyProfile
+                                                ? (UserStore.instance.currentUser?.name ?? 'Gangster Vagas')
+                                                : (widget.username ?? 'gangster_vagas'),
                                             style: GoogleFonts.inter(
                                               color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: -0.3,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w700, // Bold
+                                              letterSpacing: -0.4,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '@${_isMyProfile ? (UserStore.instance.currentUser?.userId ?? 'gangster_vagas') : (widget.username ?? 'gangster_vagas')}',
+                                            style: GoogleFonts.inter(
+                                              color: const Color(0xFF7C7C81),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
@@ -478,7 +543,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildProfileGrid() {
-    final bool isMyProfile = widget.username == null || widget.username == 'gangster_vagas';
+    final bool isMyProfile = _isMyProfile;
     final query = _profileSearchQuery.toLowerCase().trim();
 
     if (_activeTab == 0) {

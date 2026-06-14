@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'avatar_setup_screen.dart';
 import 'login_screen.dart';
 import 'screens/feed/feed_screen.dart';
 import 'screens/post/write_post_screen.dart';
+import 'utils/user_store.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -32,6 +34,10 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     if (!mounted) return;
+
+    // Restore session from SharedPreferences
+    await UserStore.instance.loadSession();
+
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     if (!mounted) return;
@@ -49,13 +55,22 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    // Normal flow with 2-second delay if not launched from share intent
-    await Future.delayed(const Duration(seconds: 2));
+    // Normal flow with 1.5-second delay if not launched from share intent
+    await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
-    
+
+    if (!isLoggedIn) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      return;
+    }
+
+    // Already logged in — check if avatar setup was done
+    final avatarDone = prefs.getBool('avatar_setup_done') ?? false;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => isLoggedIn ? const FeedScreen() : const LoginScreen(),
+        builder: (_) => avatarDone ? const FeedScreen() : const AvatarSetupScreen(),
       ),
     );
   }

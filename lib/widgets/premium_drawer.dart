@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:fluttermoji/fluttermoji.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'animated_avatar.dart';
+import '../utils/user_store.dart';
 import '../utils/translation_manager.dart';
 
 class PremiumDrawer extends StatelessWidget {
@@ -65,21 +66,87 @@ class PremiumDrawer extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF1E1F22),
+                        const Color(0xFF1E1F22),
+                        const Color(0xFF7B61FF).withValues(alpha: 0.15),
+                      ],
+                      stops: const [0.0, 0.6, 1.0],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      width: 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      const AnimatedAvatar(size: 48), // Small circular avatar
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'gangster_vagas',
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600, // Username: 16px SemiBold
+                      // Large avatar with a beautiful gradient background and shadow
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF7B61FF),
+                              Color(0xFFFF6B9D),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: FluttermojiCircleAvatar(
+                            radius: 25,
+                            backgroundColor: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              UserStore.instance.currentUser?.name ?? 'Gangster Vagas',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '@${UserStore.instance.currentUser?.userId ?? 'gangster_vagas'}',
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFFA0A0A5),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

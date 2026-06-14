@@ -21,6 +21,32 @@ class RichStyle {
     this.highlightColor,
   });
 
+  Map<String, dynamic> toJson() {
+    return {
+      'bold': bold,
+      'italic': italic,
+      'underline': underline,
+      'strikethrough': strikethrough,
+      'weight': weight,
+      'fontSize': fontSize,
+      'color': color?.value,
+      'highlightColor': highlightColor?.value,
+    };
+  }
+
+  factory RichStyle.fromJson(Map<String, dynamic> json) {
+    return RichStyle(
+      bold: json['bold'] as bool?,
+      italic: json['italic'] as bool?,
+      underline: json['underline'] as bool?,
+      strikethrough: json['strikethrough'] as bool?,
+      weight: json['weight'] as String?,
+      fontSize: (json['fontSize'] as num?)?.toDouble(),
+      color: json['color'] != null ? Color(json['color'] as int) : null,
+      highlightColor: json['highlightColor'] != null ? Color(json['highlightColor'] as int) : null,
+    );
+  }
+
   RichStyle copyWith({
     bool? bold,
     bool? italic,

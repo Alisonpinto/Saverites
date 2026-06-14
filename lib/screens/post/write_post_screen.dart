@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1348,6 +1349,12 @@ class _WritePostScreenState extends State<WritePostScreen>
     );
   }
 
+  int _getWordCount(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return 0;
+    return trimmed.split(RegExp(r'\s+')).length;
+  }
+
   Widget _buildAutomaticPreview() {
     final String resolvedType = _getResolvedType();
 
@@ -1869,6 +1876,10 @@ class _WritePostScreenState extends State<WritePostScreen>
                             maxLines: null,
                             keyboardType: TextInputType.multiline,
                             textCapitalization: TextCapitalization.sentences,
+                            onChanged: (_) => setState(() {}),
+                            inputFormatters: [
+                              WordLimitTextInputFormatter(6),
+                            ],
                             style: GoogleFonts.inter(
                               color: Colors.white,
                               fontSize: 16,
@@ -1885,7 +1896,22 @@ class _WritePostScreenState extends State<WritePostScreen>
                               contentPadding: EdgeInsets.zero,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 2, bottom: 6),
+                              child: Text(
+                                '${_getWordCount(_titleController.text)}/6 words',
+                                style: GoogleFonts.inter(
+                                  color: _getWordCount(_titleController.text) >= 6
+                                      ? const Color(0xFFFAF096)
+                                      : const Color(0xFF7C7C81),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
 
                           if (widget.isSaveItem) ...[
                             _buildAutomaticPreview(),
@@ -2217,4 +2243,24 @@ class WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class WordLimitTextInputFormatter extends TextInputFormatter {
+  final int maxWords;
+
+  WordLimitTextInputFormatter(this.maxWords);
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text.trim();
+    if (text.isEmpty) {
+      return newValue;
+    }
+    final words = text.split(RegExp(r'\s+'));
+    if (words.length > maxWords) {
+      return oldValue;
+    }
+    return newValue;
+  }
 }

@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.WRITE_CONTACTS"/>
 
     <application
-        android:label="memoria_flutter"
+        android:label="Memoria"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

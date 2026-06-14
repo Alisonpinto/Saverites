@@ -1,6 +1,6 @@
 {
-    "name": "memoria_flutter",
-    "short_name": "memoria_flutter",
+    "name": "Memoria",
+    "short_name": "Memoria",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

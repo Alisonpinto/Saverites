@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,6 +54,11 @@ class _FeedScreenState extends State<FeedScreen> {
     // Listen for new posts to rebuild
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
     
+    // Load local cached posts and then trigger online sync
+    PostStore.instance.loadFromLocal().then((_) {
+      PostStore.instance.syncOnlinePosts();
+    });
+    
     // Initialize share intent listener
     _initShareIntentListener();
   }
@@ -67,6 +73,230 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _onPostsChanged() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _handleBackPress() async {
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    if (_isAddMenuOpen) {
+      setState(() {
+        _isAddMenuOpen = false;
+      });
+      return;
+    }
+
+    if (_currentTab != 0) {
+      setState(() {
+        _currentTab = 0;
+      });
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final skipConfirm = prefs.getBool('skip_exit_confirmation') ?? false;
+    
+    if (skipConfirm) {
+      SystemNavigator.pop();
+      return;
+    }
+
+    _showExitConfirmationDialog();
+  }
+
+  void _showExitConfirmationDialog() {
+    bool dontShowAgain = false;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (BuildContext context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              return Dialog(
+                backgroundColor: const Color(0xFF161618),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    width: 1.0,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Minimalist Power Icon (instead of generic red circle)
+                      Center(
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.03),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.07),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.power_settings_new_rounded,
+                            color: Colors.white.withValues(alpha: 0.75),
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      Text(
+                        'Exit Memoria?',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      Text(
+                        'Are you sure you want to close the app? You can save your session automatically.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Premium Custom Radio-style Checkbox
+                      GestureDetector(
+                        onTap: () {
+                          setDialogState(() {
+                            dontShowAgain = !dontShowAgain;
+                          });
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            color: Colors.transparent,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: dontShowAgain ? const Color(0xFFFAF096) : Colors.transparent,
+                                    border: Border.all(
+                                      color: dontShowAgain ? const Color(0xFFFAF096) : Colors.white.withValues(alpha: 0.3),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: dontShowAgain
+                                      ? const Icon(
+                                          Icons.check,
+                                          size: 13,
+                                          color: Colors.black,
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Do not ask again',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Action Buttons
+                      Row(
+                        children: [
+                          // Stay Button (Primary / Filled)
+                          Expanded(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: Text(
+                                'Stay',
+                                style: GoogleFonts.inter(
+                                  color: Colors.black,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Exit Button (Secondary / Outlined)
+                          Expanded(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                    width: 1.0,
+                                  ),
+                                ),
+                              ),
+                              onPressed: () async {
+                                if (dontShowAgain) {
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.setBool('skip_exit_confirmation', true);
+                                }
+                                SystemNavigator.pop();
+                              },
+                              child: Text(
+                                'Exit',
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFFFF453A).withValues(alpha: 0.85),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   static const _shareChannel = MethodChannel('com.example.memoria_flutter/share_intent');
@@ -154,12 +384,18 @@ class _FeedScreenState extends State<FeedScreen> {
       ..._shuffledPredefinedPosts,
     ];
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        systemNavigationBarColor: Color(0xFF272729),
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: Colors.transparent,
-      ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          systemNavigationBarColor: Color(0xFF272729),
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ),
       child: Scaffold(
         key: _scaffoldKey,
         drawerScrimColor: Colors.black.withValues(alpha: 0.4),
@@ -452,8 +688,9 @@ class _FeedScreenState extends State<FeedScreen> {
           },
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildCircularAddOption({
     required IconData icon,
@@ -600,7 +837,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _refreshFeed() {
     setState(() => _isRefreshing = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
+    PostStore.instance.syncOnlinePosts().then((_) {
       if (mounted) {
         setState(() {
           _shuffledPredefinedPosts.shuffle();

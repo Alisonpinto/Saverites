@@ -20,109 +20,9 @@ class NotificationManager {
   final AudioPlayer _soundPlayer = AudioPlayer();
   
   /// Reactive notifier for the list of notifications shown in the app.
-  /// Starts with the original sample notifications.
-  final ValueNotifier<List<NotificationModel>> notificationsNotifier = ValueNotifier<List<NotificationModel>>([
-    const NotificationModel(
-      id: 'n1',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'A',
-      avatarColor: Color(0xFF4A90E2),
-      username: 'alex.creates',
-      previewText: 'liked your post',
-      timestamp: '52m',
-      isRead: false,
-    ),
-    const NotificationModel(
-      id: 'n2',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'S',
-      avatarColor: Color(0xFF7B61FF),
-      username: 'sara.m',
-      previewText: 'started following you',
-      timestamp: '1h',
-      isRead: false,
-    ),
-    const NotificationModel(
-      id: 'n3',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'J',
-      avatarColor: Color(0xFFE24A6A),
-      username: 'jordan',
-      previewText: 'saved your post',
-      timestamp: '3h',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n4',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'M',
-      avatarColor: Color(0xFF2ECC71),
-      username: 'mia.visual',
-      previewText: 'commented: "This is stunning 🔥"',
-      timestamp: '5h',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n5',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'R',
-      avatarColor: Color(0xFFE67E22),
-      username: 'ravi.dev',
-      previewText: 'liked your post',
-      timestamp: '8h',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n6',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'L',
-      avatarColor: Color(0xFF1ABC9C),
-      username: 'luna.arts',
-      previewText: 'started following you',
-      timestamp: '1d',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n7',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'K',
-      avatarColor: Color(0xFF9B59B6),
-      username: 'kai.shoots',
-      previewText: 'shared your post',
-      timestamp: '1d',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n8',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'P',
-      avatarColor: Color(0xFFE74C3C),
-      username: 'priya.lens',
-      previewText: 'liked your post',
-      timestamp: '2d',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n9',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'T',
-      avatarColor: Color(0xFF3498DB),
-      username: 'tom.ink',
-      previewText: 'commented: "Where was this taken?"',
-      timestamp: '3d',
-      isRead: true,
-    ),
-    const NotificationModel(
-      id: 'n10',
-      avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'Z',
-      avatarColor: Color(0xFFF39C12),
-      username: 'zara.film',
-      previewText: 'started following you',
-      timestamp: '5d',
-      isRead: true,
-    ),
-  ]);
+  /// Starts with empty list.
+  final ValueNotifier<List<NotificationModel>> notificationsNotifier =
+      ValueNotifier<List<NotificationModel>>([]);
 
   List<NotificationModel> get notifications => notificationsNotifier.value;
   
@@ -259,45 +159,78 @@ class NotificationManager {
   }
 
   /// Triggers a notification for a user action (like, share, save).
+  ///
+  /// Pass [isIncoming] = true when triggered by a remote user (e.g. someone else
+  /// liked YOUR post). When [isIncoming] is true, [remoteUsername], [remoteAvatarColor]
+  /// and [remoteAvatarInitial] describe the person who performed the action.
   void triggerUserActionNotification({
     required String action, // 'liked', 'shared', 'saved'
     required String postTitle,
     String? author,
+    bool isIncoming = false,
+    String? remoteUsername,
+    Color? remoteAvatarColor,
+    String? remoteAvatarInitial,
+    String? remoteAvatarAssetPath,
   }) async {
     final rand = Random();
     final String id = 'user-${DateTime.now().millisecondsSinceEpoch}';
-    
-    final displayAuthor = (author != null && author.isNotEmpty) ? author : 'a post';
-    
-    // Format presentation based on the action
+
+    // The person who performed the action
+    final actorName = isIncoming
+        ? (remoteUsername ?? 'Someone')
+        : (author != null && author.isNotEmpty ? author : 'Someone');
+
+    // Format body text based on action and direction
     String body = '';
     String title = '';
-    Color avatarColor = Colors.blue;
-    String initial = '';
+    Color avatarColor;
+    String initial;
+    String? avatarAsset;
 
-    if (action == 'liked') {
-      title = 'Post Liked';
-      body = 'You liked $displayAuthor\'s post: "$postTitle"';
-      avatarColor = const Color(0xFFE24A6A); // Pinkish red
-      initial = 'L';
-    } else if (action == 'shared') {
-      title = 'Post Shared';
-      body = 'You shared $displayAuthor\'s post: "$postTitle"';
-      avatarColor = const Color(0xFF7B61FF); // Purple
-      initial = 'S';
-    } else if (action == 'saved') {
-      title = 'Post Saved';
-      body = 'You saved $displayAuthor\'s post: "$postTitle"';
-      avatarColor = const Color(0xFF2ECC71); // Green
-      initial = 'B';
+    if (isIncoming) {
+      // Remote user liked / shared our post
+      avatarColor = remoteAvatarColor ?? const Color(0xFFE24A6A);
+      initial = remoteAvatarInitial ?? actorName[0].toUpperCase();
+      avatarAsset = remoteAvatarAssetPath;
+      if (action == 'liked') {
+        title = 'Someone liked your post';
+        body = '$actorName liked your post: "$postTitle"';
+      } else if (action == 'shared') {
+        title = 'Someone shared your post';
+        body = '$actorName shared your post: "$postTitle"';
+      } else {
+        title = 'Post activity';
+        body = '$actorName interacted with "$postTitle"';
+      }
+    } else {
+      // Local user performed an action
+      avatarColor = action == 'liked'
+          ? const Color(0xFFE24A6A)
+          : action == 'shared'
+              ? const Color(0xFF7B61FF)
+              : const Color(0xFF2ECC71);
+      initial = action == 'liked' ? 'L' : action == 'shared' ? 'S' : 'B';
+      avatarAsset = null;
+
+      if (action == 'liked') {
+        title = 'Post Liked';
+        body = 'You liked $actorName\'s post: "$postTitle"';
+      } else if (action == 'shared') {
+        title = 'Post Shared';
+        body = 'You shared $actorName\'s post: "$postTitle"';
+      } else if (action == 'saved') {
+        title = 'Post Saved';
+        body = 'You saved $actorName\'s post: "$postTitle"';
+      }
     }
 
     final newNotif = NotificationModel(
       id: id,
-      avatarAssetPath: 'assets/images/panda.png',
+      avatarAssetPath: avatarAsset ?? 'assets/images/panda.png',
       avatarInitial: initial,
       avatarColor: avatarColor,
-      username: 'You',
+      username: isIncoming ? actorName : 'You',
       previewText: body,
       timestamp: 'now',
       isRead: false,
@@ -305,9 +238,9 @@ class NotificationManager {
 
     // Prepend to notifications list
     notificationsNotifier.value = [newNotif, ...notifications];
-    
+
     _playNotificationSound();
-    
+
     // Update dynamic badge indicators
     _updateLauncherBadge();
 
@@ -318,12 +251,12 @@ class NotificationManager {
       body: body,
     );
 
-    // Trigger custom in-app push notification banner
-    if (action == 'saved') {
+    // ── In-app banner ────────────────────────────────────────────────────────
+    if (action == 'saved' && !isIncoming) {
+      // Save action: show with image preview
       String? localImagePath;
       String? assetImagePath;
 
-      // Find post media
       for (final p in PostStore.instance.posts) {
         if (p.title == postTitle) {
           localImagePath = p.imagePath;
@@ -344,11 +277,18 @@ class NotificationManager {
         imagePath: localImagePath,
         assetImagePath: assetImagePath,
         showMedia: true,
+        avatarInitial: initial,
+        avatarColor: avatarColor,
+        avatarAssetPath: avatarAsset,
       );
-    } else if (action == 'liked' || action == 'shared') {
+    } else {
+      // Like / share / incoming — no image preview (matches like reference)
       InAppNotificationHelper.show(
         body: body,
         showMedia: false,
+        avatarInitial: initial,
+        avatarColor: avatarColor,
+        avatarAssetPath: avatarAsset,
       );
     }
   }
@@ -357,26 +297,40 @@ class NotificationManager {
   void triggerVaultReminderNotification(String title) async {
     final rand = Random();
     final String id = 'vault-${DateTime.now().millisecondsSinceEpoch}';
+    const Color vaultColor = Color(0xFFF39C12);
+    const String vaultInitial = 'V';
+    final String body = 'You added a new memory: "$title". Review it in Self Save.';
+
     final newNotif = NotificationModel(
       id: id,
       avatarAssetPath: 'assets/images/panda.png',
-      avatarInitial: 'V',
-      avatarColor: const Color(0xFFF39C12),
+      avatarInitial: vaultInitial,
+      avatarColor: vaultColor,
       username: 'Memoria Vault',
-      previewText: 'You added a new memory: "$title". Review it in Self Save.',
+      previewText: body,
       timestamp: 'now',
       isRead: false,
     );
 
     // Prepend to notifications list
     notificationsNotifier.value = [newNotif, ...notifications];
-    
+
     _playNotificationSound();
     _updateLauncherBadge();
+
     await showLocalNotification(
       id: rand.nextInt(100000),
       title: 'Memoria Vault Reminder',
       body: 'You added a new memory: "$title"',
+    );
+
+    // In-app banner — vault style (no image preview)
+    InAppNotificationHelper.show(
+      body: body,
+      showMedia: false,
+      avatarInitial: vaultInitial,
+      avatarColor: vaultColor,
+      avatarAssetPath: 'assets/images/panda.png',
     );
   }
 
@@ -545,7 +499,10 @@ class NotificationManager {
           body: body,
           imagePath: localImagePath,
           assetImagePath: assetImagePath,
-          showMedia: true,
+          showMedia: localImagePath != null || assetImagePath != null,
+          avatarInitial: 'R',
+          avatarColor: const Color(0xFFFF9500),
+          avatarAssetPath: 'assets/images/panda.png',
         );
       }
     } catch (e) {

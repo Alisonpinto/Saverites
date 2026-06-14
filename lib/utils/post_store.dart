@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
-import '../widgets/in_app_notification.dart';
 import 'rich_text_controller.dart';
 import 'notification_manager.dart';
 
@@ -12,10 +16,10 @@ class UserPost {
   final String? url;
 
   /// Absolute path to a local image file, or null if no image attached.
-  final String? imagePath;
+  String? imagePath;
 
   /// Absolute path to a local video file, or null if no video attached.
-  final String? videoPath;
+  String? videoPath;
 
   /// Whether to also save this post in the profile grid.
   final bool savedInProfile;
@@ -27,12 +31,16 @@ class UserPost {
 
   // New fields for Save to Memoria workflow:
   final String? type;            // "image", "video", "document", "audio", "contact", "link", "text", "checklist", "code"
-  final String? filePath;        // local file path for document/audio/vcf
+  String? filePath;        // local file path for document/audio/vcf
   final String? contactName;     // contact full name
   final String? contactPhone;    // contact phone number
   final String? duration;        // audio duration
   final List<String>? checklistItems; // checklist entries
   final List<bool>? checklistStates;  // checkbox states
+
+  final String? imageBase64;
+  final String? videoBase64;
+  final String? fileBase64;
 
   UserPost({
     required this.id,
@@ -51,7 +59,141 @@ class UserPost {
     this.duration,
     this.checklistItems,
     this.checklistStates,
+    this.imageBase64,
+    this.videoBase64,
+    this.fileBase64,
   });
+
+  Map<String, dynamic> toJson() {
+    String? imgB64 = imageBase64;
+    if (!kIsWeb && imgB64 == null && imagePath != null) {
+      final file = File(imagePath!);
+      if (file.existsSync()) {
+        try {
+          imgB64 = base64Encode(file.readAsBytesSync());
+        } catch (e) {
+          debugPrint("Error reading image bytes: $e");
+        }
+      }
+    }
+    String? vidB64 = videoBase64;
+    if (!kIsWeb && vidB64 == null && videoPath != null) {
+      final file = File(videoPath!);
+      if (file.existsSync()) {
+        try {
+          vidB64 = base64Encode(file.readAsBytesSync());
+        } catch (e) {
+          debugPrint("Error reading video bytes: $e");
+        }
+      }
+    }
+    String? fileB64Val = fileBase64;
+    if (!kIsWeb && fileB64Val == null && filePath != null) {
+      final file = File(filePath!);
+      if (file.existsSync()) {
+        try {
+          fileB64Val = base64Encode(file.readAsBytesSync());
+        } catch (e) {
+          debugPrint("Error reading file bytes: $e");
+        }
+      }
+    }
+
+    return {
+      'id': id,
+      'title': title,
+      'body': body,
+      'url': url,
+      'imagePath': imagePath,
+      'videoPath': videoPath,
+      'savedInProfile': savedInProfile,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'charStyles': charStyles?.map((s) => s.toJson()).toList(),
+      'type': type,
+      'filePath': filePath,
+      'contactName': contactName,
+      'contactPhone': contactPhone,
+      'duration': duration,
+      'checklistItems': checklistItems,
+      'checklistStates': checklistStates,
+      'imageBase64': imgB64,
+      'videoBase64': vidB64,
+      'fileBase64': fileB64Val,
+    };
+  }
+
+  factory UserPost.fromJson(Map<String, dynamic> json) {
+    String? imagePath = json['imagePath'] as String?;
+    String? videoPath = json['videoPath'] as String?;
+    String? filePath = json['filePath'] as String?;
+
+    final imgB64 = json['imageBase64'] as String?;
+    if (!kIsWeb && imgB64 != null) {
+      try {
+        final filename = 'img_${json['id']}.png';
+        final tempFile = File('${Directory.systemTemp.path}/$filename');
+        if (!tempFile.existsSync()) {
+          tempFile.writeAsBytesSync(base64Decode(imgB64));
+        }
+        imagePath = tempFile.path;
+      } catch (e) {
+        debugPrint("Error recreating image from base64: $e");
+      }
+    }
+
+    final vidB64 = json['videoBase64'] as String?;
+    if (!kIsWeb && vidB64 != null) {
+      try {
+        final filename = 'vid_${json['id']}.mp4';
+        final tempFile = File('${Directory.systemTemp.path}/$filename');
+        if (!tempFile.existsSync()) {
+          tempFile.writeAsBytesSync(base64Decode(vidB64));
+        }
+        videoPath = tempFile.path;
+      } catch (e) {
+        debugPrint("Error recreating video from base64: $e");
+      }
+    }
+
+    final fileB64Val = json['fileBase64'] as String?;
+    if (!kIsWeb && fileB64Val != null) {
+      try {
+        final ext = (json['type'] as String?) == 'document' ? 'pdf' : 'bin';
+        final filename = 'file_${json['id']}.$ext';
+        final tempFile = File('${Directory.systemTemp.path}/$filename');
+        if (!tempFile.existsSync()) {
+          tempFile.writeAsBytesSync(base64Decode(fileB64Val));
+        }
+        filePath = tempFile.path;
+      } catch (e) {
+        debugPrint("Error recreating file from base64: $e");
+      }
+    }
+
+    return UserPost(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      body: json['body'] as String,
+      url: json['url'] as String?,
+      imagePath: imagePath,
+      videoPath: videoPath,
+      savedInProfile: json['savedInProfile'] as bool? ?? false,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
+      charStyles: (json['charStyles'] as List?)
+          ?.map((s) => RichStyle.fromJson(s as Map<String, dynamic>))
+          .toList(),
+      type: json['type'] as String?,
+      filePath: filePath,
+      contactName: json['contactName'] as String?,
+      contactPhone: json['contactPhone'] as String?,
+      duration: json['duration'] as String?,
+      checklistItems: (json['checklistItems'] as List?)?.cast<String>(),
+      checklistStates: (json['checklistStates'] as List?)?.cast<bool>(),
+      imageBase64: imgB64,
+      videoBase64: vidB64,
+      fileBase64: fileB64Val,
+    );
+  }
 }
 
 /// Global reactive store for user-created posts.
@@ -61,6 +203,8 @@ class UserPost {
 class PostStore {
   PostStore._();
   static final PostStore instance = PostStore._();
+
+  static const String _kvdbUrl = 'https://kvdb.io/memoria_shared_feed_a22556c1/posts';
 
   /// All published posts, newest first.
   final ValueNotifier<List<UserPost>> postsNotifier =
@@ -80,6 +224,137 @@ class PostStore {
 
   Set<String> get likedPostIds => likedPostIdsNotifier.value;
 
+  Future<void> loadFromLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Load liked IDs
+      final likedList = prefs.getStringList('liked_post_ids');
+      if (likedList != null) {
+        likedPostIdsNotifier.value = likedList.toSet();
+      }
+
+      // Load saved social IDs
+      final savedSocialList = prefs.getStringList('saved_social_post_ids');
+      if (savedSocialList != null) {
+        savedSocialPostIdsNotifier.value = savedSocialList.toSet();
+      }
+
+      // Load user posts
+      final postsJson = prefs.getString('user_posts');
+      if (postsJson != null) {
+        final decoded = jsonDecode(postsJson);
+        if (decoded is List) {
+          final List<UserPost> loaded = [];
+          for (var p in decoded) {
+            try {
+              loaded.add(UserPost.fromJson(p as Map<String, dynamic>));
+            } catch (e) {
+              debugPrint("Error parsing local post: $e");
+            }
+          }
+          postsNotifier.value = loaded;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading from local: $e");
+    }
+  }
+
+  Future<void> saveToLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('liked_post_ids', likedPostIds.toList());
+      await prefs.setStringList('saved_social_post_ids', savedSocialPostIds.toList());
+
+      final postsJson = jsonEncode(postsNotifier.value.map((p) => p.toJson()).toList());
+      await prefs.setString('user_posts', postsJson);
+    } catch (e) {
+      debugPrint("Error saving to local: $e");
+    }
+  }
+
+  Future<void> syncOnlinePosts() async {
+    try {
+      final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          final List<UserPost> onlinePosts = [];
+          for (var p in decoded) {
+            try {
+              onlinePosts.add(UserPost.fromJson(p as Map<String, dynamic>));
+            } catch (e) {
+              debugPrint("Error parsing online post: $e");
+            }
+          }
+
+          // Merge with local posts:
+          // Keep local private posts (savedInProfile == true)
+          // Merge local public posts with online public posts (matching by ID)
+          final List<UserPost> currentPosts = List.from(postsNotifier.value);
+          final privatePosts = currentPosts.where((p) => p.savedInProfile).toList();
+
+          final Map<String, UserPost> mergedMap = {};
+          // First add online posts
+          for (var p in onlinePosts) {
+            mergedMap[p.id] = p;
+          }
+          // Then add current posts (so local public additions are preserved)
+          for (var p in currentPosts) {
+            if (!p.savedInProfile) {
+              mergedMap[p.id] = p;
+            }
+          }
+
+          // Combine private and merged public posts
+          final List<UserPost> finalPosts = [
+            ...privatePosts,
+            ...mergedMap.values.where((p) => !p.savedInProfile)
+          ];
+
+          // Sort by createdAt descending
+          finalPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+          postsNotifier.value = finalPosts;
+          await saveToLocal();
+        }
+      }
+    } catch (e) {
+      debugPrint("Error syncing online posts: $e");
+    }
+  }
+
+  Future<void> uploadPostOnline(UserPost newPost) async {
+    try {
+      // 1. Get latest online posts
+      List<dynamic> jsonList = [];
+      try {
+        final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is List) {
+            jsonList = decoded;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error fetching online posts for upload: $e");
+      }
+
+      // 2. Prepend our new post
+      jsonList.insert(0, newPost.toJson());
+
+      // 3. Write back
+      await http.put(
+        Uri.parse(_kvdbUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(jsonList),
+      ).timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint("Error uploading post online: $e");
+    }
+  }
+
   /// Toggles the liked status of a post.
   void toggleLikedPost(String postId) {
     final current = Set<String>.from(likedPostIds);
@@ -91,6 +366,7 @@ class PostStore {
       isLiked = true;
     }
     likedPostIdsNotifier.value = current;
+    saveToLocal();
 
     if (isLiked) {
       final details = getPostDetails(postId);
@@ -122,15 +398,17 @@ class PostStore {
   /// Adds a post and notifies all listeners.
   void addPost(UserPost post) {
     postsNotifier.value = [post, ...postsNotifier.value];
+    saveToLocal();
+
+    if (!post.savedInProfile) {
+      uploadPostOnline(post);
+    }
+
     if (post.savedInProfile) {
       NotificationManager.instance.triggerVaultReminderNotification(post.title);
-      InAppNotificationHelper.show(
-        body: post.title,
-        imagePath: post.imagePath,
-        showMedia: true,
-      );
     } else {
       savedSocialPostIdsNotifier.value = {post.id, ...savedSocialPostIdsNotifier.value};
+      saveToLocal();
     }
   }
 
@@ -157,10 +435,14 @@ class PostStore {
           duration: post.duration,
           checklistItems: post.checklistItems,
           checklistStates: post.checklistStates,
+          imageBase64: post.imageBase64,
+          videoBase64: post.videoBase64,
+          fileBase64: post.fileBase64,
         );
       }
       return post;
     }).toList();
+    saveToLocal();
 
     if (isSaved) {
       final details = getPostDetails(postId);
@@ -193,10 +475,14 @@ class PostStore {
           duration: post.duration,
           checklistItems: post.checklistItems,
           checklistStates: post.checklistStates,
+          imageBase64: post.imageBase64,
+          videoBase64: post.videoBase64,
+          fileBase64: post.fileBase64,
         );
       }
       return post;
     }).toList();
+    saveToLocal();
   }
 
   /// Toggles the saved status of a social post.
@@ -210,6 +496,7 @@ class PostStore {
       isSaved = true;
     }
     savedSocialPostIdsNotifier.value = current;
+    saveToLocal();
 
     if (isSaved) {
       final details = getPostDetails(postId);

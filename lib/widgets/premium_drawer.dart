@@ -99,8 +99,8 @@ class PremiumDrawer extends StatelessWidget {
                           shape: BoxShape.circle,
                           gradient: const LinearGradient(
                             colors: [
-                              Color(0xFF7B61FF),
-                              Color(0xFFFF6B9D),
+                              Color(0xFF4A4A4A),
+                              Color(0xFF1A1A1B),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,

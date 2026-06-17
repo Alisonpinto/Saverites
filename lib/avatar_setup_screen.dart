@@ -209,7 +209,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                           primaryBgColor: const Color(0xFF111113),
                           secondaryBgColor: const Color(0xFF1C1C1E),
                           iconColor: Colors.white.withValues(alpha: 0.5),
-                          selectedIconColor: const Color(0xFF7B61FF),
+                          selectedIconColor: Colors.white,
                           unselectedIconColor: Colors.white.withValues(alpha: 0.3),
                           labelTextStyle: GoogleFonts.inter(
                             color: Colors.white.withValues(alpha: 0.75),
@@ -225,10 +225,10 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                             ),
                           ),
                           selectedTileDecoration: BoxDecoration(
-                            color: const Color(0xFF7B61FF).withValues(alpha: 0.18),
+                            color: Colors.white.withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: const Color(0xFF7B61FF),
+                              color: Colors.white,
                               width: 1.5,
                             ),
                           ),
@@ -255,9 +255,9 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                       child: TextButton(
                         onPressed: _isSaving ? null : _saveAndContinue,
                         style: TextButton.styleFrom(
-                          backgroundColor: const Color(0xFF7B61FF),
+                          backgroundColor: Colors.white,
                           disabledBackgroundColor:
-                              const Color(0xFF7B61FF).withValues(alpha: 0.4),
+                              Colors.white.withValues(alpha: 0.4),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(26),
                           ),
@@ -268,19 +268,19 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                                 height: 22,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.4,
-                                  color: Colors.white,
+                                  color: Colors.black,
                                 ),
                               )
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   const Icon(Icons.check_circle_rounded,
-                                      color: Colors.white, size: 20),
+                                      color: Colors.black, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
                                     widget.isFromProfile ? 'Save & Return' : 'Save Avatar & Continue',
                                     style: GoogleFonts.inter(
-                                      color: Colors.white,
+                                      color: Colors.black,
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -316,15 +316,15 @@ class _AvatarPreviewRing extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: const SweepGradient(
           colors: [
-            Color(0xFF7B61FF),
-            Color(0xFFFF6B9D),
-            Color(0xFFFFB347),
-            Color(0xFF7B61FF),
+            Color(0xFF4A4A4A),
+            Color(0xFFE5E5EA),
+            Color(0xFF1A1A1B),
+            Color(0xFF4A4A4A),
           ],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7B61FF).withValues(alpha: 0.35),
+            color: Colors.white.withValues(alpha: 0.1),
             blurRadius: 28,
             spreadRadius: 4,
           ),

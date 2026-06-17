@@ -462,62 +462,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Content Builders for details pages
-  Widget _buildHelpContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildInfoCard(
-          title: _t('helpQ1'),
-          body: _t('helpA1'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('helpQ2'),
-          body: _t('helpA2'),
-        ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          title: _t('helpQ3'),
-          body: _t('helpA3'),
-        ),
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard({required String title, required String body}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF333333),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: GoogleFonts.inter(
-              color: const Color(0xFFC0BEBB),
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -631,7 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _buildRow(
                                   icon: Icons.help_outline_rounded,
                                   label: _t('helpSupport'),
-                                  onTap: () => _navigateToDetail(_t('helpSupport'), _buildHelpContent()),
+                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/support'),
                                 ),
                                 _buildDivider(),
                                 _buildRow(

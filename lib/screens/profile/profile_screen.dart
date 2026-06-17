@@ -323,15 +323,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                         shape: BoxShape.circle,
                                                         gradient: const LinearGradient(
                                                           colors: [
-                                                            Color(0xFF7B61FF),
-                                                            Color(0xFFFF6B9D),
+                                                            Color(0xFF4A4A4A),
+                                                            Color(0xFF1A1A1B),
                                                           ],
                                                           begin: Alignment.topLeft,
                                                           end: Alignment.bottomRight,
                                                         ),
                                                         boxShadow: [
                                                           BoxShadow(
-                                                            color: const Color(0xFF7B61FF).withValues(alpha: 0.35),
+                                                            color: Colors.white.withValues(alpha: 0.1),
                                                             blurRadius: 20,
                                                             spreadRadius: 2,
                                                           ),

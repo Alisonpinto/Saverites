@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/post_model.dart';
 import '../../screens/notifications/notification_screen.dart';
 import '../../screens/post_detail/post_detail_screen.dart';
@@ -439,34 +439,11 @@ class _FeedScreenState extends State<FeedScreen> {
               ),
             );
           },
-          onHelpTap: () {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) => DetailInfoScreen(
-                  title: TranslationManager.t('helpSupport'),
-                  content: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildHelpInfoCard(title: TranslationManager.t('helpQ1'), body: TranslationManager.t('helpA1')),
-                      const SizedBox(height: 16),
-                      _buildHelpInfoCard(title: TranslationManager.t('helpQ2'), body: TranslationManager.t('helpA2')),
-                      const SizedBox(height: 16),
-                      _buildHelpInfoCard(title: TranslationManager.t('helpQ3'), body: TranslationManager.t('helpA3')),
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                ),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  final slideAnimation = Tween<Offset>(begin: const Offset(0.0, 0.05), end: Offset.zero).animate(
-                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                  );
-                  final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeIn));
-                  return FadeTransition(opacity: fadeAnimation, child: SlideTransition(position: slideAnimation, child: child));
-                },
-                transitionDuration: const Duration(milliseconds: 600),
-              ),
-            );
+          onHelpTap: () async {
+            final uri = Uri.parse('https://memoria-website-sigma.vercel.app/support');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+            }
           },
           onSettingsTap: () {
             Navigator.push(
@@ -1085,38 +1062,7 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  Widget _buildHelpInfoCard({required String title, required String body}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF333333),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: GoogleFonts.inter(
-              color: const Color(0xFFC0BEBB),
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -384,6 +384,21 @@ class _FeedScreenState extends State<FeedScreen> {
       ..._shuffledPredefinedPosts,
     ];
 
+    final filteredItems = allItems.where((item) {
+      if (_searchQuery.trim().isEmpty) return true;
+      final q = _searchQuery.toLowerCase();
+      if (item is UserPost) {
+        return item.title.toLowerCase().contains(q) ||
+            item.body.toLowerCase().contains(q) ||
+            (item.url?.toLowerCase().contains(q) ?? false);
+      } else if (item is PostModel) {
+        return (item.title?.toLowerCase().contains(q) ?? false) ||
+            (item.description?.toLowerCase().contains(q) ?? false) ||
+            (item.url?.toLowerCase().contains(q) ?? false);
+      }
+      return false;
+    }).toList();
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) async {
@@ -516,16 +531,9 @@ class _FeedScreenState extends State<FeedScreen> {
                       onMenuTap: () {
                         _scaffoldKey.currentState?.openDrawer();
                       },
-                      onSearchTap: () {
-                        setState(() {
-                          _currentTab = 1;
-                        });
-                      },
                       onSearchChanged: (query) {
                         setState(() {
-                          _currentTab = 1;
                           _searchQuery = query;
-                          _searchController.text = query;
                         });
                       },
                       onNotificationTap: () {
@@ -543,29 +551,49 @@ class _FeedScreenState extends State<FeedScreen> {
                               child: ValueListenableBuilder<Set<String>>(
                                 valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
                                 builder: (context, savedSocialIds, _) {
-                                  return Center(
-                                    child: Container(
-                                      constraints: const BoxConstraints(maxWidth: 500),
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          // Left Column
-                                          Expanded(
+                                  return filteredItems.isEmpty && _searchQuery.trim().isNotEmpty
+                                      ? Center(
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(top: 80),
                                             child: Column(
-                                              children: _buildStaggeredList(allItems, left: true),
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                const Icon(Icons.search_off, color: Color(0xFF7C7C81), size: 48),
+                                                const SizedBox(height: 12),
+                                                Text(
+                                                  'No items match your search',
+                                                  style: GoogleFonts.inter(
+                                                    color: const Color(0xFF7C7C81),
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          const SizedBox(width: 16),
-                                          // Right Column
-                                          Expanded(
-                                            child: Column(
-                                              children: _buildStaggeredList(allItems, left: false),
+                                        )
+                                      : Center(
+                                          child: Container(
+                                            constraints: const BoxConstraints(maxWidth: 500),
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                // Left Column
+                                                Expanded(
+                                                  child: Column(
+                                                    children: _buildStaggeredList(filteredItems, left: true),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 16),
+                                                // Right Column
+                                                Expanded(
+                                                  child: Column(
+                                                    children: _buildStaggeredList(filteredItems, left: false),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
+                                        );
                                 },
                               ),
                             ),
@@ -1171,64 +1199,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
       );
     }
 
-    void showPreviewDialog() {
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          Widget media;
-          if (widget.item is UserPost) {
-            final post = widget.item as UserPost;
-            if (post.videoPath != null) {
-              media = RunningVideoPlayer(file: File(post.videoPath!));
-            } else if (post.imagePath != null) {
-              media = Image.file(File(post.imagePath!), fit: BoxFit.contain);
-            } else {
-              media = Container(
-                padding: const EdgeInsets.all(20),
-                color: const Color(0xFF1C1C1E),
-                child: Text(post.body, style: const TextStyle(color: Colors.white, fontSize: 16)),
-              );
-            }
-          } else {
-            final post = widget.item as PostModel;
-            if (post.mediaType == PostMediaType.video) {
-              media = RunningVideoPlayer(assetPath: post.mediaAssetPath);
-            } else {
-              media = Image.asset(post.mediaAssetPath, fit: BoxFit.contain);
-            }
-          }
-          
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.all(16),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.95),
-                      child: media,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    }
+
 
     if (showShimmer) {
       return ShimmerContainer(
@@ -1383,7 +1354,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
 
         final item = widget.item;
         final String titleText = item is UserPost ? item.title : (item as PostModel).title ?? '';
-        final String userText = item is UserPost ? 'gangster_vagas' : (item as PostModel).username ?? 'Unknown';
+        final String userText = item is UserPost ? (item.username ?? 'gangster_vagas') : (item as PostModel).username ?? 'Unknown';
         final String? avatarAsset = item is UserPost ? null : (item as PostModel).avatarAssetPath;
         final String initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
         final Color color = item is UserPost ? const Color(0xFF6B9BF7) : (item as PostModel).accentColor ?? const Color(0xFF7B61FF);
@@ -1426,7 +1397,6 @@ class _FeedPostTileState extends State<_FeedPostTile> {
             }
           },
           onCardTap: onTap,
-          onImageTap: showPreviewDialog,
         );
       },
     );

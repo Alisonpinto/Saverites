@@ -1394,64 +1394,7 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
       );
     }
 
-    void showPreviewDialog() {
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          Widget media;
-          if (widget.item is UserPost) {
-            final post = widget.item as UserPost;
-            if (post.videoPath != null) {
-              media = RunningVideoPlayer(file: File(post.videoPath!));
-            } else if (post.imagePath != null) {
-              media = Image.file(File(post.imagePath!), fit: BoxFit.contain);
-            } else {
-              media = Container(
-                padding: const EdgeInsets.all(20),
-                color: const Color(0xFF1C1C1E),
-                child: Text(post.body, style: const TextStyle(color: Colors.white, fontSize: 16)),
-              );
-            }
-          } else {
-            final post = widget.item as PostModel;
-            if (post.mediaType == PostMediaType.video) {
-              media = RunningVideoPlayer(assetPath: post.mediaAssetPath);
-            } else {
-              media = Image.asset(post.mediaAssetPath, fit: BoxFit.contain);
-            }
-          }
-          
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.all(16),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.95),
-                      child: media,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    }
+
 
     if (showShimmer) {
       return ShimmerContainer(
@@ -1668,7 +1611,7 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
         }
 
         final titleText = widget.item is UserPost ? (widget.item as UserPost).title : (widget.item as PostModel).title ?? '';
-        final userText = widget.item is UserPost ? 'gangster_vagas' : (widget.item as PostModel).username ?? 'Unknown';
+        final userText = widget.item is UserPost ? (widget.item.username ?? 'gangster_vagas') : (widget.item as PostModel).username ?? 'Unknown';
         final avatarAsset = widget.item is UserPost ? null : (widget.item as PostModel).avatarAssetPath;
         final initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
         final color = widget.item is UserPost ? const Color(0xFF6B9BF7) : (widget.item as PostModel).accentColor ?? const Color(0xFF7B61FF);
@@ -1711,7 +1654,6 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
             }
           },
           onCardTap: onTap,
-          onImageTap: showPreviewDialog,
         );
       },
     );

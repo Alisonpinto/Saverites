@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'avatar_setup_screen.dart';
 import 'login_screen.dart';
 import 'screens/feed/feed_screen.dart';
@@ -14,11 +15,35 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeIn,
+      ),
+    );
+
+    _animController.forward();
+
     _navigateToHome();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
   }
 
   void _navigateToHome() async {
@@ -78,14 +103,51 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111216),
+      backgroundColor: const Color(0xFF0D0D0D),
       body: SafeArea(
-        child: Align(
-          alignment: const Alignment(0.0, -0.2),
-          child: Image.asset(
-            'assets/images/app_logo_memoria.png',
-            height: 48,
-            fit: BoxFit.contain,
+        child: Center(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                IntrinsicWidth(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'me',
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.jotiOne(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 1,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'moria',
+                  softWrap: false,
+                  maxLines: 1,
+                  style: GoogleFonts.inter(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
 import '../../utils/post_store.dart';
+import '../../utils/user_store.dart';
 import '../../widgets/running_video_player.dart';
 import '../../utils/rich_text_controller.dart';
 import 'drawing_canvas.dart';
@@ -1303,6 +1304,7 @@ class _WritePostScreenState extends State<WritePostScreen>
       url: _urlController.text.trim().isEmpty
           ? null
           : _urlController.text.trim(),
+      username: UserStore.instance.currentUser?.userId ?? 'gangster_vagas',
       imagePath: _pickedImagePath,
       videoPath: _pickedVideoPath,
       savedInProfile: _saveInProfile,

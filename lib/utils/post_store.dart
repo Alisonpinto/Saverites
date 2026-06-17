@@ -14,6 +14,7 @@ class UserPost {
   final String title;
   final String body;
   final String? url;
+  final String? username; // The user who created the post
 
   /// Absolute path to a local image file, or null if no image attached.
   String? imagePath;
@@ -47,6 +48,7 @@ class UserPost {
     required this.title,
     required this.body,
     this.url,
+    this.username,
     this.imagePath,
     this.videoPath,
     required this.savedInProfile,
@@ -104,6 +106,7 @@ class UserPost {
       'title': title,
       'body': body,
       'url': url,
+      'username': username,
       'imagePath': imagePath,
       'videoPath': videoPath,
       'savedInProfile': savedInProfile,
@@ -175,6 +178,7 @@ class UserPost {
       title: json['title'] as String,
       body: json['body'] as String,
       url: json['url'] as String?,
+      username: json['username'] as String?,
       imagePath: imagePath,
       videoPath: videoPath,
       savedInProfile: json['savedInProfile'] as bool? ?? false,
@@ -423,6 +427,7 @@ class PostStore {
           title: post.title,
           body: post.body,
           url: post.url,
+          username: post.username,
           imagePath: post.imagePath,
           videoPath: post.videoPath,
           savedInProfile: !post.savedInProfile,
@@ -463,6 +468,7 @@ class PostStore {
           title: post.title,
           body: newBody,
           url: post.url,
+          username: post.username,
           imagePath: post.imagePath,
           videoPath: post.videoPath,
           savedInProfile: post.savedInProfile,

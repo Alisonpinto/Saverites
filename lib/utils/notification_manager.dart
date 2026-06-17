@@ -30,7 +30,6 @@ class NotificationManager {
   int get unreadCount => notifications.where((n) => !n.isRead).length;
 
   Timer? _simulationTimer;
-  Timer? _reminderTimer;
 
   /// Initialize local notification plugins and set the initial launcher icon badge count.
   Future<void> init() async {
@@ -85,7 +84,7 @@ class NotificationManager {
     _updateLauncherBadge();
 
     // 4. Start periodic reminder check timer (runs every 10 seconds)
-    _startReminderTimer();
+    // _startReminderTimer();
 
     // 5. Start mock push notification loop (triggers every 25 seconds)
     // startSimulation();
@@ -239,50 +238,19 @@ class NotificationManager {
     // Prepend to notifications list
     notificationsNotifier.value = [newNotif, ...notifications];
 
+    // Always trigger sound, badge, and native heads-up OS notification for all actions.
     _playNotificationSound();
-
-    // Update dynamic badge indicators
     _updateLauncherBadge();
 
-    // Show OS level local notification
     await showLocalNotification(
       id: rand.nextInt(100000),
       title: title,
       body: body,
     );
 
-    // ── In-app banner ────────────────────────────────────────────────────────
-    if (action == 'saved' && !isIncoming) {
-      // Save action: show with image preview
-      String? localImagePath;
-      String? assetImagePath;
-
-      for (final p in PostStore.instance.posts) {
-        if (p.title == postTitle) {
-          localImagePath = p.imagePath;
-          break;
-        }
-      }
-      if (localImagePath == null) {
-        for (final p in PostStore.predefinedPosts) {
-          if (p.title == postTitle) {
-            assetImagePath = p.mediaAssetPath;
-            break;
-          }
-        }
-      }
-
-      InAppNotificationHelper.show(
-        body: body,
-        imagePath: localImagePath,
-        assetImagePath: assetImagePath,
-        showMedia: true,
-        avatarInitial: initial,
-        avatarColor: avatarColor,
-        avatarAssetPath: avatarAsset,
-      );
-    } else {
-      // Like / share / incoming — no image preview (matches like reference)
+    // Suppress custom in-app banners for local actions (so they don't cover the screen 'in between the app').
+    // Only show the custom in-app banner for incoming remote actions.
+    if (isIncoming) {
       InAppNotificationHelper.show(
         body: body,
         showMedia: false,
@@ -295,7 +263,6 @@ class NotificationManager {
 
   /// Triggers a reminder notification for a vault item.
   void triggerVaultReminderNotification(String title) async {
-    final rand = Random();
     final String id = 'vault-${DateTime.now().millisecondsSinceEpoch}';
     const Color vaultColor = Color(0xFFF39C12);
     const String vaultInitial = 'V';
@@ -319,19 +286,19 @@ class NotificationManager {
     _updateLauncherBadge();
 
     await showLocalNotification(
-      id: rand.nextInt(100000),
+      id: Random().nextInt(100000),
       title: 'Memoria Vault Reminder',
       body: 'You added a new memory: "$title"',
     );
 
-    // In-app banner — vault style (no image preview)
-    InAppNotificationHelper.show(
-      body: body,
-      showMedia: false,
-      avatarInitial: vaultInitial,
-      avatarColor: vaultColor,
-      avatarAssetPath: 'assets/images/panda.png',
-    );
+    // In-app banner is commented out to avoid popping up inside the app UI.
+    // InAppNotificationHelper.show(
+    //   body: body,
+    //   showMedia: false,
+    //   avatarInitial: vaultInitial,
+    //   avatarColor: vaultColor,
+    //   avatarAssetPath: 'assets/images/panda.png',
+    // );
   }
 
   /// Renders a native heads-up overlay notification on the OS level.
@@ -398,12 +365,7 @@ class NotificationManager {
     _updateLauncherBadge();
   }
 
-  void _startReminderTimer() {
-    _reminderTimer?.cancel();
-    _reminderTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      checkAndTriggerSavedItemsReminder();
-    });
-  }
+
 
   Future<void> triggerSavedItemsCheck() async {
     await checkAndTriggerSavedItemsReminder();

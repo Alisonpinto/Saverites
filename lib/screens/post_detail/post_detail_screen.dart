@@ -75,7 +75,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   String get title => currentUserPost?.title ?? widget.postModel?.title ?? '';
   String get description => currentUserPost?.body ?? widget.postModel?.description ?? '';
   List<RichStyle>? get charStyles => currentUserPost?.charStyles;
-  String get username => widget.userPost != null ? 'gangster_vagas' : (widget.postModel?.username ?? 'Unknown user');
+  String get username => widget.userPost != null ? (currentUserPost?.username ?? 'gangster_vagas') : (widget.postModel?.username ?? 'Unknown user');
   String? get avatarAssetPath => widget.userPost != null ? null : widget.postModel?.avatarAssetPath;
   String? get url => widget.userPost?.url ?? widget.postModel?.url;
   bool get _liked => PostStore.instance.likedPostIds.contains(id);

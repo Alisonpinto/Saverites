@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../login_screen.dart';
@@ -17,8 +19,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   String _currentLanguage = 'English';
   String _reminderInterval = 'Always';
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _feedbackController = TextEditingController();
   int _charCount = 0;
+  bool _isSubmittingFeedback = false;
 
   // Helper to translate keys dynamically with fallback to English
   String _t(String key) {
@@ -55,6 +60,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
     _feedbackController.dispose();
     super.dispose();
   }
@@ -421,47 +428,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Navigate to information detail screens using premium animations
-  void _navigateToDetail(String title, Widget content) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            DetailInfoScreen(title: title, content: content),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final slideAnimation = Tween<Offset>(
-            begin: const Offset(0.0, 0.05),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            ),
-          );
-
-          final fadeAnimation = Tween<double>(
-            begin: 0.0,
-            end: 1.0,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeIn,
-            ),
-          );
-
-          return FadeTransition(
-            opacity: fadeAnimation,
-            child: SlideTransition(
-              position: slideAnimation,
-              child: child,
-            ),
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 600),
-      ),
-    );
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -687,7 +653,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 24), // Spacing between cards
 
                           // ── Feedback Section ────────────────────────────────
-                          _buildSectionLabel(_t('feedback')),
+                          _buildSectionLabel('Feedback'),
                           const SizedBox(height: 12),
                           Container(
                             decoration: BoxDecoration(
@@ -699,21 +665,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 TextField(
+                                  controller: _nameController,
+                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
+                                  decoration: InputDecoration(
+                                    hintText: 'Full Name',
+                                    hintStyle: GoogleFonts.inter(color: const Color(0xFF7C7C81), fontSize: 16),
+                                    border: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF48484A))),
+                                    enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF48484A))),
+                                    focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
+                                  decoration: InputDecoration(
+                                    hintText: 'Email Address',
+                                    hintStyle: GoogleFonts.inter(color: const Color(0xFF7C7C81), fontSize: 16),
+                                    border: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF48484A))),
+                                    enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF48484A))),
+                                    focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
                                   controller: _feedbackController,
                                   maxLines: 5,
                                   maxLength: 500,
-                                  style: GoogleFonts.inter(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w400,
-                                  ),
+                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
                                   decoration: InputDecoration(
-                                    hintText: _t('placeholder'),
-                                    hintStyle: GoogleFonts.inter(
-                                      color: const Color(0xFF7C7C81),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w400,
-                                    ),
+                                    hintText: 'Feedback Message',
+                                    hintStyle: GoogleFonts.inter(color: const Color(0xFF7C7C81), fontSize: 16),
                                     border: InputBorder.none,
                                     counterText: "",
                                     contentPadding: EdgeInsets.zero,
@@ -734,56 +719,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     SizedBox(
                                       width: 120,
                                       height: 44,
-                                      child: TextButton(
-                                        onPressed: () {
-                                          final text = _feedbackController.text.trim();
-                                          if (text.isEmpty) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  _t('enterFeedback'),
-                                                  style: GoogleFonts.inter(color: Colors.black),
-                                                ),
-                                                backgroundColor: Colors.white,
-                                                behavior: SnackBarBehavior.floating,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(10),
-                                                ),
-                                              ),
-                                            );
-                                            return;
-                                          }
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                _t('feedbackSubmitted'),
-                                                style: GoogleFonts.inter(color: Colors.white),
-                                              ),
-                                              backgroundColor: Colors.green,
-                                              behavior: SnackBarBehavior.floating,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                          );
-                                          _feedbackController.clear();
-                                          FocusScope.of(context).unfocus();
-                                        },
-                                        style: TextButton.styleFrom(
+                                      child: ElevatedButton(
+                                        onPressed: _isSubmittingFeedback ? null : _submitFeedback,
+                                        style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(22), // Pill shape
-                                          ),
+                                          disabledBackgroundColor: Colors.white.withValues(alpha: 0.5),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                                           padding: EdgeInsets.zero,
                                         ),
-                                        child: Text(
-                                          _t('submit'),
-                                          style: GoogleFonts.inter(
-                                            color: Colors.black,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500, // Inter Medium
-                                          ),
-                                        ),
+                                        child: _isSubmittingFeedback
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
+                                              )
+                                            : Text(
+                                                'Submit',
+                                                style: GoogleFonts.inter(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w500),
+                                              ),
                                       ),
                                     ),
                                   ],
@@ -803,6 +756,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _submitFeedback() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final feedback = _feedbackController.text.trim();
+
+    if (name.isEmpty) {
+      _showErrorSnackBar('Name required');
+      return;
+    }
+    if (email.isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      _showErrorSnackBar('Valid email required');
+      return;
+    }
+    if (feedback.isEmpty) {
+      _showErrorSnackBar('Feedback required');
+      return;
+    }
+
+    setState(() {
+      _isSubmittingFeedback = true;
+    });
+    FocusScope.of(context).unfocus();
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://script.google.com/macros/s/AKfycbwPRemvI9shGcvMF29eIcAOlFsFxZADs73rSLKmKQtxRnosG9zHUxKJHxTPXTl8rJZj0w/exec'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          'feedback': feedback,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 302) {
+        // Sometimes Google Apps Script returns an HTML page (like a login page) if permissions are wrong.
+        // We can check if it's an error page or not, but usually 200 is success if deployed as Anyone.
+        _nameController.clear();
+        _emailController.clear();
+        _feedbackController.clear();
+        setState(() {
+          _charCount = 0;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Thank you for your feedback.', style: GoogleFonts.inter(color: Colors.white)),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      } else {
+        _showErrorSnackBar('Error ${response.statusCode}: ${response.body.length > 50 ? response.body.substring(0, 50) : response.body}');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Exception: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingFeedback = false;
+        });
+      }
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.inter(color: Colors.white)),
+        backgroundColor: const Color(0xFFEB4335),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
@@ -930,78 +961,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // ── DETAIL SCREEN FOR GENERAL INFORMATION ─────────────────────────────────────
-class DetailInfoScreen extends StatelessWidget {
-  final String title;
-  final Widget content;
-
-  const DetailInfoScreen({
-    super.key,
-    required this.title,
-    required this.content,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: const Color(0xFF121212), // Same background as settings
-        child: SafeArea(
-              top: false,
-              bottom: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── HEADER ──────────────────────────────────────────────────
-                  Container(
-                    color: const Color(0xFF121212),
-                    padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top > 0
-                          ? MediaQuery.of(context).padding.top
-                          : 10,
-                      bottom: 12,
-                      left: 8,
-                      right: 16,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(),
-                          splashRadius: 20,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          title,
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20), // Header -> Content spacing
-
-                  // ── CONTENT ─────────────────────────────────────────────────
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: content,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-  }
-}

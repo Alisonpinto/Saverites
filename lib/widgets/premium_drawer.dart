@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:fluttermoji/fluttermoji.dart';
+import '../widgets/dice_avatar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/user_store.dart';
 import '../utils/translation_manager.dart';
@@ -65,18 +65,16 @@ class PremiumDrawer extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF1E1F22),
-                        const Color(0xFF1E1F22),
-                        const Color(0xFF7B61FF).withValues(alpha: 0.15),
-                      ],
-                      stops: const [0.0, 0.6, 1.0],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFF1C1C1E),
+                          Color(0xFF2C2C2E),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.05),
                       width: 1.0,
@@ -92,33 +90,9 @@ class PremiumDrawer extends StatelessWidget {
                   child: Row(
                     children: [
                       // Large avatar with a beautiful gradient background and shadow
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF4A4A4A),
-                              Color(0xFF1A1A1B),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: FluttermojiCircleAvatar(
-                            radius: 25,
-                            backgroundColor: Colors.transparent,
-                          ),
-                        ),
+                      const DiceAvatar(
+                        radius: 25,
+                        backgroundColor: Colors.transparent,
                       ),
                       const SizedBox(width: 14),
                       Expanded(

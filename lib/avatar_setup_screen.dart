@@ -1,16 +1,12 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fluttermoji/fluttermoji.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'screens/feed/feed_screen.dart';
+import 'widgets/dice_avatar.dart';
 
-/// AvatarSetupScreen — shown once after login/registration
-/// so the user can personalise their Fluttermoji before entering the feed.
-///
-/// The screen can be skipped via "Skip for now" — the avatar will just be
-/// the default one. A saved avatar is stored locally by the fluttermoji
-/// package in SharedPreferences and is shown across the app automatically.
 class AvatarSetupScreen extends StatefulWidget {
   final bool isFromProfile;
   const AvatarSetupScreen({super.key, this.isFromProfile = false});
@@ -25,11 +21,14 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
 
+  final TextEditingController _seedController = TextEditingController();
+  String _currentSeed = 'memoria';
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    _loadInitialSeed();
     _entryCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 650),
@@ -43,23 +42,44 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
     _entryCtrl.forward();
   }
 
+  Future<void> _loadInitialSeed() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedSeed = prefs.getString('dice_bear_seed');
+    if (savedSeed != null && savedSeed.isNotEmpty) {
+      setState(() {
+        _currentSeed = savedSeed;
+        _seedController.text = savedSeed;
+      });
+    } else {
+      _randomizeSeed();
+    }
+  }
+
   @override
   void dispose() {
     _entryCtrl.dispose();
+    _seedController.dispose();
     super.dispose();
+  }
+
+  void _randomizeSeed() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final random = Random();
+    final newSeed = String.fromCharCodes(Iterable.generate(
+        8, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+    setState(() {
+      _currentSeed = newSeed;
+      _seedController.text = newSeed;
+    });
   }
 
   Future<void> _saveAndContinue() async {
     setState(() => _isSaving = true);
     try {
-      // Encode and persist the avatar string — fluttermoji handles SharedPrefs
-      // internally, but we also set a flag so we don't show this screen again.
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('avatar_setup_done', true);
-
-      // Optionally encode and save for cross-device sync later:
-      // final avatarString = await encodeMySVGtoString();
-      // await prefs.setString('fluttermoji_string', avatarString);
+      await prefs.setString('dice_bear_seed', _currentSeed);
+      DiceAvatar.seedNotifier.value = _currentSeed;
     } catch (e) {
       debugPrint('AvatarSetupScreen save error: $e');
     }
@@ -115,7 +135,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
           child: SafeArea(
             child: Column(
               children: [
-                // ── Top bar ──────────────────────────────────────────────────
+                // Top bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
                   child: Row(
@@ -144,7 +164,6 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                           ),
                         ],
                       ),
-                      // Skip or Close button
                       widget.isFromProfile
                           ? IconButton(
                               icon: const Icon(Icons.close, color: Colors.white, size: 24),
@@ -155,8 +174,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                               onPressed: _skip,
                               style: TextButton.styleFrom(
                                 foregroundColor: Colors.white.withValues(alpha: 0.4),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
@@ -173,80 +191,72 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const Spacer(),
 
-                // ── Avatar circle preview ─────────────────────────────────────
+                // Avatar preview
                 Center(
-                  child: _AvatarPreviewRing(
-                    child: FluttermojiCircleAvatar(
-                      radius: 70,
-                      backgroundColor: const Color(0xFF1C1C1E),
+                  child: SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: SvgPicture.network(
+                      'https://api.dicebear.com/9.x/notionists/svg?seed=$_currentSeed&backgroundColor=transparent',
+                      fit: BoxFit.contain,
+                      placeholderBuilder: (BuildContext context) => const CircularProgressIndicator(color: Colors.white),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                const Spacer(),
 
-                // ── Customizer ────────────────────────────────────────────────
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF111113),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                          topRight: Radius.circular(24),
+                // Customizer
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Avatar Name / Seed',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      child: FluttermojiCustomizer(
-                        scaffoldWidth: MediaQuery.of(context).size.width,
-                        autosave: true,
-                        theme: FluttermojiThemeData(
-                          primaryBgColor: const Color(0xFF111113),
-                          secondaryBgColor: const Color(0xFF1C1C1E),
-                          iconColor: Colors.white.withValues(alpha: 0.5),
-                          selectedIconColor: Colors.white,
-                          unselectedIconColor: Colors.white.withValues(alpha: 0.3),
-                          labelTextStyle: GoogleFonts.inter(
-                            color: Colors.white.withValues(alpha: 0.75),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          boxDecoration: BoxDecoration(
-                            color: const Color(0xFF1C1C1E),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _seedController,
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: const Color(0xFF1C1C1E),
+                          border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.06),
-                              width: 1,
-                            ),
+                            borderSide: BorderSide.none,
                           ),
-                          selectedTileDecoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 1.5,
-                            ),
-                          ),
-                          unselectedTileDecoration: BoxDecoration(
-                            color: const Color(0xFF1C1C1E),
-                            borderRadius: BorderRadius.circular(14),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.casino, color: Colors.white),
+                            onPressed: _randomizeSeed,
+                            tooltip: 'Randomize',
                           ),
                         ),
+                        onChanged: (val) {
+                          if (val.isNotEmpty) {
+                            setState(() {
+                              _currentSeed = val;
+                            });
+                          }
+                        },
                       ),
-                    ),
+                    ],
                   ),
                 ),
 
-                // ── Save button ───────────────────────────────────────────────
+                const SizedBox(height: 40),
+
+                // Save button
                 Container(
                   color: const Color(0xFF111113),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                   child: SafeArea(
                     top: false,
                     child: SizedBox(
@@ -256,8 +266,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                         onPressed: _isSaving ? null : _saveAndContinue,
                         style: TextButton.styleFrom(
                           backgroundColor: Colors.white,
-                          disabledBackgroundColor:
-                              Colors.white.withValues(alpha: 0.4),
+                          disabledBackgroundColor: Colors.white.withValues(alpha: 0.4),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(26),
                           ),
@@ -274,8 +283,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.check_circle_rounded,
-                                      color: Colors.black, size: 20),
+                                  const Icon(Icons.check_circle_rounded, color: Colors.black, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
                                     widget.isFromProfile ? 'Save & Return' : 'Save Avatar & Continue',
@@ -300,44 +308,4 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Decorative glow ring around the avatar preview circle
-// ─────────────────────────────────────────────────────────────────────────────
 
-class _AvatarPreviewRing extends StatelessWidget {
-  final Widget child;
-  const _AvatarPreviewRing({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const SweepGradient(
-          colors: [
-            Color(0xFF4A4A4A),
-            Color(0xFFE5E5EA),
-            Color(0xFF1A1A1B),
-            Color(0xFF4A4A4A),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.1),
-            blurRadius: 28,
-            spreadRadius: 4,
-          ),
-        ],
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: const BoxDecoration(
-          color: Color(0xFF0A0A0C),
-          shape: BoxShape.circle,
-        ),
-        child: ClipOval(child: child),
-      ),
-    );
-  }
-}

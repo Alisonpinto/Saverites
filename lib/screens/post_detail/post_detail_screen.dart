@@ -150,6 +150,350 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  void _showOptionsPanel() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF48484A),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                _buildOptionTile(
+                  icon: Icons.share_outlined,
+                  title: 'Share',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _sharePost();
+                  },
+                ),
+                _buildOptionTile(
+                  icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  title: isSaved ? 'Unsave' : 'Save',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleSave();
+                  },
+                ),
+                _buildOptionTile(
+                  icon: Icons.download_outlined,
+                  title: 'Download',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Downloading media...',
+                          style: GoogleFonts.inter(color: Colors.white),
+                        ),
+                        backgroundColor: const Color(0xFF6B9BF7),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                  },
+                ),
+                _buildOptionTile(
+                  icon: Icons.visibility_off_outlined,
+                  title: 'Hide',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Post hidden from your feed.',
+                          style: GoogleFonts.inter(color: Colors.white),
+                        ),
+                        backgroundColor: const Color(0xFF48484A),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                  },
+                ),
+                _buildOptionTile(
+                  icon: Icons.flag_outlined,
+                  title: 'Report',
+                  color: Colors.redAccent,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showReportBottomSheet();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showReportBottomSheet() {
+    String? selectedReason;
+    final List<String> reasons = [
+      'Harassment',
+      'Hate speech',
+      'Spam or misleading',
+      'Self-harm',
+      'Copyright violation',
+      'Prohibited content',
+      'Sharing personal info',
+      'Other'
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                  top: 12,
+                  left: 20,
+                  right: 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF48484A),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Report Post',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Why are you reporting this post?',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFAEAEB2),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ...reasons.map((reason) {
+                      final bool isSelected = selectedReason == reason;
+                      return GestureDetector(
+                        onTap: () {
+                          setModalState(() {
+                            selectedReason = reason;
+                          });
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: Color(0xFF2C2C2E), width: 1),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isSelected ? Colors.white : const Color(0xFF48484A),
+                                    width: isSelected ? 6 : 1.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Text(
+                                reason,
+                                style: GoogleFonts.inter(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: selectedReason == null
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                
+                                final String subject = Uri.encodeComponent('Memoria Report - $selectedReason');
+                                final String postId = widget.userPost?.id ?? widget.postModel?.id ?? 'Unknown ID';
+                                final String reportedAt = DateTime.now().toString();
+                                final String bodyText = '''MEMORIA
+
+Community Report Submission
+
+Report Reason: $selectedReason
+
+Post ID: $postId
+
+Reported At: $reportedAt
+
+This report was submitted from the Memoria mobile application.
+
+Thank you for helping keep Memoria safe.
+
+— Team Memoria''';
+                                final String body = Uri.encodeComponent(bodyText);
+                                final Uri emailUri = Uri.parse('mailto:etamax2026@gmail.com?subject=$subject&body=$body');
+
+                                try {
+                                  final bool launched = await launchUrl(emailUri);
+                                  if (launched) {
+                                    if (context.mounted) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          backgroundColor: const Color(0xFF1C1C1E),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                          title: Text(
+                                            'Thank You',
+                                            style: GoogleFonts.inter(
+                                              color: Colors.white,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          content: Text(
+                                            'Thank you for helping improve Memoria and making our community safer for everyone.',
+                                            style: GoogleFonts.inter(
+                                              color: const Color(0xFFAEAEB2),
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(context),
+                                              child: Text(
+                                                'Done',
+                                                style: GoogleFonts.inter(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    throw Exception('Could not launch email');
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Unable to open email app. Please contact support manually.',
+                                          style: GoogleFonts.inter(color: Colors.white),
+                                        ),
+                                        backgroundColor: const Color(0xFFEB4335),
+                                        duration: const Duration(seconds: 3),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFF3A3A3C),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Submit Report',
+                          style: GoogleFonts.inter(
+                            color: selectedReason == null ? const Color(0xFFAEAEB2) : Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    Color color = Colors.white,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: color, size: 24),
+      title: Text(
+        title,
+        style: GoogleFonts.inter(
+          color: color,
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
@@ -223,49 +567,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             Positioned(
               top: statusBarHeight + 12,
               right: 16,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  shape: BoxShape.circle,
-                ),
-                child: PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white, size: 26),
-                  color: const Color(0xFF2C2C2E),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onSelected: (value) {
-                    if (value == 'report') {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Post reported. Our team will review it.',
-                            style: GoogleFonts.inter(color: Colors.white),
-                          ),
-                          backgroundColor: const Color(0xFFEB4335),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      );
-                    }
-                  },
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'report',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.flag_outlined, color: Colors.redAccent, size: 20),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Report Post',
-                            style: GoogleFonts.inter(
-                              color: Colors.redAccent,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              child: GestureDetector(
+                onTap: _showOptionsPanel,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.more_vert, color: Colors.white, size: 26),
                 ),
               ),
             ),

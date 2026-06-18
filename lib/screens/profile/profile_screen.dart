@@ -11,7 +11,7 @@ import '../../widgets/shimmer_container.dart';
 import '../../widgets/feed_card.dart';
 import '../../widgets/running_video_player.dart';
 import '../../widgets/animated_avatar.dart';
-import 'package:fluttermoji/fluttermoji.dart';
+import '../../widgets/dice_avatar.dart';
 import '../../utils/user_store.dart';
 import '../../avatar_setup_screen.dart';
 import '../../utils/share_helper.dart';
@@ -318,31 +318,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                   cursor: SystemMouseCursors.click,
                                                   child: Tooltip(
                                                     message: 'Customize Avatar',
-                                                    child: Container(
-                                                      decoration: BoxDecoration(
-                                                        shape: BoxShape.circle,
-                                                        gradient: const LinearGradient(
-                                                          colors: [
-                                                            Color(0xFF4A4A4A),
-                                                            Color(0xFF1A1A1B),
-                                                          ],
-                                                          begin: Alignment.topLeft,
-                                                          end: Alignment.bottomRight,
-                                                        ),
-                                                        boxShadow: [
-                                                          BoxShadow(
-                                                            color: Colors.white.withValues(alpha: 0.1),
-                                                            blurRadius: 20,
-                                                            spreadRadius: 2,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      child: ClipOval(
-                                                        child: FluttermojiCircleAvatar(
-                                                          radius: 65,
-                                                          backgroundColor: Colors.transparent,
-                                                        ),
-                                                      ),
+                                                    child: const DiceAvatar(
+                                                      radius: 65,
+                                                      backgroundColor: Colors.transparent,
                                                     ),
                                                   ),
                                                 ),

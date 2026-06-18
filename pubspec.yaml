@@ -46,10 +46,9 @@ dependencies:
   file_picker: ^8.0.0
   flutter_contacts: ^2.2.1
   shared_preferences: ^2.3.2
-  fluttermoji: ^1.0.2
-  get: ^4.6.5
-
-
+  dice_bear: ^1.0.4
+  flutter_svg: ^2.3.0
+  get: ^4.7.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

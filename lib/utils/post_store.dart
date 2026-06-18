@@ -208,7 +208,7 @@ class PostStore {
   PostStore._();
   static final PostStore instance = PostStore._();
 
-  static const String _kvdbUrl = 'https://kvdb.io/memoria_shared_feed_a22556c1/posts';
+  static const String _kvdbUrl = 'https://jsonblob.com/api/jsonBlob/019ed7cb-fda2-716d-b43c-b868d304b6fd';
 
   /// All published posts, newest first.
   final ValueNotifier<List<UserPost>> postsNotifier =
@@ -280,7 +280,7 @@ class PostStore {
 
   Future<void> syncOnlinePosts() async {
     try {
-      final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 8));
+      final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is List) {
@@ -333,27 +333,48 @@ class PostStore {
     try {
       // 1. Get latest online posts
       List<dynamic> jsonList = [];
+      bool fetchSuccess = false;
       try {
-        final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 5));
+        final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 20));
         if (response.statusCode == 200) {
           final decoded = jsonDecode(response.body);
           if (decoded is List) {
             jsonList = decoded;
+            fetchSuccess = true;
           }
         }
       } catch (e) {
         debugPrint("Error fetching online posts for upload: $e");
       }
 
+      if (!fetchSuccess && jsonList.isEmpty) {
+        // If we failed to fetch the list and it's completely empty, abort so we don't wipe existing posts
+        debugPrint("Aborting upload because fetching the current list failed");
+        return;
+      }
+
       // 2. Prepend our new post
-      jsonList.insert(0, newPost.toJson());
+      final postMap = newPost.toJson();
+      
+      // Safety: Stripping large base64 data was preventing images from syncing across devices.
+      // Commented out so that images/videos/documents work for other devices.
+      // Keep in mind this might trigger a JSONBlob 413 Payload Too Large if files are huge.
+      // postMap['imageBase64'] = null;
+      // postMap['videoBase64'] = null;
+      // postMap['fileBase64'] = null;
+      
+      jsonList.insert(0, postMap);
 
       // 3. Write back
-      await http.put(
+      final putResponse = await http.put(
         Uri.parse(_kvdbUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(jsonList),
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 30));
+
+      if (putResponse.statusCode != 200 && putResponse.statusCode != 201) {
+        debugPrint("Failed to upload: ${putResponse.statusCode} ${putResponse.body}");
+      }
     } catch (e) {
       debugPrint("Error uploading post online: $e");
     }

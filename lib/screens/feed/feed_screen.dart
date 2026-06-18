@@ -522,9 +522,17 @@ class _FeedScreenState extends State<FeedScreen> {
                     Expanded(
                       child: _isRefreshing
                           ? _buildShimmerGrid()
-                          : SingleChildScrollView(
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.all(16),
+                          : RefreshIndicator(
+                              onRefresh: () async {
+                                _refreshFeed();
+                                // Wait for sync to finish to dismiss indicator
+                                await Future.delayed(const Duration(milliseconds: 500));
+                              },
+                              color: const Color(0xFF7B61FF),
+                              backgroundColor: const Color(0xFF1C1C1E),
+                              child: SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                                padding: const EdgeInsets.all(16),
                               child: ValueListenableBuilder<Set<String>>(
                                 valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
                                 builder: (context, savedSocialIds, _) {
@@ -572,6 +580,7 @@ class _FeedScreenState extends State<FeedScreen> {
                                           ),
                                         );
                                 },
+                              ),
                               ),
                             ),
                     ),

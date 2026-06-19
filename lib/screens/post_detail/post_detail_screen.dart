@@ -12,6 +12,7 @@ import '../../widgets/running_video_player.dart';
 import '../../widgets/feed_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/rich_text_controller.dart';
+import '../post/write_post_screen.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -633,17 +634,47 @@ Thank you for helping keep Memoria safe.
             Positioned(
               top: statusBarHeight + 12,
               right: 16,
-              child: GestureDetector(
-                onTap: _showOptionsPanel,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    shape: BoxShape.circle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.userPost != null && widget.userPost!.savedInProfile) ...[
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => WritePostScreen(
+                              isSaveItem: true,
+                              editingPost: widget.userPost,
+                            ),
+                          ),
+                        );
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.edit, color: Colors.white, size: 26),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  GestureDetector(
+                    onTap: _showOptionsPanel,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.more_vert, color: Colors.white, size: 26),
+                    ),
                   ),
-                  child: const Icon(Icons.more_vert, color: Colors.white, size: 26),
-                ),
+                ],
               ),
             ),
 
@@ -808,34 +839,6 @@ Thank you for helping keep Memoria safe.
                             ),
                             const SizedBox(width: 24),
 
-                            // Bookmarks / Saves
-                            GestureDetector(
-                              onTap: _toggleSave,
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                children: [
-                                  BouncingIcon(
-                                    trigger: isSaved,
-                                    child: Icon(
-                                      isSaved ? Icons.bookmark : Icons.bookmark_border,
-                                      color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _format(isSaved ? _saves + 1 : _saves),
-                                    style: GoogleFonts.inter(
-                                        color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 24),
-
                             // Shares
                             GestureDetector(
                               onTap: _sharePost,
@@ -856,6 +859,34 @@ Thank you for helping keep Memoria safe.
                                     _format(_shares),
                                     style: GoogleFonts.inter(
                                       color: const Color(0xFFAEAEB2),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+
+                            // Bookmarks / Saves
+                            GestureDetector(
+                              onTap: _toggleSave,
+                              behavior: HitTestBehavior.opaque,
+                              child: Row(
+                                children: [
+                                  BouncingIcon(
+                                    trigger: isSaved,
+                                    child: Icon(
+                                      isSaved ? Icons.bookmark : Icons.bookmark_border,
+                                      color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _format(isSaved ? _saves + 1 : _saves),
+                                    style: GoogleFonts.inter(
+                                        color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),

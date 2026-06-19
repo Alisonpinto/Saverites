@@ -137,6 +137,7 @@ class _WritePostScreenState extends State<WritePostScreen>
 
     if (widget.editingPost != null) {
       final post = widget.editingPost!;
+      _saveInProfile = post.savedInProfile;
       _titleController.text = post.title;
       _bodyController.text = post.body;
       if (post.charStyles != null) {
@@ -1836,7 +1837,9 @@ class _WritePostScreenState extends State<WritePostScreen>
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          widget.editingPost != null ? 'Edit Saved Item' : (widget.isSaveItem ? 'Save an Item' : 'Write a Post'),
+                          widget.editingPost != null
+                              ? 'Edit Saved Item'
+                              : (_saveInProfile ? 'Save an Item' : 'Write a Post'),
                           style: GoogleFonts.inter(
                             color: Colors.white,
                             fontSize: 24,
@@ -1856,7 +1859,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                                 ),
                               )
                             : TextButton(
-                                onPressed: widget.isSaveItem
+                                onPressed: _saveInProfile
                                     ? _post
                                     : ((_pickedImagePath == null &&
                                             _pickedVideoPath == null)
@@ -1864,7 +1867,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                                             'Please upload an image or video to post!')
                                         : _post),
                                 style: TextButton.styleFrom(
-                                  backgroundColor: (!widget.isSaveItem &&
+                                  backgroundColor: (!_saveInProfile &&
                                             _pickedImagePath == null &&
                                             _pickedVideoPath == null)
                                         ? Colors.white.withValues(alpha: 0.3)
@@ -1877,11 +1880,11 @@ class _WritePostScreenState extends State<WritePostScreen>
                                   ),
                                 ),
                                 child: Text(
-                                  widget.isSaveItem ? 'Save' : 'Post',
+                                  _saveInProfile ? 'Save' : 'Post',
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: (!widget.isSaveItem &&
+                                    color: (!_saveInProfile &&
                                             _pickedImagePath == null &&
                                             _pickedVideoPath == null)
                                         ? Colors.black38
@@ -1902,7 +1905,44 @@ class _WritePostScreenState extends State<WritePostScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Always show Title input at the top
+                          if (widget.isSaveItem) ...[
+                            _buildAutomaticPreview(),
+                            const SizedBox(height: 6),
+                          ],
+
+                          // Description (Body input)
+                          TextField(
+                            controller: _bodyController,
+                            focusNode: _bodyFocusNode,
+                            maxLines: null,
+                            textAlign: _bodyAlign,
+                            keyboardType: TextInputType.multiline,
+                            textCapitalization: TextCapitalization.sentences,
+                            style: resolvedType == 'code'
+                                ? const TextStyle(
+                                    fontFamily: 'Cascadia Code',
+                                    color: Color(0xFFB71C1C),
+                                    fontSize: 16,
+                                  )
+                                : GoogleFonts.inter(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                            decoration: InputDecoration(
+                              hintText: widget.isSaveItem ? 'save anything.....' : 'Description',
+                              hintStyle: GoogleFonts.inter(
+                                color: const Color(0xFF7C7C81),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Title input below description
                           TextField(
                             controller: _titleController,
                             focusNode: _titleFocusNode,
@@ -1945,102 +1985,36 @@ class _WritePostScreenState extends State<WritePostScreen>
                               ),
                             ),
                           ),
+                          const SizedBox(height: 10),
 
-                          if (widget.isSaveItem) ...[
-                            _buildAutomaticPreview(),
-                            const SizedBox(height: 6),
-                            TextField(
-                              controller: _bodyController,
-                              focusNode: _bodyFocusNode,
-                              maxLines: null,
-                              textAlign: _bodyAlign,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization: TextCapitalization.sentences,
-                              style: resolvedType == 'code'
-                                  ? const TextStyle(
-                                      fontFamily: 'Cascadia Code',
-                                      color: Color(0xFFB71C1C),
-                                      fontSize: 16,
-                                    )
-                                  : GoogleFonts.inter(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                              decoration: InputDecoration(
-                                hintText: 'save anything.....',
-                                hintStyle: GoogleFonts.inter(
-                                  color: const Color(0xFF7C7C81),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                          // Link input (always available and optional)
+                          TextField(
+                            controller: _urlController,
+                            maxLines: 1,
+                            keyboardType: TextInputType.url,
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
                             ),
-                          ] else ...[
-                            // Body input
-                            TextField(
-                              controller: _bodyController,
-                              focusNode: _bodyFocusNode,
-                              maxLines: null,
-                              textAlign: _bodyAlign,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization: TextCapitalization.sentences,
-                              style: resolvedType == 'code'
-                                  ? const TextStyle(
-                                      fontFamily: 'Cascadia Code',
-                                      color: Color(0xFFB71C1C),
-                                      fontSize: 16,
-                                    )
-                                  : GoogleFonts.inter(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Share your saved item to all..(optional)',
-                                hintStyle: GoogleFonts.inter(
-                                  color: const Color(0xFF7C7C81),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-
-                            // Link input
-                            TextField(
-                              controller: _urlController,
-                              maxLines: 1,
-                              keyboardType: TextInputType.url,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
+                            decoration: InputDecoration(
+                              hintText: 'Add a link (optional)',
+                              hintStyle: GoogleFonts.inter(
+                                color: const Color(0xFF7C7C81),
                                 fontSize: 16,
                                 fontWeight: FontWeight.w400,
                               ),
-                              decoration: InputDecoration(
-                                hintText: 'Add a link (optional)',
-                                hintStyle: GoogleFonts.inter(
-                                  color: const Color(0xFF7C7C81),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                prefixIcon: const Padding(
-                                  padding: EdgeInsets.only(right: 8.0),
-                                  child: Icon(Icons.link,
-                                      color: Color(0xFF7C7C81), size: 20),
-                                ),
-                                prefixIconConstraints: const BoxConstraints(
-                                    minWidth: 0, minHeight: 0),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
+                              prefixIcon: const Padding(
+                                padding: EdgeInsets.only(right: 8.0),
+                                child: Icon(Icons.link,
+                                    color: Color(0xFF7C7C81), size: 20),
                               ),
+                              prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 0, minHeight: 0),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
                             ),
-                          ],
+                          ),
 
                           // ── Attachment preview cards ────────────────────────
                           _buildAttachmentPreviews(),

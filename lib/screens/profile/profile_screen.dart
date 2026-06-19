@@ -178,6 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
 
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
+    PostStore.instance.likedPostIdsNotifier.addListener(_onPostsChanged);
   }
 
   void _onPostsChanged() {
@@ -190,6 +191,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     _scrollController.dispose();
     _searchController.dispose();
     PostStore.instance.postsNotifier.removeListener(_onPostsChanged);
+    PostStore.instance.likedPostIdsNotifier.removeListener(_onPostsChanged);
     super.dispose();
   }
 
@@ -244,6 +246,27 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = UserStore.instance.currentUser;
+    final currentUserId = currentUser?.userId ?? 'gangster_vagas';
+    
+    int likesCount = 0;
+    int postsCount = 0;
+
+    if (_isMyProfile) {
+      likesCount = PostStore.instance.likedPostIds.length;
+      postsCount = PostStore.instance.posts
+          .where((p) => p.username == currentUserId)
+          .length;
+    } else {
+      likesCount = 0;
+      postsCount = PostStore.instance.posts
+          .where((p) => p.username == widget.username)
+          .length;
+      postsCount += PostStore.predefinedPosts
+          .where((p) => p.username == widget.username)
+          .length;
+    }
+
     return ValueListenableBuilder<String>(
       valueListenable: TranslationManager.currentLanguageNotifier,
       builder: (context, lang, v) {
@@ -499,7 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                 crossAxisAlignment: CrossAxisAlignment.center,
                                                 children: [
                                                   Text(
-                                                    '6.7k',
+                                                    '$likesCount',
                                                     style: GoogleFonts.inter(
                                                       color: Colors.white,
                                                       fontSize: 14,
@@ -522,7 +545,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                 crossAxisAlignment: CrossAxisAlignment.center,
                                                 children: [
                                                   Text(
-                                                    '170',
+                                                    '$postsCount',
                                                     style: GoogleFonts.inter(
                                                       color: Colors.white,
                                                       fontSize: 14,
@@ -1508,7 +1531,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
         PageRouteBuilder(
           pageBuilder: (context, _, _) {
             if (widget.item is UserPost) {
-              return WritePostScreen(isSaveItem: true, editingPost: widget.item as UserPost);
+              return PostDetailScreen(userPost: widget.item as UserPost);
             } else {
               return PostDetailScreen(postModel: widget.item as PostModel);
             }

@@ -42,6 +42,7 @@ class _FeedScreenState extends State<FeedScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = "";
   bool _isAddMenuOpen = false;
+  Timer? _syncTimer;
 
   @override
   void initState() {
@@ -55,9 +56,16 @@ class _FeedScreenState extends State<FeedScreen> {
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
     PostStore.instance.hiddenPostIdsNotifier.addListener(_onPostsChanged);
     
-    // Load local cached posts and then trigger online sync
-    PostStore.instance.loadFromLocal().then((_) {
-      PostStore.instance.syncOnlinePosts();
+    // Load local cached posts AND trigger online sync in parallel for faster startup
+    PostStore.instance.loadFromLocal();
+    PostStore.instance.syncOnlinePosts();
+
+    // Background polling: sync every 8 seconds so new posts from other users
+    // appear quickly without manual pull-to-refresh
+    _syncTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (_isOnline) {
+        PostStore.instance.syncOnlinePosts();
+      }
     });
     
     // Initialize share intent listener
@@ -67,6 +75,7 @@ class _FeedScreenState extends State<FeedScreen> {
   @override
   void dispose() {
     _connectivityTimer?.cancel();
+    _syncTimer?.cancel();
     _searchController.dispose();
     PostStore.instance.postsNotifier.removeListener(_onPostsChanged);
     PostStore.instance.hiddenPostIdsNotifier.removeListener(_onPostsChanged);

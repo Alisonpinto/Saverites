@@ -299,7 +299,7 @@ class PostStore {
 
   Future<void> syncOnlinePosts() async {
     try {
-      final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 20));
+      final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is List) {
@@ -339,8 +339,13 @@ class PostStore {
           // Sort by createdAt descending
           finalPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-          postsNotifier.value = finalPosts;
-          await saveToLocal();
+          // Only update if something actually changed (avoid unnecessary rebuilds)
+          final currentIds = postsNotifier.value.map((p) => p.id).toList();
+          final finalIds = finalPosts.map((p) => p.id).toList();
+          if (currentIds.length != finalIds.length || !currentIds.every((id) => finalIds.contains(id))) {
+            postsNotifier.value = finalPosts;
+            await saveToLocal();
+          }
         }
       }
     } catch (e) {
@@ -350,11 +355,11 @@ class PostStore {
 
   Future<void> uploadPostOnline(UserPost newPost) async {
     try {
-      // 1. Get latest online posts
+      // 1. Get latest online posts (with short timeout for speed)
       List<dynamic> jsonList = [];
       bool fetchSuccess = false;
       try {
-        final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 20));
+        final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 10));
         if (response.statusCode == 200) {
           final decoded = jsonDecode(response.body);
           if (decoded is List) {
@@ -372,27 +377,27 @@ class PostStore {
         return;
       }
 
-      // 2. Prepend our new post
+      // 2. Prepend our new post — strip base64 to keep payload small and fast.
+      // Images/videos are stored locally and synced via paths; base64 data
+      // would make the blob huge and cause slow uploads / 413 errors.
       final postMap = newPost.toJson();
-      
-      // Safety: Stripping large base64 data was preventing images from syncing across devices.
-      // Commented out so that images/videos/documents work for other devices.
-      // Keep in mind this might trigger a JSONBlob 413 Payload Too Large if files are huge.
-      // postMap['imageBase64'] = null;
-      // postMap['videoBase64'] = null;
-      // postMap['fileBase64'] = null;
+      postMap['imageBase64'] = null;
+      postMap['videoBase64'] = null;
+      postMap['fileBase64'] = null;
       
       jsonList.insert(0, postMap);
 
-      // 3. Write back
+      // 3. Write back with a reasonable timeout
       final putResponse = await http.put(
         Uri.parse(_kvdbUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(jsonList),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 15));
 
       if (putResponse.statusCode != 200 && putResponse.statusCode != 201) {
         debugPrint("Failed to upload: ${putResponse.statusCode} ${putResponse.body}");
+      } else {
+        debugPrint("Post uploaded successfully.");
       }
     } catch (e) {
       debugPrint("Error uploading post online: $e");

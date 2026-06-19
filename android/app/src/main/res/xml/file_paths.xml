@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Internal app files -->
+    <files-path name="files" path="." />
+    <!-- External app files (e.g., downloaded APKs) -->
+    <external-files-path name="external_files" path="." />
+    <!-- Cache directory -->
+    <cache-path name="cache" path="." />
+    <!-- External cache -->
+    <external-cache-path name="external_cache" path="." />
+    <!-- Public Downloads folder -->
+    <external-path name="external" path="." />
+</paths>

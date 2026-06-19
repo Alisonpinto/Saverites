@@ -15,6 +15,10 @@ class NotificationModel {
   /// Falls back to [avatarInitial] + [avatarColor] if null.
   final String? avatarAssetPath;
 
+  /// DiceBear seed for the avatar SVG. When set, renders a DiceBear
+  /// notionists avatar instead of the initials fallback.
+  final String? avatarSeed;
+
   /// Single character shown inside the avatar circle when no image is set.
   final String avatarInitial;
 
@@ -36,6 +40,7 @@ class NotificationModel {
   const NotificationModel({
     required this.id,
     this.avatarAssetPath,
+    this.avatarSeed,
     required this.avatarInitial,
     required this.avatarColor,
     required this.username,

@@ -124,6 +124,7 @@ class FeedCard extends StatelessWidget {
   final String shares;
   final bool isLiked;
   final bool isSaved;
+  final bool isSelected;
   final VoidCallback? onLikeTap;
   final VoidCallback? onSaveTap;
   final VoidCallback? onShareTap;
@@ -143,6 +144,7 @@ class FeedCard extends StatelessWidget {
     required this.shares,
     this.isLiked = false,
     this.isSaved = false,
+    this.isSelected = false,
     this.onLikeTap,
     this.onSaveTap,
     this.onShareTap,
@@ -164,13 +166,16 @@ class FeedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onCardTap,
-      child: Container(
-        // Removed fixed width: 181 to make the card fully responsive to column constraints
-        decoration: BoxDecoration(
-          color: const Color(0xFF3A3A3B),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
+      child: Stack(
+        children: [
+          Container(
+            // Removed fixed width: 181 to make the card fully responsive to column constraints
+            decoration: BoxDecoration(
+              color: const Color(0xFF3A3A3B),
+              borderRadius: BorderRadius.circular(10),
+              border: isSelected ? Border.all(color: const Color(0xFFFAF096), width: 2) : null,
+            ),
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -280,6 +285,25 @@ class FeedCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+          if (isSelected)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFAF096),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check,
+                  size: 16,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

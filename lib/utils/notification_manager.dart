@@ -6,8 +6,10 @@ import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_model.dart';
+import '../widgets/dice_avatar.dart';
 import '../widgets/in_app_notification.dart';
 import 'post_store.dart';
+import 'user_store.dart';
 
 class NotificationManager {
   NotificationManager._();
@@ -132,7 +134,7 @@ class NotificationManager {
     
     final newNotif = NotificationModel(
       id: id,
-      avatarAssetPath: 'assets/images/panda.png',
+      avatarSeed: activity['username'], // use username as DiceBear seed
       avatarInitial: activity['initial']!,
       avatarColor: Color(int.parse(activity['color']!)),
       username: activity['username']!,
@@ -224,13 +226,22 @@ class NotificationManager {
       }
     }
 
+    final String currentUserId = UserStore.instance.currentUser?.userId ?? 'You';
+
     final newNotif = NotificationModel(
       id: id,
-      avatarAssetPath: avatarAsset ?? 'assets/images/panda.png',
+      // For own actions use the user's dice avatar seed; for remote actors use their username as seed
+      avatarSeed: isIncoming ? actorName : DiceAvatar.seedNotifier.value,
       avatarInitial: initial,
       avatarColor: avatarColor,
-      username: isIncoming ? actorName : 'You',
-      previewText: body,
+      username: isIncoming ? actorName : currentUserId,
+      previewText: isIncoming
+          ? body
+          : (action == 'liked'
+              ? 'liked $actorName\'s post: "$postTitle"'
+              : action == 'shared'
+                  ? 'shared $actorName\'s post: "$postTitle"'
+                  : 'saved $actorName\'s post: "$postTitle"'),
       timestamp: 'now',
       isRead: false,
     );
@@ -270,7 +281,7 @@ class NotificationManager {
 
     final newNotif = NotificationModel(
       id: id,
-      avatarAssetPath: 'assets/images/panda.png',
+      avatarSeed: 'memoria_vault', // consistent vault avatar seed
       avatarInitial: vaultInitial,
       avatarColor: vaultColor,
       username: 'Memoria Vault',
@@ -353,6 +364,7 @@ class NotificationManager {
       return NotificationModel(
         id: n.id,
         avatarAssetPath: n.avatarAssetPath,
+        avatarSeed: n.avatarSeed,
         avatarInitial: n.avatarInitial,
         avatarColor: n.avatarColor,
         username: n.username,
@@ -436,7 +448,7 @@ class NotificationManager {
         
         final newNotif = NotificationModel(
           id: notifId,
-          avatarAssetPath: 'assets/images/panda.png',
+          avatarSeed: 'memoria_reminder', // consistent reminder avatar seed
           avatarInitial: 'R',
           avatarColor: const Color(0xFFFF9500),
           username: 'Memoria Reminder',

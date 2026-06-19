@@ -89,6 +89,122 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  Future<bool?> _showDeleteConfirmation(BuildContext context, int count) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF3B30).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xFFFF3B30),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  count > 1 ? 'Delete $count Items?' : 'Delete Item?',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  count > 1
+                      ? 'Are you sure you want to permanently delete these items? This action cannot be undone.'
+                      : 'Are you sure you want to permanently delete this item? This action cannot be undone.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFAEAEB2),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.12), width: 1),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF3B30),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Delete',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   final TextEditingController _searchController = TextEditingController();
   String _profileSearchQuery = "";
   String _activeCategoryChip = "Recent";
@@ -367,12 +483,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 tooltip: 'Move to Locked Folder',
                               ),
                               IconButton(
-                                onPressed: _selectedIds.isEmpty ? null : () {
-                                  PostStore.instance.removeUserPosts(_selectedIds);
-                                  setState(() {
-                                    _isSelectionMode = false;
-                                    _selectedIds.clear();
-                                  });
+                                onPressed: _selectedIds.isEmpty ? null : () async {
+                                  final confirmed = await _showDeleteConfirmation(context, _selectedIds.length);
+                                  if (confirmed == true) {
+                                    PostStore.instance.removeUserPosts(_selectedIds);
+                                    setState(() {
+                                      _isSelectionMode = false;
+                                      _selectedIds.clear();
+                                    });
+                                  }
                                 },
                                 icon: Icon(Icons.delete, color: _selectedIds.isEmpty ? Colors.grey : Colors.redAccent, size: 24),
                                 padding: const EdgeInsets.all(8),
@@ -710,7 +829,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return ValueListenableBuilder<List<UserPost>>(
           valueListenable: PostStore.instance.postsNotifier,
           builder: (context, postsList, _) {
-            var savedUserPosts = postsList.where((p) => !p.isLocked).toList();
+            var savedUserPosts = postsList.where((p) => !p.isLocked && p.savedInProfile).toList();
 
             if (_activeCategoryChip == 'Documents') {
               savedUserPosts = savedUserPosts.where((p) => p.type == 'document').toList();
@@ -1803,6 +1922,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
           shares: sharesText,
           isLiked: isLiked,
           isSaved: isSaved,
+          isSelected: widget.isSelected,
           onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
           onSaveTap: () => PostStore.instance.toggleSavedSocialPost(itemId),
           onShareTap: () async {

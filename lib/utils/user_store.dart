@@ -202,7 +202,7 @@ class UserStore {
     if (taken) {
       return const AuthResult(
           success: false,
-          error: 'That User ID is already taken. Please choose another.');
+          error: 'User ID already exists. Please choose a different one.');
     }
 
     // Also check email uniqueness

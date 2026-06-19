@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/notification_model.dart';
@@ -134,6 +135,35 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Priority 1: DiceBear seed → render SVG avatar
+    if (notification.avatarSeed != null && notification.avatarSeed!.isNotEmpty) {
+      return Container(
+        width: 46,
+        height: 46,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color(0xFF2A2A2E),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: SvgPicture.network(
+          'https://api.dicebear.com/9.x/notionists/svg?seed=${notification.avatarSeed}&backgroundColor=transparent',
+          fit: BoxFit.cover,
+          placeholderBuilder: (_) => Center(
+            child: Text(
+              notification.avatarInitial.toUpperCase(),
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Priority 2: static asset path
+    // Priority 3: initials fallback
     return Container(
       width: 46,
       height: 46,

@@ -140,7 +140,7 @@ class UserPost {
       try {
         final filename = 'img_${json['id']}.png';
         final tempFile = File('${Directory.systemTemp.path}/$filename');
-        if (!tempFile.existsSync()) {
+        if (!tempFile.existsSync() || tempFile.lengthSync() == 0) {
           tempFile.writeAsBytesSync(base64Decode(imgB64));
         }
         imagePath = tempFile.path;
@@ -154,7 +154,7 @@ class UserPost {
       try {
         final filename = 'vid_${json['id']}.mp4';
         final tempFile = File('${Directory.systemTemp.path}/$filename');
-        if (!tempFile.existsSync()) {
+        if (!tempFile.existsSync() || tempFile.lengthSync() == 0) {
           tempFile.writeAsBytesSync(base64Decode(vidB64));
         }
         videoPath = tempFile.path;
@@ -169,7 +169,7 @@ class UserPost {
         final ext = (json['type'] as String?) == 'document' ? 'pdf' : 'bin';
         final filename = 'file_${json['id']}.$ext';
         final tempFile = File('${Directory.systemTemp.path}/$filename');
-        if (!tempFile.existsSync()) {
+        if (!tempFile.existsSync() || tempFile.lengthSync() == 0) {
           tempFile.writeAsBytesSync(base64Decode(fileB64Val));
         }
         filePath = tempFile.path;
@@ -377,13 +377,9 @@ class PostStore {
         return;
       }
 
-      // 2. Prepend our new post — strip base64 to keep payload small and fast.
-      // Images/videos are stored locally and synced via paths; base64 data
-      // would make the blob huge and cause slow uploads / 413 errors.
+      // 2. Prepend our new post. Keep base64 data intact so that
+      // other users can download and view media files properly.
       final postMap = newPost.toJson();
-      postMap['imageBase64'] = null;
-      postMap['videoBase64'] = null;
-      postMap['fileBase64'] = null;
       
       jsonList.insert(0, postMap);
 
@@ -446,7 +442,7 @@ class PostStore {
     // 2. Search in user posts
     for (final p in posts) {
       if (p.id == postId) {
-        return {'title': p.title, 'author': 'You'};
+        return {'title': p.title, 'author': p.username ?? 'You'};
       }
     }
     return {'title': 'Untitled Post', 'author': 'someone'};

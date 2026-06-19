@@ -264,8 +264,26 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
     if (_userIdAvailable == false) {
-      _showError('That User ID is already taken.');
+      _showError('User ID already exists. Please choose a different one.');
       return;
+    }
+
+    // If userId is valid length but availability wasn't checked yet, check now
+    if (userId.length >= 3 && _userIdAvailable == null) {
+      _userIdDebounce?.cancel();
+      setState(() {
+        _checkingUserId = true;
+      });
+      final available = await UserStore.instance.isUserIdAvailable(userId);
+      if (!mounted) return;
+      setState(() {
+        _userIdAvailable = available;
+        _checkingUserId = false;
+      });
+      if (!available) {
+        _showError('User ID already exists. Please choose a different one.');
+        return;
+      }
     }
 
     setState(() => _isLoading = true);

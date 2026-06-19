@@ -55,8 +55,9 @@ class _AttachItem {
 class WritePostScreen extends StatefulWidget {
   final bool isSaveItem;
   final Map<String, dynamic>? sharedData;
+  final UserPost? editingPost;
 
-  const WritePostScreen({super.key, this.isSaveItem = false, this.sharedData});
+  const WritePostScreen({super.key, this.isSaveItem = false, this.sharedData, this.editingPost});
 
   @override
   State<WritePostScreen> createState() => _WritePostScreenState();
@@ -134,7 +135,29 @@ class _WritePostScreenState extends State<WritePostScreen>
     super.initState();
     _saveInProfile = widget.isSaveItem;
 
-    if (widget.sharedData != null) {
+    if (widget.editingPost != null) {
+      final post = widget.editingPost!;
+      _titleController.text = post.title;
+      _bodyController.text = post.body;
+      if (post.charStyles != null) {
+        _bodyController.charStyles.clear();
+        _bodyController.charStyles.addAll(post.charStyles!);
+      }
+      if (post.url != null) _urlController.text = post.url!;
+      if (post.imagePath != null) _pickedImagePath = post.imagePath;
+      if (post.videoPath != null) _pickedVideoPath = post.videoPath;
+      
+      _sharedType = post.type;
+      _sharedFilePath = post.filePath;
+      _contactName = post.contactName;
+      _contactPhone = post.contactPhone;
+      _audioDuration = post.duration;
+      
+      if (post.checklistItems != null && post.checklistStates != null) {
+        _checklistItemsList.addAll(post.checklistItems!);
+        _checklistStatesList.addAll(post.checklistStates!);
+      }
+    } else if (widget.sharedData != null) {
       _saveInProfile = true; // Shared content is private (Save an Item) by default
       final data = widget.sharedData!;
       final type = data['type'] as String?;
@@ -1298,17 +1321,17 @@ class _WritePostScreenState extends State<WritePostScreen>
     final String resolvedType = _getResolvedType();
 
     final post = UserPost(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: widget.editingPost?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       title: resolvedTitle.isEmpty ? 'Untitled' : resolvedTitle,
       body: body,
       url: _urlController.text.trim().isEmpty
           ? null
           : _urlController.text.trim(),
-      username: UserStore.instance.currentUser?.userId ?? 'gangster_vagas',
+      username: widget.editingPost?.username ?? UserStore.instance.currentUser?.userId ?? 'gangster_vagas',
       imagePath: _pickedImagePath,
       videoPath: _pickedVideoPath,
       savedInProfile: _saveInProfile,
-      createdAt: DateTime.now(),
+      createdAt: widget.editingPost?.createdAt ?? DateTime.now(),
       charStyles: List<RichStyle>.from(_bodyController.charStyles),
       type: resolvedType,
       filePath: resolvedFilePath,
@@ -1319,7 +1342,11 @@ class _WritePostScreenState extends State<WritePostScreen>
       checklistStates: _checklistStatesList.isNotEmpty ? _checklistStatesList : null,
     );
 
-    PostStore.instance.addPost(post);
+    if (widget.editingPost != null) {
+      PostStore.instance.updateUserPost(post);
+    } else {
+      PostStore.instance.addPost(post);
+    }
 
     if (mounted) {
       setState(() => _isPosting = false);
@@ -1366,15 +1393,17 @@ class _WritePostScreenState extends State<WritePostScreen>
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
         height: 200,
+        width: double.infinity,
         decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.white12, width: 0.5),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: path.startsWith('assets/')
-              ? Image.asset(path, fit: BoxFit.cover, width: double.infinity, height: 200)
-              : Image.file(File(path), fit: BoxFit.cover, width: double.infinity, height: 200),
+              ? Image.asset(path, fit: BoxFit.contain, width: double.infinity, height: 200)
+              : Image.file(File(path), fit: BoxFit.contain, width: double.infinity, height: 200),
         ),
       );
     }
@@ -1807,11 +1836,13 @@ class _WritePostScreenState extends State<WritePostScreen>
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          widget.isSaveItem ? 'Save an Item' : 'Write a Post',
+                          widget.editingPost != null ? 'Edit Saved Item' : (widget.isSaveItem ? 'Save an Item' : 'Write a Post'),
                           style: GoogleFonts.inter(
                             color: Colors.white,
                             fontSize: 24,
                             fontWeight: FontWeight.w600,
+                            height: 1.2,
+                            letterSpacing: -0.5,
                           ),
                         ),
                         const Spacer(),
@@ -2019,13 +2050,21 @@ class _WritePostScreenState extends State<WritePostScreen>
                             const SizedBox(height: 20),
                             Stack(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Image.file(
-                                    File(_pickedImagePath!),
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: 200,
+                                Container(
+                                  width: double.infinity,
+                                  height: 200,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1C1C1E),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: Colors.white12, width: 0.5),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Image.file(
+                                      File(_pickedImagePath!),
+                                      fit: BoxFit.contain,
+                                      width: double.infinity,
+                                      height: 200,
                                     errorBuilder: (context, error, stackTrace) {
                                       return Container(
                                         width: double.infinity,
@@ -2039,7 +2078,8 @@ class _WritePostScreenState extends State<WritePostScreen>
                                     },
                                   ),
                                 ),
-                                Positioned(
+                              ),
+                              Positioned(
                                   top: 8,
                                   right: 8,
                                   child: GestureDetector(

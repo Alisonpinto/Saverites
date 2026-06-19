@@ -25,6 +25,9 @@ class UserPost {
   /// Whether to also save this post in the profile grid.
   final bool savedInProfile;
 
+  /// Whether this post is hidden in the Locked Folder.
+  final bool isLocked;
+
   final DateTime createdAt;
 
   /// Formatting character-by-character styles.
@@ -52,6 +55,7 @@ class UserPost {
     this.imagePath,
     this.videoPath,
     required this.savedInProfile,
+    this.isLocked = false,
     required this.createdAt,
     this.charStyles,
     this.type,
@@ -110,6 +114,7 @@ class UserPost {
       'imagePath': imagePath,
       'videoPath': videoPath,
       'savedInProfile': savedInProfile,
+      'isLocked': isLocked,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'charStyles': charStyles?.map((s) => s.toJson()).toList(),
       'type': type,
@@ -182,6 +187,7 @@ class UserPost {
       imagePath: imagePath,
       videoPath: videoPath,
       savedInProfile: json['savedInProfile'] as bool? ?? false,
+      isLocked: json['isLocked'] as bool? ?? false,
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
       charStyles: (json['charStyles'] as List?)
           ?.map((s) => RichStyle.fromJson(s as Map<String, dynamic>))
@@ -228,6 +234,12 @@ class PostStore {
 
   Set<String> get likedPostIds => likedPostIdsNotifier.value;
 
+  /// Set of hidden post IDs.
+  final ValueNotifier<Set<String>> hiddenPostIdsNotifier =
+      ValueNotifier<Set<String>>({});
+
+  Set<String> get hiddenPostIds => hiddenPostIdsNotifier.value;
+
   Future<void> loadFromLocal() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -242,6 +254,12 @@ class PostStore {
       final savedSocialList = prefs.getStringList('saved_social_post_ids');
       if (savedSocialList != null) {
         savedSocialPostIdsNotifier.value = savedSocialList.toSet();
+      }
+
+      // Load hidden post IDs
+      final hiddenList = prefs.getStringList('hidden_post_ids');
+      if (hiddenList != null) {
+        hiddenPostIdsNotifier.value = hiddenList.toSet();
       }
 
       // Load user posts
@@ -270,6 +288,7 @@ class PostStore {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('liked_post_ids', likedPostIds.toList());
       await prefs.setStringList('saved_social_post_ids', savedSocialPostIds.toList());
+      await prefs.setStringList('hidden_post_ids', hiddenPostIds.toList());
 
       final postsJson = jsonEncode(postsNotifier.value.map((p) => p.toJson()).toList());
       await prefs.setString('user_posts', postsJson);
@@ -403,6 +422,14 @@ class PostStore {
     }
   }
 
+  /// Hides a post so it no longer appears in the feed.
+  void hidePost(String postId) {
+    final current = Set<String>.from(hiddenPostIds);
+    current.add(postId);
+    hiddenPostIdsNotifier.value = current;
+    saveToLocal();
+  }
+
   /// Helper to get post details (title and author) for notifications.
   Map<String, String> getPostDetails(String postId) {
     // 1. Search in predefinedPosts
@@ -435,6 +462,89 @@ class PostStore {
       savedSocialPostIdsNotifier.value = {post.id, ...savedSocialPostIdsNotifier.value};
       saveToLocal();
     }
+  }
+
+  /// Updates an existing post and notifies all listeners.
+  void updateUserPost(UserPost updatedPost) {
+    postsNotifier.value = postsNotifier.value.map((post) {
+      if (post.id == updatedPost.id) {
+        return updatedPost;
+      }
+      return post;
+    }).toList();
+    saveToLocal();
+  }
+
+  /// Removes multiple posts by ID and notifies all listeners.
+  void removeUserPosts(Set<String> postIds) {
+    postsNotifier.value = postsNotifier.value.where((post) => !postIds.contains(post.id)).toList();
+    saveToLocal();
+  }
+
+  /// Locks multiple posts by ID and notifies all listeners.
+  void lockUserPosts(Set<String> postIds) {
+    postsNotifier.value = postsNotifier.value.map((post) {
+      if (postIds.contains(post.id)) {
+        return UserPost(
+          id: post.id,
+          title: post.title,
+          body: post.body,
+          url: post.url,
+          username: post.username,
+          imagePath: post.imagePath,
+          videoPath: post.videoPath,
+          savedInProfile: post.savedInProfile,
+          isLocked: true,
+          createdAt: post.createdAt,
+          charStyles: post.charStyles,
+          type: post.type,
+          filePath: post.filePath,
+          contactName: post.contactName,
+          contactPhone: post.contactPhone,
+          duration: post.duration,
+          checklistItems: post.checklistItems,
+          checklistStates: post.checklistStates,
+          imageBase64: post.imageBase64,
+          videoBase64: post.videoBase64,
+          fileBase64: post.fileBase64,
+        );
+      }
+      return post;
+    }).toList();
+    saveToLocal();
+  }
+
+  /// Unlocks multiple posts by ID and notifies all listeners.
+  void unlockUserPosts(Set<String> postIds) {
+    postsNotifier.value = postsNotifier.value.map((post) {
+      if (postIds.contains(post.id)) {
+        return UserPost(
+          id: post.id,
+          title: post.title,
+          body: post.body,
+          url: post.url,
+          username: post.username,
+          imagePath: post.imagePath,
+          videoPath: post.videoPath,
+          savedInProfile: post.savedInProfile,
+          isLocked: false,
+          createdAt: post.createdAt,
+          charStyles: post.charStyles,
+          type: post.type,
+          filePath: post.filePath,
+          contactName: post.contactName,
+          contactPhone: post.contactPhone,
+          duration: post.duration,
+          checklistItems: post.checklistItems,
+          checklistStates: post.checklistStates,
+          imageBase64: post.imageBase64,
+          videoBase64: post.videoBase64,
+          fileBase64: post.fileBase64,
+        );
+      }
+      return post;
+    }).toList();
+    saveToLocal();
   }
 
   /// Toggles the savedInProfile status of a post and notifies listeners.

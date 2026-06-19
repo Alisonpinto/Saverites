@@ -61,11 +61,13 @@ class _ActionButton extends StatefulWidget {
   final Widget iconWidget;
   final String count;
   final VoidCallback? onTap;
+  final Color? textColor;
 
   const _ActionButton({
     required this.iconWidget,
     required this.count,
     this.onTap,
+    this.textColor,
   });
 
   @override
@@ -97,7 +99,7 @@ class _ActionButtonState extends State<_ActionButton> {
             Text(
               widget.count,
               style: GoogleFonts.inter(
-                color: Colors.white,
+                color: widget.textColor ?? Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -224,11 +226,12 @@ class FeedCard extends StatelessWidget {
                             isLiked ? Icons.favorite : Icons.favorite_border,
                             key: ValueKey<bool>(isLiked),
                             size: 22,
-                            color: isLiked ? const Color(0xFFE52E5E) : Colors.white,
+                            color: isLiked ? const Color(0xFFE52E5E) : const Color(0xFFAEAEB2),
                           ),
                         ),
                       ),
                       count: likes,
+                      textColor: isLiked ? const Color(0xFFE52E5E) : const Color(0xFFAEAEB2),
                       onTap: onLikeTap,
                     ),
                     const SizedBox(width: 12),
@@ -241,10 +244,11 @@ class FeedCard extends StatelessWidget {
                         child: const Icon(
                           Icons.reply,
                           size: 22,
-                          color: Colors.white,
+                          color: Color(0xFFAEAEB2),
                         ),
                       ),
                       count: shares,
+                      textColor: const Color(0xFFAEAEB2),
                       onTap: onShareTap,
                     ),
                     const SizedBox(width: 12),
@@ -262,11 +266,12 @@ class FeedCard extends StatelessWidget {
                             isSaved ? Icons.bookmark : Icons.bookmark_border,
                             key: ValueKey<bool>(isSaved),
                             size: 22,
-                            color: isSaved ? const Color(0xFFFFEE00) : Colors.white,
+                            color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
                           ),
                         ),
                       ),
                       count: bookmarks,
+                      textColor: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
                       onTap: onSaveTap,
                     ),
                   ],

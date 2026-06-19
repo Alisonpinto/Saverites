@@ -12,6 +12,8 @@ import '../../widgets/running_video_player.dart';
 import '../../widgets/feed_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/rich_text_controller.dart';
+import 'package:gal/gal.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Unified full-screen detail view for any post (user-created or predefined social post).
 ///
@@ -150,6 +152,79 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  Future<void> _downloadMedia() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Downloading media...',
+          style: GoogleFonts.inter(color: Colors.white),
+        ),
+        backgroundColor: const Color(0xFF6B9BF7),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+
+    try {
+      final hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        final request = await Gal.requestAccess();
+        if (!request) {
+          throw Exception("Gallery permission denied");
+        }
+      }
+
+      if (widget.userPost != null) {
+        if (widget.userPost!.imagePath != null) {
+          await Gal.putImage(widget.userPost!.imagePath!);
+        } else if (widget.userPost!.videoPath != null) {
+          await Gal.putVideo(widget.userPost!.videoPath!);
+        }
+      } else if (widget.postModel != null) {
+        final assetPath = widget.postModel!.mediaAssetPath;
+        final byteData = await rootBundle.load(assetPath);
+        final tempDir = await getTemporaryDirectory();
+        final fileName = assetPath.split('/').last;
+        final file = File('${tempDir.path}/$fileName');
+        await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+        if (assetPath.toLowerCase().endsWith('.mp4') || assetPath.toLowerCase().endsWith('.mov')) {
+          await Gal.putVideo(file.path);
+        } else {
+          await Gal.putImage(file.path);
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Saved to gallery successfully!',
+              style: GoogleFonts.inter(color: Colors.white),
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save: $e',
+              style: GoogleFonts.inter(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
+
   void _showOptionsPanel() {
     showModalBottomSheet(
       context: context,
@@ -194,18 +269,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   title: 'Download',
                   onTap: () {
                     Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Downloading media...',
-                          style: GoogleFonts.inter(color: Colors.white),
-                        ),
-                        backgroundColor: const Color(0xFF6B9BF7),
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    );
+                    _downloadMedia();
                   },
                 ),
                 _buildOptionTile(
@@ -213,6 +277,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   title: 'Hide',
                   onTap: () {
                     Navigator.pop(ctx);
+                    PostStore.instance.hidePost(id);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
@@ -225,6 +290,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     );
+                    Navigator.pop(context);
                   },
                 ),
                 _buildOptionTile(
@@ -724,7 +790,7 @@ Thank you for helping keep Memoria safe.
                                     trigger: _liked,
                                     child: Icon(
                                       _liked ? Icons.favorite : Icons.favorite_border,
-                                      color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
+                                      color: _liked ? const Color(0xFFE52E5E) : const Color(0xFFAEAEB2),
                                       size: 22,
                                     ),
                                   ),
@@ -732,7 +798,7 @@ Thank you for helping keep Memoria safe.
                                   Text(
                                     _format(_liked ? _likes + 1 : _likes),
                                     style: GoogleFonts.inter(
-                                      color: _liked ? const Color(0xFF6B9BF7) : const Color(0xFFAEAEB2),
+                                        color: _liked ? const Color(0xFFE52E5E) : const Color(0xFFAEAEB2),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -752,7 +818,7 @@ Thank you for helping keep Memoria safe.
                                     trigger: isSaved,
                                     child: Icon(
                                       isSaved ? Icons.bookmark : Icons.bookmark_border,
-                                      color: isSaved ? const Color(0xFFBF5AF2) : const Color(0xFFAEAEB2),
+                                      color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
                                       size: 22,
                                     ),
                                   ),
@@ -760,7 +826,7 @@ Thank you for helping keep Memoria safe.
                                   Text(
                                     _format(isSaved ? _saves + 1 : _saves),
                                     style: GoogleFonts.inter(
-                                      color: isSaved ? const Color(0xFFBF5AF2) : const Color(0xFFAEAEB2),
+                                        color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),

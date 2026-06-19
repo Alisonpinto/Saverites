@@ -2,8 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'utils/post_store.dart';
-
+import 'utils/tutorial_keys.dart';
 class SocialFeedPage extends StatefulWidget {
   const SocialFeedPage({super.key});
 
@@ -13,6 +15,124 @@ class SocialFeedPage extends StatefulWidget {
 
 class _SocialFeedPageState extends State<SocialFeedPage> {
   int _currentTab = 0;
+  TutorialCoachMark? tutorialCoachMark;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkTutorial();
+    });
+  }
+
+  Future<void> _checkTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasSeenTutorial = prefs.getBool('hasSeenTutorial') ?? false;
+    if (!hasSeenTutorial) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          _showTutorial();
+        }
+      });
+    }
+  }
+
+  void _showTutorial() {
+    tutorialCoachMark = TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: Colors.black,
+      textSkip: "SKIP",
+      paddingFocus: 10,
+      opacityShadow: 0.8,
+      onFinish: () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('hasSeenTutorial', true);
+      },
+      onSkip: () {
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setBool('hasSeenTutorial', true);
+        });
+        return true;
+      },
+    )..show(context: context);
+  }
+
+  List<TargetFocus> _createTargets() {
+    return [
+      TargetFocus(
+        identify: "home-tab",
+        keyTarget: TutorialKeys.homeTabKey,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return _buildTutorialContent(
+                "Home Feed",
+                "This is where you can find community posts and updates. Tap here to return home at any time.",
+              );
+            },
+          )
+        ],
+      ),
+      TargetFocus(
+        identify: "feed-card",
+        keyTarget: TutorialKeys.firstFeedCardKey,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) {
+              return _buildTutorialContent(
+                "Interact",
+                "Tap on a post card to view it in full screen, read details, and interact.",
+              );
+            },
+          )
+        ],
+      ),
+      TargetFocus(
+        identify: "saved-tab",
+        keyTarget: TutorialKeys.savedTabKey,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return _buildTutorialContent(
+                "Saved Items",
+                "Find all your saved and bookmarked items right here.",
+              );
+            },
+          )
+        ],
+      ),
+    ];
+  }
+
+  Widget _buildTutorialContent(String title, String desc) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 10.0),
+          child: Text(
+            desc,
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +201,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
 
                                 for (int i = 0; i < posts.length; i++) {
                                   final post = posts[i];
-                                  final card = _buildUserPostCard(post);
+                                  final card = _buildUserPostCard(post, isFirst: i == 0);
                                   if (i % 2 == 0) {
                                     leftColumn.add(card);
                                   } else {
@@ -197,7 +317,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(21),
                 border: Border.all(
-                  color: Colors.white,
+                  color: const Color(0xFFFAF096),
                   width: 1.0,
                 ),
               ),
@@ -240,7 +360,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
   }
 
   // --- Dynamic User Post Card ---
-  Widget _buildUserPostCard(UserPost post) {
+  Widget _buildUserPostCard(UserPost post, {bool isFirst = false}) {
     Widget imageWidget;
     // Generate a somewhat varied height based on content length for masonry effect
     double height = 150.0 + ((post.title.length + post.body.length) % 5) * 30.0;
@@ -274,12 +394,15 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
       );
     }
 
-    return FeedCard(
-      title: post.title,
-      likes: '0',
-      bookmarks: '0',
-      shares: '0',
-      imageWidget: imageWidget,
+    return Container(
+      key: isFirst ? TutorialKeys.firstFeedCardKey : null,
+      child: FeedCard(
+        title: post.title,
+        likes: '0',
+        bookmarks: '0',
+        shares: '0',
+        imageWidget: imageWidget,
+      ),
     );
   }
 
@@ -292,6 +415,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           IconButton(
+            key: TutorialKeys.homeTabKey,
             onPressed: () => setState(() => _currentTab = 0),
             icon: Icon(
               _currentTab == 0 ? Icons.home : Icons.home_outlined,
@@ -345,6 +469,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
             ),
           ),
           IconButton(
+            key: TutorialKeys.savedTabKey,
             onPressed: () => setState(() => _currentTab = 3),
             icon: Icon(
               _currentTab == 3 ? Icons.bookmark : Icons.bookmark_border,
@@ -440,7 +565,7 @@ class FeedCard extends StatelessWidget {
         Icon(
           icon,
           size: 18,
-          color: const Color(0xFF8E8E93), // Apple standard gray
+          color: const Color(0xFFAEAEB2),
         ),
         const SizedBox(width: 6),
         Text(
@@ -448,7 +573,7 @@ class FeedCard extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: const Color(0xFF8E8E93),
+            color: const Color(0xFFAEAEB2),
           ),
         ),
       ],

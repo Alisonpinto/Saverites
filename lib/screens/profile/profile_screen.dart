@@ -19,8 +19,12 @@ import 'settings_screen.dart';
 import '../notifications/notification_screen.dart';
 import '../../utils/post_store.dart';
 import '../post_detail/post_detail_screen.dart';
-import 'save_item_preview_screen.dart';
 import '../../utils/rich_text_controller.dart';
+import '../post/write_post_screen.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'locked_folder/locked_folder_screen.dart';
+import 'locked_folder/pin_entry_screen.dart';
+import 'locked_folder/pin_setup_screen.dart';
 
 
 // ─────────────────────────────────────────────
@@ -57,11 +61,37 @@ class _ProfileScreenState extends State<ProfileScreen>
   double _scrollOffset = 0;
   bool _isOnline = true;
   Timer? _connectivityTimer;
+  
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
+
+  void _toggleSelection(String id) {
+    if (!_isSelectionMode) return;
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+        if (_selectedIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _onLongPress(String id) {
+    if (!_isSelectionMode) {
+      HapticFeedback.heavyImpact();
+      setState(() {
+        _isSelectionMode = true;
+        _selectedIds.add(id);
+      });
+    }
+  }
 
   final TextEditingController _searchController = TextEditingController();
   String _profileSearchQuery = "";
   String _activeCategoryChip = "Recent";
-  bool _isPrivate = false;
 
   bool get _isMyProfile {
     final currentUser = UserStore.instance.currentUser;
@@ -181,6 +211,37 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  Future<void> _openLockedFolder() async {
+    const storage = FlutterSecureStorage();
+    final savedPin = await storage.read(key: 'memoria_locked_folder_pin');
+    
+    if (!mounted) return;
+    
+    if (savedPin == null) {
+      final success = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const PinSetupScreen()),
+      );
+      if (success == true && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LockedFolderScreen()),
+        );
+      }
+    } else {
+      final success = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const PinEntryScreen()),
+      );
+      if (success == true && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LockedFolderScreen()),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<String>(
@@ -233,22 +294,36 @@ class _ProfileScreenState extends State<ProfileScreen>
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            IconButton(
-                              onPressed: () {
-                                if (widget.onBackTap != null) {
-                                  widget.onBackTap!();
-                                } else if (Navigator.of(context).canPop()) {
-                                  Navigator.of(context).pop();
-                                }
-                              },
-                              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                              splashRadius: 20,
-                            ),
+                            if (_isSelectionMode)
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isSelectionMode = false;
+                                    _selectedIds.clear();
+                                  });
+                                },
+                                icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                                padding: const EdgeInsets.all(8),
+                                constraints: const BoxConstraints(),
+                                splashRadius: 20,
+                              )
+                            else
+                              IconButton(
+                                onPressed: () {
+                                  if (widget.onBackTap != null) {
+                                    widget.onBackTap!();
+                                  } else if (Navigator.of(context).canPop()) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                                padding: const EdgeInsets.all(8),
+                                constraints: const BoxConstraints(),
+                                splashRadius: 20,
+                              ),
                             const SizedBox(width: 4),
                             Text(
-                              'Profile',
+                              _isSelectionMode ? '${_selectedIds.length} Selected' : 'Profile',
                               style: GoogleFonts.inter(
                                 color: Colors.white,
                                 fontSize: 24,
@@ -256,29 +331,61 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                             ),
                             const Spacer(),
-                            IconButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                PageRouteBuilder(
-                                  pageBuilder: (ctx, anim, x) => const SettingsScreen(),
-                                  transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(
-                                      position: Tween<Offset>(
-                                        begin: const Offset(0, 0.04),
-                                        end: Offset.zero,
-                                      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                                      child: child,
-                                    ),
-                                  ),
-                                  transitionDuration: const Duration(milliseconds: 450),
-                                ),
+                            if (_isSelectionMode) ...[
+                              IconButton(
+                                onPressed: _selectedIds.isEmpty ? null : () {
+                                  PostStore.instance.lockUserPosts(_selectedIds);
+                                  setState(() {
+                                    _isSelectionMode = false;
+                                    _selectedIds.clear();
+                                  });
+                                },
+                                icon: Icon(Icons.lock, color: _selectedIds.isEmpty ? Colors.grey : Colors.white, size: 24),
+                                tooltip: 'Move to Locked Folder',
                               ),
-                              icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 24),
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                              splashRadius: 20,
-                            ),
+                              IconButton(
+                                onPressed: _selectedIds.isEmpty ? null : () {
+                                  PostStore.instance.removeUserPosts(_selectedIds);
+                                  setState(() {
+                                    _isSelectionMode = false;
+                                    _selectedIds.clear();
+                                  });
+                                },
+                                icon: Icon(Icons.delete, color: _selectedIds.isEmpty ? Colors.grey : Colors.redAccent, size: 24),
+                                padding: const EdgeInsets.all(8),
+                                constraints: const BoxConstraints(),
+                                splashRadius: 20,
+                              ),
+                            ] else ...[
+                              IconButton(
+                                onPressed: _openLockedFolder,
+                                icon: const Icon(Icons.lock_outline, color: Colors.white, size: 24),
+                                tooltip: 'Locked Folder',
+                              ),
+                              IconButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  PageRouteBuilder(
+                                    pageBuilder: (ctx, anim, x) => const SettingsScreen(),
+                                    transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0, 0.04),
+                                          end: Offset.zero,
+                                        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                                        child: child,
+                                      ),
+                                    ),
+                                    transitionDuration: const Duration(milliseconds: 450),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 24),
+                                padding: const EdgeInsets.all(8),
+                                constraints: const BoxConstraints(),
+                                splashRadius: 20,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -292,7 +399,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             children: [
                               const SizedBox(height: 8),
 
-                              // Avatar + Profile Details Row
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 20),
                                 child: Row(
@@ -364,7 +470,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             style: GoogleFonts.inter(
                                               color: Colors.white,
                                               fontSize: 20,
-                                              fontWeight: FontWeight.w700, // Bold
+                                              fontWeight: FontWeight.w700,
                                               letterSpacing: -0.4,
                                             ),
                                           ),
@@ -445,7 +551,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                               const SizedBox(height: 24),
 
-                              // Search field (Only search field has rounded border)
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 20),
                                 child: _PremiumSearchBar(
@@ -466,14 +571,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                               const SizedBox(height: 24),
 
-                              // Tabs
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 20),
                                 child: _PremiumTabBar(
                                   activeTab: _activeTab,
                                   onTabChanged: (i) => setState(() => _activeTab = i),
-                                  isPrivate: _isPrivate,
-                                  onPrivateChanged: (val) => setState(() => _isPrivate = val),
                                 ),
                               ),
 
@@ -484,7 +586,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                               const SizedBox(height: 18),
 
-                              // Grid — Tab 0 shows saved PostModel, Tab 1 shows saved UserPost
                               _buildProfileGrid(),
 
                               const SizedBox(height: 100),
@@ -553,7 +654,14 @@ class _ProfileScreenState extends State<ProfileScreen>
               }).toList();
             }
 
-            return _ProfileMasonryGrid(items: savedSocial, isOnline: _isOnline);
+            return ProfileMasonryGrid(
+              items: savedSocial, 
+              isOnline: _isOnline,
+              isSelectionMode: _isSelectionMode,
+              selectedIds: _selectedIds,
+              onSelectToggle: _toggleSelection,
+              onLongPress: _onLongPress,
+            );
           },
         );
       } else {
@@ -565,16 +673,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                    (p.url?.toLowerCase().contains(query) ?? false);
           }).toList();
         }
-        return _ProfileMasonryGrid(items: friendPosts, isOnline: _isOnline);
+        return ProfileMasonryGrid(
+          items: friendPosts, 
+          isOnline: _isOnline,
+          isSelectionMode: _isSelectionMode,
+          selectedIds: _selectedIds,
+          onSelectToggle: _toggleSelection,
+          onLongPress: _onLongPress,
+        );
       }
     } else {
       if (isMyProfile) {
         return ValueListenableBuilder<List<UserPost>>(
           valueListenable: PostStore.instance.postsNotifier,
           builder: (context, postsList, _) {
-            var savedUserPosts = postsList.toList();
+            var savedUserPosts = postsList.where((p) => !p.isLocked).toList();
 
-            // 1. Filter by category chip
             if (_activeCategoryChip == 'Documents') {
               savedUserPosts = savedUserPosts.where((p) => p.type == 'document').toList();
             } else if (_activeCategoryChip == 'Media') {
@@ -587,7 +701,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               savedUserPosts = savedUserPosts.where((p) => p.type == 'text' || p.type == 'checklist' || p.type == 'code' || p.type == 'link').toList();
             }
 
-            // 2. Filter by search query
             if (query.isNotEmpty) {
               savedUserPosts = savedUserPosts.where((p) {
                 return p.title.toLowerCase().contains(query) ||
@@ -632,7 +745,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   const SizedBox(height: 8),
                 ],
-                _ProfileMasonryGrid(items: savedUserPosts, isOnline: _isOnline),
+                ProfileMasonryGrid(
+                  items: savedUserPosts, 
+                  isOnline: _isOnline,
+                  isSelectionMode: _isSelectionMode,
+                  selectedIds: _selectedIds,
+                  onSelectToggle: _toggleSelection,
+                  onLongPress: _onLongPress,
+                ),
               ],
             );
           },
@@ -646,22 +766,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                    (p.url?.toLowerCase().contains(query) ?? false);
           }).toList();
         }
-        return _ProfileMasonryGrid(items: friendPosts, isOnline: _isOnline);
+        return ProfileMasonryGrid(
+          items: friendPosts, 
+          isOnline: _isOnline,
+          isSelectionMode: _isSelectionMode,
+          selectedIds: _selectedIds,
+          onSelectToggle: _toggleSelection,
+          onLongPress: _onLongPress,
+        );
       }
     }
   }
 }
 
-
-
-// _PremiumProfileInfo is now inlined inside the top card — kept as no-op placeholder
-
-
-// Removed _AnimatedAvatar definition as it was moved to animated_avatar.dart
-
-// ─────────────────────────────────────────────
-//  Premium Search Bar
-// ─────────────────────────────────────────────
 class _PremiumSearchBar extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -681,7 +798,7 @@ class _PremiumSearchBar extends StatelessWidget {
         color: const Color(0xFF161617),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFF333335),
+          color: const Color(0xFFFAF096),
           width: 1.0,
         ),
       ),
@@ -724,20 +841,13 @@ class _PremiumSearchBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Premium Tab Bar
-// ─────────────────────────────────────────────
 class _PremiumTabBar extends StatelessWidget {
   final int activeTab;
   final ValueChanged<int> onTabChanged;
-  final bool isPrivate;
-  final ValueChanged<bool> onPrivateChanged;
 
   const _PremiumTabBar({
     required this.activeTab,
     required this.onTabChanged,
-    required this.isPrivate,
-    required this.onPrivateChanged,
   });
 
   @override
@@ -756,12 +866,6 @@ class _PremiumTabBar extends StatelessWidget {
             ),
             const SizedBox(width: 10),
           ],
-          _TabButton(
-            label: 'Private',
-            icon: isPrivate ? Icons.lock_rounded : Icons.lock_outline_rounded,
-            isActive: isPrivate,
-            onTap: () => onPrivateChanged(!isPrivate),
-          ),
         ],
       ),
     );
@@ -822,14 +926,22 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Profile Masonry Grid
-// ─────────────────────────────────────────────
-class _ProfileMasonryGrid extends StatelessWidget {
+class ProfileMasonryGrid extends StatelessWidget {
   final List<dynamic> items;
   final bool isOnline;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final Function(String) onSelectToggle;
+  final Function(String) onLongPress;
 
-  const _ProfileMasonryGrid({required this.items, required this.isOnline});
+  const ProfileMasonryGrid({
+    required this.items,
+    required this.isOnline,
+    this.isSelectionMode = false,
+    this.selectedIds = const {},
+    required this.onSelectToggle,
+    required this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -905,11 +1017,25 @@ class _ProfileMasonryGrid extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _ProfileMasonryColumn(items: left, isOnline: isOnline),
+                child: _ProfileMasonryColumn(
+                  items: left, 
+                  isOnline: isOnline,
+                  isSelectionMode: isSelectionMode,
+                  selectedIds: selectedIds,
+                  onSelectToggle: onSelectToggle,
+                  onLongPress: onLongPress,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _ProfileMasonryColumn(items: right, isOnline: isOnline),
+                child: _ProfileMasonryColumn(
+                  items: right, 
+                  isOnline: isOnline,
+                  isSelectionMode: isSelectionMode,
+                  selectedIds: selectedIds,
+                  onSelectToggle: onSelectToggle,
+                  onLongPress: onLongPress,
+                ),
               ),
             ],
           ),
@@ -922,10 +1048,18 @@ class _ProfileMasonryGrid extends StatelessWidget {
 class _ProfileMasonryColumn extends StatelessWidget {
   final List<dynamic> items;
   final bool isOnline;
+  final bool isSelectionMode;
+  final Set<String> selectedIds;
+  final Function(String) onSelectToggle;
+  final Function(String) onLongPress;
 
   const _ProfileMasonryColumn({
     required this.items,
     required this.isOnline,
+    required this.isSelectionMode,
+    required this.selectedIds,
+    required this.onSelectToggle,
+    required this.onLongPress,
   });
 
   @override
@@ -933,10 +1067,14 @@ class _ProfileMasonryColumn extends StatelessWidget {
     return Column(
       children: [
         for (int i = 0; i < items.length; i++) ...[
-          _ProfilePostTile(
+          ProfilePostTile(
             key: ValueKey(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
             item: items[i],
             isOnline: isOnline,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedIds.contains(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
+            onSelectToggle: () => onSelectToggle(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
+            onLongPress: () => onLongPress(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
           ),
           if (i < items.length - 1) const SizedBox(height: 16),
         ],
@@ -945,21 +1083,29 @@ class _ProfileMasonryColumn extends StatelessWidget {
   }
 }
 
-class _ProfilePostTile extends StatefulWidget {
+class ProfilePostTile extends StatefulWidget {
   final dynamic item;
   final bool isOnline;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback onSelectToggle;
+  final VoidCallback onLongPress;
 
-  const _ProfilePostTile({
+  const ProfilePostTile({
     super.key,
     required this.item,
     required this.isOnline,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    required this.onSelectToggle,
+    required this.onLongPress,
   });
 
   @override
-  State<_ProfilePostTile> createState() => _ProfilePostTileState();
+  State<ProfilePostTile> createState() => _ProfilePostTileState();
 }
 
-class _ProfilePostTileState extends State<_ProfilePostTile> {
+class _ProfilePostTileState extends State<ProfilePostTile> {
   static final Set<String> _shimmeredIds = {};
   late bool _showShimmer;
 
@@ -1353,12 +1499,16 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
     final cardHeight = _getCardHeight(widget.item);
 
     void onTap() {
+      if (widget.isSelectionMode) {
+        widget.onSelectToggle();
+        return;
+      }
       Navigator.push(
         context,
         PageRouteBuilder(
           pageBuilder: (context, _, _) {
             if (widget.item is UserPost) {
-              return SaveItemPreviewScreen(post: widget.item as UserPost);
+              return WritePostScreen(isSaveItem: true, editingPost: widget.item as UserPost);
             } else {
               return PostDetailScreen(postModel: widget.item as PostModel);
             }
@@ -1394,16 +1544,20 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
 
       return GestureDetector(
         onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF3A3A3B),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
+        onLongPress: widget.onLongPress,
+        child: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF3A3A3B),
+                borderRadius: BorderRadius.circular(10),
+                border: widget.isSelected ? Border.all(color: const Color(0xFFFAF096), width: 2) : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
                 padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
                 child: GestureDetector(
                   onTap: onTap,
@@ -1456,6 +1610,25 @@ class _ProfilePostTileState extends State<_ProfilePostTile> {
               ),
             ],
           ),
+        ),
+            if (widget.isSelected)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFAF096),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    size: 16,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+          ],
         ),
       );
     }

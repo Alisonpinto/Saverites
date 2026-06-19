@@ -51,8 +51,9 @@ class _FeedScreenState extends State<FeedScreen> {
     _connectivityTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _checkConnectivity();
     });
-    // Listen for new posts to rebuild
+    // Listen for new posts and hidden posts to rebuild
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
+    PostStore.instance.hiddenPostIdsNotifier.addListener(_onPostsChanged);
     
     // Load local cached posts and then trigger online sync
     PostStore.instance.loadFromLocal().then((_) {
@@ -68,6 +69,7 @@ class _FeedScreenState extends State<FeedScreen> {
     _connectivityTimer?.cancel();
     _searchController.dispose();
     PostStore.instance.postsNotifier.removeListener(_onPostsChanged);
+    PostStore.instance.hiddenPostIdsNotifier.removeListener(_onPostsChanged);
     super.dispose();
   }
 
@@ -382,7 +384,7 @@ class _FeedScreenState extends State<FeedScreen> {
     final List<dynamic> allItems = [
       ...userPublicPosts,
       ..._shuffledPredefinedPosts,
-    ];
+    ].where((item) => !PostStore.instance.hiddenPostIds.contains(item.id)).toList();
 
     final filteredItems = allItems.where((item) {
       if (_searchQuery.trim().isEmpty) return true;
@@ -441,8 +443,10 @@ class _FeedScreenState extends State<FeedScreen> {
           },
           onHelpTap: () async {
             final uri = Uri.parse('https://memoria-website-sigma.vercel.app/support');
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri);
+            try {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            } catch (e) {
+              debugPrint("Could not launch $uri");
             }
           },
           onSettingsTap: () {
@@ -899,7 +903,8 @@ class _FeedScreenState extends State<FeedScreen> {
 
   Widget _buildSearchPage() {
     final userPosts = PostStore.instance.posts.where((p) => !p.savedInProfile).toList();
-    final List<dynamic> allItems = [...userPosts, ..._shuffledPredefinedPosts];
+    final List<dynamic> allItems = [...userPosts, ..._shuffledPredefinedPosts]
+        .where((item) => !PostStore.instance.hiddenPostIds.contains(item.id)).toList();
 
     final filteredItems = allItems.where((item) {
       if (_searchQuery.trim().isEmpty) return false;
@@ -937,7 +942,7 @@ class _FeedScreenState extends State<FeedScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1C1C1E),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white12, width: 1),
+                border: Border.all(color: const Color(0xFFFAF096), width: 1),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(

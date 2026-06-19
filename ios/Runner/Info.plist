@@ -4,6 +4,8 @@
 <dict>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Memoria requires access to the photo library to pick images and videos for posts.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Memoria requires access to the photo library to save downloaded images and videos.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Memoria requires access to the camera to take photos and videos for posts.</string>
 	<key>NSMicrophoneUsageDescription</key>

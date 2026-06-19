@@ -67,7 +67,7 @@ class FeedHeader extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white, width: 1.0),
+                border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(

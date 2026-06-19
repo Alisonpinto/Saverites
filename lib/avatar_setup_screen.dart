@@ -22,6 +22,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
   late final Animation<Offset> _slideAnim;
 
   final TextEditingController _seedController = TextEditingController();
+  final FocusNode _seedFocus = FocusNode();
   String _currentSeed = 'memoria';
   bool _isSaving = false;
 
@@ -39,7 +40,20 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic));
 
+    _seedFocus.addListener(_onFocusChange);
+
     _entryCtrl.forward();
+  }
+
+  void _onFocusChange() {
+    if (!_seedFocus.hasFocus) {
+      final val = _seedController.text.trim();
+      if (val.isNotEmpty && val != _currentSeed) {
+        setState(() {
+          _currentSeed = val;
+        });
+      }
+    }
   }
 
   Future<void> _loadInitialSeed() async {
@@ -59,6 +73,8 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
   void dispose() {
     _entryCtrl.dispose();
     _seedController.dispose();
+    _seedFocus.removeListener(_onFocusChange);
+    _seedFocus.dispose();
     super.dispose();
   }
 
@@ -225,6 +241,7 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                       const SizedBox(height: 10),
                       TextField(
                         controller: _seedController,
+                        focusNode: _seedFocus,
                         style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
                         decoration: InputDecoration(
                           filled: true,
@@ -240,9 +257,19 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
                           ),
                         ),
                         onChanged: (val) {
+                          if (val.isNotEmpty && val.endsWith(' ')) {
+                            final trimmed = val.trim();
+                            if (trimmed != _currentSeed) {
+                              setState(() {
+                                _currentSeed = trimmed;
+                              });
+                            }
+                          }
+                        },
+                        onSubmitted: (val) {
                           if (val.isNotEmpty) {
                             setState(() {
-                              _currentSeed = val;
+                              _currentSeed = val.trim();
                             });
                           }
                         },

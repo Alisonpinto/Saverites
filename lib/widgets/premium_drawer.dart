@@ -151,17 +151,7 @@ class PremiumDrawer extends StatelessWidget {
                   onSaveItemTap();
                 },
               ),
-              const SizedBox(height: 4),
-              _DrawerItem(
-                icon: Icons.person_outline,
-                activeIcon: Icons.person,
-                label: 'Profile',
-                selected: currentTab == 3,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onTabSelected(3);
-                },
-              ),
+
 
               const Spacer(),
 

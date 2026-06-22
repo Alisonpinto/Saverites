@@ -128,6 +128,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         localImagePath: widget.userPost!.imagePath,
         localVideoPath: widget.userPost!.videoPath,
         author: username,
+        postId: widget.userPost!.id,
       );
     } else if (widget.postModel != null) {
       await ShareHelper.sharePost(
@@ -136,6 +137,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         url: url,
         assetPath: widget.postModel!.mediaAssetPath,
         author: username,
+        postId: widget.postModel!.id,
       );
     }
   }
@@ -1138,7 +1140,17 @@ Thank you for helping keep Memoria safe.
   }
 
   Future<void> _openDocumentReader(String docName) async {
-    final path = widget.userPost?.filePath;
+    String? path = widget.userPost?.filePath;
+    if (widget.userPost?.filePaths != null) {
+      for (var p in widget.userPost!.filePaths!) {
+        final name = p.split('/').last.split('\\').last;
+        if (name == docName) {
+          path = p;
+          break;
+        }
+      }
+    }
+
     if (path != null && await File(path).exists()) {
       try {
         await OpenFilex.open(path);

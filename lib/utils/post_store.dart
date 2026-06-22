@@ -36,6 +36,7 @@ class UserPost {
   // New fields for Save to Memoria workflow:
   final String? type;            // "image", "video", "document", "audio", "contact", "link", "text", "checklist", "code"
   String? filePath;        // local file path for document/audio/vcf
+  final List<String>? filePaths; // multiple local file paths for documents
   final String? contactName;     // contact full name
   final String? contactPhone;    // contact phone number
   final List<String>? contactNames;
@@ -47,6 +48,7 @@ class UserPost {
   final String? imageBase64;
   final String? videoBase64;
   final String? fileBase64;
+  final List<String>? fileBase64s;
 
   UserPost({
     required this.id,
@@ -62,6 +64,7 @@ class UserPost {
     this.charStyles,
     this.type,
     this.filePath,
+    this.filePaths,
     this.contactName,
     this.contactPhone,
     this.contactNames,
@@ -72,6 +75,7 @@ class UserPost {
     this.imageBase64,
     this.videoBase64,
     this.fileBase64,
+    this.fileBase64s,
   });
 
   Map<String, dynamic> toJson() {
@@ -109,6 +113,21 @@ class UserPost {
       }
     }
 
+    List<String>? fileB64sVals = fileBase64s;
+    if (!kIsWeb && fileB64sVals == null && filePaths != null) {
+      fileB64sVals = [];
+      for (var fp in filePaths!) {
+        final file = File(fp);
+        if (file.existsSync()) {
+          try {
+            fileB64sVals.add(base64Encode(file.readAsBytesSync()));
+          } catch (e) {
+            debugPrint("Error reading file bytes for list: $e");
+          }
+        }
+      }
+    }
+
     return {
       'id': id,
       'title': title,
@@ -123,6 +142,7 @@ class UserPost {
       'charStyles': charStyles?.map((s) => s.toJson()).toList(),
       'type': type,
       'filePath': filePath,
+      'filePaths': filePaths,
       'contactName': contactName,
       'contactPhone': contactPhone,
       'contactNames': contactNames,
@@ -133,6 +153,7 @@ class UserPost {
       'imageBase64': imgB64,
       'videoBase64': vidB64,
       'fileBase64': fileB64Val,
+      'fileBase64s': fileB64sVals,
     };
   }
 
@@ -140,6 +161,7 @@ class UserPost {
     String? imagePath = json['imagePath'] as String?;
     String? videoPath = json['videoPath'] as String?;
     String? filePath = json['filePath'] as String?;
+    List<String>? filePaths = (json['filePaths'] as List?)?.cast<String>();
 
     final imgB64 = json['imageBase64'] as String?;
     if (!kIsWeb && imgB64 != null) {
@@ -184,6 +206,24 @@ class UserPost {
       }
     }
 
+    final fileB64sVals = (json['fileBase64s'] as List?)?.cast<String>();
+    if (!kIsWeb && fileB64sVals != null) {
+      filePaths = [];
+      for (int i = 0; i < fileB64sVals.length; i++) {
+        try {
+          final ext = (json['type'] as String?) == 'document' ? 'pdf' : 'bin';
+          final filename = 'file_${json['id']}_$i.$ext';
+          final tempFile = File('${Directory.systemTemp.path}/$filename');
+          if (!tempFile.existsSync() || tempFile.lengthSync() == 0) {
+            tempFile.writeAsBytesSync(base64Decode(fileB64sVals[i]));
+          }
+          filePaths.add(tempFile.path);
+        } catch (e) {
+          debugPrint("Error recreating file from base64 list: $e");
+        }
+      }
+    }
+
     return UserPost(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -200,6 +240,7 @@ class UserPost {
           .toList(),
       type: json['type'] as String?,
       filePath: filePath,
+      filePaths: filePaths,
       contactName: json['contactName'] as String?,
       contactPhone: json['contactPhone'] as String?,
       contactNames: (json['contactNames'] as List?)?.cast<String>(),
@@ -210,6 +251,7 @@ class UserPost {
       imageBase64: imgB64,
       videoBase64: vidB64,
       fileBase64: fileB64Val,
+      fileBase64s: fileB64sVals,
     );
   }
 }
@@ -516,6 +558,7 @@ class PostStore {
           charStyles: post.charStyles,
           type: post.type,
           filePath: post.filePath,
+          filePaths: post.filePaths,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
           contactNames: post.contactNames,
@@ -526,6 +569,7 @@ class PostStore {
           imageBase64: post.imageBase64,
           videoBase64: post.videoBase64,
           fileBase64: post.fileBase64,
+          fileBase64s: post.fileBase64s,
         );
       }
       return post;
@@ -551,6 +595,7 @@ class PostStore {
           charStyles: post.charStyles,
           type: post.type,
           filePath: post.filePath,
+          filePaths: post.filePaths,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
           contactNames: post.contactNames,
@@ -561,6 +606,7 @@ class PostStore {
           imageBase64: post.imageBase64,
           videoBase64: post.videoBase64,
           fileBase64: post.fileBase64,
+          fileBase64s: post.fileBase64s,
         );
       }
       return post;
@@ -587,6 +633,7 @@ class PostStore {
           charStyles: post.charStyles,
           type: post.type,
           filePath: post.filePath,
+          filePaths: post.filePaths,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
           contactNames: post.contactNames,
@@ -597,6 +644,7 @@ class PostStore {
           imageBase64: post.imageBase64,
           videoBase64: post.videoBase64,
           fileBase64: post.fileBase64,
+          fileBase64s: post.fileBase64s,
         );
       }
       return post;
@@ -630,6 +678,7 @@ class PostStore {
           charStyles: charStyles,
           type: post.type,
           filePath: post.filePath,
+          filePaths: post.filePaths,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
           contactNames: post.contactNames,
@@ -640,6 +689,7 @@ class PostStore {
           imageBase64: post.imageBase64,
           videoBase64: post.videoBase64,
           fileBase64: post.fileBase64,
+          fileBase64s: post.fileBase64s,
         );
       }
       return post;

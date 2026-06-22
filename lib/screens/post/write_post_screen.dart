@@ -260,14 +260,16 @@ class _WritePostScreenState extends State<WritePostScreen>
         _checklistStatesList.addAll(post.checklistStates!);
       }
 
-      if (post.type == 'document' && post.filePath != null) {
-        final path = post.filePath!;
-        final name = path.split('/').last.split('\\').last;
-        _attachedItems.add(_AttachItem.document(
-          name: name,
-          path: path,
-          extension: path.split('.').last.toUpperCase(),
-        ));
+      if (post.type == 'document') {
+        final paths = post.filePaths ?? (post.filePath != null ? [post.filePath!] : []);
+        for (var path in paths) {
+          final name = path.split('/').last.split('\\').last;
+          _attachedItems.add(_AttachItem.document(
+            name: name,
+            path: path,
+            extension: path.split('.').last.toUpperCase(),
+          ));
+        }
       } else if (post.type == 'audio' && post.filePath != null) {
         _attachedItems.add(_AttachItem.audio(
           duration: post.duration,
@@ -749,21 +751,22 @@ class _WritePostScreenState extends State<WritePostScreen>
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
-        allowMultiple: false,
+        allowMultiple: true,
         withData: false,
       );
 
       if (result != null && result.files.isNotEmpty && mounted) {
-        final file = result.files.single;
-        if (file.path != null) {
-          setState(() {
-            _attachedItems.add(_AttachItem.document(
-              name: file.name,
-              path: file.path!,
-              extension: file.extension?.toUpperCase(),
-            ));
-          });
-        }
+        setState(() {
+          for (var file in result.files) {
+            if (file.path != null) {
+              _attachedItems.add(_AttachItem.document(
+                name: file.name,
+                path: file.path!,
+                extension: file.extension?.toUpperCase(),
+              ));
+            }
+          }
+        });
       }
     } catch (e) {
       debugPrint("Error picking file: $e");
@@ -1343,6 +1346,7 @@ class _WritePostScreenState extends State<WritePostScreen>
     }
 
     String? resolvedFilePath = _sharedFilePath;
+    List<String> resolvedFilePaths = [];
     String? resolvedContactName = _contactName;
     String? resolvedContactPhone = _contactPhone;
     String? resolvedDuration = _audioDuration;
@@ -1354,6 +1358,8 @@ class _WritePostScreenState extends State<WritePostScreen>
         if (item.type == _AttachType.contact) {
           resolvedContactNames.add(item.name);
           resolvedContactPhones.add(item.phone ?? '');
+        } else if (item.type == _AttachType.document && item.path != null) {
+          resolvedFilePaths.add(item.path!);
         }
       }
 
@@ -1386,6 +1392,7 @@ class _WritePostScreenState extends State<WritePostScreen>
       charStyles: _serializeCharStyles(),
       type: resolvedType,
       filePath: resolvedFilePath,
+      filePaths: resolvedFilePaths.isNotEmpty ? resolvedFilePaths : null,
       contactName: resolvedContactName,
       contactPhone: resolvedContactPhone,
       contactNames: resolvedContactNames.isNotEmpty ? resolvedContactNames : null,
@@ -1614,32 +1621,42 @@ class _WritePostScreenState extends State<WritePostScreen>
     );
   }
 
-  Widget _buildLinkInput() {
-    return TextField(
-      controller: _urlController,
-      readOnly: !_isEditingMode,
-      maxLines: 1,
-      keyboardType: TextInputType.url,
-      style: GoogleFonts.inter(
-        color: Colors.white,
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-      ),
-      decoration: InputDecoration(
-        hintText: 'add a link',
-        hintStyle: GoogleFonts.inter(
-          color: const Color(0xFF7C7C81),
-          fontSize: 16,
-          fontWeight: FontWeight.w400,
-        ),
-        prefixIcon: const Padding(
-          padding: EdgeInsets.only(right: 8.0),
-          child: Icon(Icons.link, color: Color(0xFF7C7C81), size: 20),
-        ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.zero,
-      ),
+  void _openLinkDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1E),
+          title: Text('Add Link', style: GoogleFonts.inter(color: Colors.white)),
+          content: TextField(
+            controller: _urlController,
+            style: GoogleFonts.inter(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'https://...',
+              hintStyle: GoogleFonts.inter(color: Colors.white54),
+              filled: true,
+              fillColor: const Color(0xFF2C2C2E),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {});
+                Navigator.pop(context);
+              },
+              child: Text('Save', style: GoogleFonts.inter(color: const Color(0xFFFAF096))),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1670,8 +1687,39 @@ class _WritePostScreenState extends State<WritePostScreen>
                   const SizedBox(height: 10),
                   _buildBodyInput(resolvedType),
                   const SizedBox(height: 10),
-                  if (!widget.isSaveItem) ...[
-                    _buildLinkInput(),
+                  if (_urlController.text.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C2C2E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.link, color: Color(0xFF8E8E93), size: 16),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _urlController.text,
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFF8E8E93),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_isEditingMode) ...[
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => setState(() => _urlController.clear()),
+                              child: const Icon(Icons.close, color: Color(0xFF8E8E93), size: 16),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 10),
                   ],
 
@@ -1923,6 +1971,16 @@ class _WritePostScreenState extends State<WritePostScreen>
                         icon: Icon(
                           Icons.text_format_rounded,
                           color: _isFormattingToolOpen ? const Color(0xFFFAF096) : Colors.white,
+                          size: 22,
+                        ),
+                        splashRadius: 20,
+                      ),
+                      // Add Link Button
+                      IconButton(
+                        onPressed: _openLinkDialog,
+                        icon: Icon(
+                          Icons.link,
+                          color: _urlController.text.isNotEmpty ? const Color(0xFFFAF096) : Colors.white,
                           size: 22,
                         ),
                         splashRadius: 20,

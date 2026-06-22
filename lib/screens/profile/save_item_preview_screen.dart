@@ -41,46 +41,55 @@ class SaveItemPreviewScreen extends StatelessWidget {
         }
         break;
       case 'document':
-        final path = post.filePath;
-        final name = path != null ? path.split('/').last.split('\\').last : 'Document';
-        if (path != null && name.toLowerCase().endsWith('.pdf') && File(path).existsSync()) {
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.65,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF2C2C2E)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SfPdfViewer.file(File(path)),
-            ),
+        final paths = post.filePaths ?? (post.filePath != null ? [post.filePath!] : []);
+        if (paths.isNotEmpty) {
+          return Column(
+            children: paths.map((path) {
+              final name = path.split('/').last.split('\\').last;
+              if (name.toLowerCase().endsWith('.pdf') && File(path).existsSync()) {
+                return Container(
+                  height: MediaQuery.of(context).size.height * 0.65,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF2C2C2E)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SfPdfViewer.file(File(path)),
+                  ),
+                );
+              }
+              return Container(
+                padding: const EdgeInsets.all(20),
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1E),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF2C2C2E)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.description_outlined, color: Colors.blue, size: 40),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           );
         }
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2C2C2E)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.description_outlined, color: Colors.blue, size: 40),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  name,
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
+        return const SizedBox.shrink();
       case 'contact':
         if (post.contactNames != null && post.contactNames!.isNotEmpty) {
           return Container(

@@ -3,22 +3,105 @@ import 'package:get/get.dart';
 import 'splash_screen.dart';
 import 'utils/notification_manager.dart';
 
+import 'dart:async';
+import 'package:app_links/app_links.dart';
+import 'utils/post_store.dart';
+import 'screens/post_detail/post_detail_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationManager.instance.init();
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  // This widget is the root of your application.
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeepLinks();
+  }
+
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle initial URI (app started from deep link)
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri);
+      }
+    } catch (e) {
+      debugPrint('Failed to get initial deep link: $e');
+    }
+
+    // Handle incoming URIs while app is open
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      _handleDeepLink(uri);
+    }, onError: (err) {
+      debugPrint('Deep link error: $err');
+    });
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.scheme == 'memoria' && uri.host == 'post') {
+      final String? postId = uri.queryParameters['id'];
+      if (postId != null) {
+        _navigateToPost(postId);
+      }
+    }
+  }
+
+  void _navigateToPost(String postId) async {
+    // Wait briefly if PostStore is still initializing (e.g., from cold start)
+    int retries = 0;
+    while (PostStore.instance.posts.isEmpty && retries < 6) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      retries++;
+    }
+
+    final userPost = PostStore.instance.posts.where((p) => p.id == postId).firstOrNull;
+    if (userPost != null) {
+      final context = MyApp.navigatorKey.currentContext;
+      if (context != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PostDetailScreen(userPost: userPost),
+          ),
+        );
+      }
+    } else {
+      final context = MyApp.navigatorKey.currentContext;
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Post not found or is no longer available.')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      navigatorKey: navigatorKey,
+      navigatorKey: MyApp.navigatorKey,
       title: 'Memoria',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),

@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:share_plus/share_plus.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:path_provider/path_provider.dart';
 import 'notification_manager.dart';
 
 class ShareHelper {
@@ -20,6 +22,7 @@ class ShareHelper {
     String? localVideoPath,
     String? assetPath,
     String? author,
+    String? postId,
   }) async {
     final bool hasUrl = url != null && url.trim().isNotEmpty;
 
@@ -35,43 +38,59 @@ class ShareHelper {
       textParts.add(url.trim());
     }
     
+    textParts.add('—\nShared via Memoria');
+    
     final String shareText = textParts.join('\n\n');
 
     try {
       String? filePathToShare;
 
-      // If a URL is present, share it as a text link to trigger rich link previews in messaging apps.
-      if (!hasUrl) {
-        // 1. Check local video path
-        if (localVideoPath != null && localVideoPath.isNotEmpty) {
-          final file = File(localVideoPath);
-          if (await file.exists()) {
+      // 1. Check local video path
+      if (localVideoPath != null && localVideoPath.isNotEmpty) {
+        final file = File(localVideoPath);
+        if (await file.exists()) {
+          try {
+            final tempDir = await getTemporaryDirectory();
+            final thumbPath = await VideoThumbnail.thumbnailFile(
+              video: localVideoPath,
+              thumbnailPath: tempDir.path,
+              imageFormat: ImageFormat.JPEG,
+              maxHeight: 1024,
+              quality: 75,
+            );
+            if (thumbPath != null) {
+              filePathToShare = thumbPath;
+            } else {
+              filePathToShare = localVideoPath;
+            }
+          } catch (e) {
+            debugPrint('Failed to generate video thumbnail: $e');
             filePathToShare = localVideoPath;
           }
         }
-        // 2. Check local image path (if no video was resolved)
-        if (filePathToShare == null && localImagePath != null && localImagePath.isNotEmpty) {
-          final file = File(localImagePath);
-          if (await file.exists()) {
-            filePathToShare = localImagePath;
-          }
+      }
+      // 2. Check local image path (if no video was resolved)
+      if (filePathToShare == null && localImagePath != null && localImagePath.isNotEmpty) {
+        final file = File(localImagePath);
+        if (await file.exists()) {
+          filePathToShare = localImagePath;
         }
-        // 3. Check asset path (predefined media assets)
-        if (filePathToShare == null && assetPath != null && assetPath.isNotEmpty) {
-          try {
-            final ByteData byteData = await rootBundle.load(assetPath);
-            final Directory tempDir = Directory.systemTemp;
-            final String fileName = assetPath.split('/').last;
-            final File file = File('${tempDir.path}/shared_post_asset_$fileName');
-            
-            await file.writeAsBytes(byteData.buffer.asUint8List(
-              byteData.offsetInBytes,
-              byteData.lengthInBytes,
-            ));
-            filePathToShare = file.path;
-          } catch (assetError) {
-            debugPrint('Error loading asset for sharing ($assetPath): $assetError');
-          }
+      }
+      // 3. Check asset path (predefined media assets)
+      if (filePathToShare == null && assetPath != null && assetPath.isNotEmpty) {
+        try {
+          final ByteData byteData = await rootBundle.load(assetPath);
+          final Directory tempDir = Directory.systemTemp;
+          final String fileName = assetPath.split('/').last;
+          final File file = File('${tempDir.path}/shared_post_asset_$fileName');
+          
+          await file.writeAsBytes(byteData.buffer.asUint8List(
+            byteData.offsetInBytes,
+            byteData.lengthInBytes,
+          ));
+          filePathToShare = file.path;
+        } catch (assetError) {
+          debugPrint('Error loading asset for sharing ($assetPath): $assetError');
         }
       }
 

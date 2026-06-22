@@ -1656,6 +1656,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 localImagePath: item.imagePath,
                 localVideoPath: item.videoPath,
                 author: 'You',
+                postId: item.id,
               );
             } else {
               await ShareHelper.sharePost(
@@ -1664,6 +1665,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 url: item.url,
                 assetPath: item.mediaAssetPath,
                 author: item.username ?? 'Unknown',
+                postId: (item as PostModel).id,
               );
             }
           },

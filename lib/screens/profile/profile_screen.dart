@@ -1464,9 +1464,11 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
               ),
       );
     } else if (resolvedType == 'document') {
-      final path = post.filePath;
-      final name = path != null ? path.split('/').last.split('\\').last : 'document.pdf';
-      final isPdf = name.toLowerCase().endsWith('.pdf');
+      final paths = post.filePaths ?? (post.filePath != null ? [post.filePath!] : []);
+      final name = paths.length > 1 
+          ? '${paths.length} Documents' 
+          : (paths.isNotEmpty ? paths.first.split('/').last.split('\\').last : 'document.pdf');
+      final isPdf = paths.isNotEmpty && paths.first.toLowerCase().endsWith('.pdf');
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -1508,7 +1510,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    isPdf ? 'PDF Document' : 'Text Document',
+                    paths.length > 1 ? 'Multiple Documents' : (isPdf ? 'PDF Document' : 'Text Document'),
                     style: GoogleFonts.inter(
                       color: const Color(0xFFAEAEB2),
                       fontSize: 10,
@@ -2083,6 +2085,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                 localImagePath: post.imagePath,
                 localVideoPath: post.videoPath,
                 author: 'You',
+                postId: post.id,
               );
             } else {
               final post = widget.item as PostModel;
@@ -2092,6 +2095,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                 url: post.url,
                 assetPath: post.mediaAssetPath,
                 author: post.username ?? 'Unknown',
+                postId: post.id,
               );
             }
           },

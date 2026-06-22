@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../widgets/parsed_text_with_code_blocks.dart';
 import '../../utils/translation_manager.dart';
 import '../../models/post_model.dart';
 import '../../widgets/app_bottom_navigation.dart';
@@ -207,7 +208,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   final TextEditingController _searchController = TextEditingController();
   String _profileSearchQuery = "";
-  String _activeCategoryChip = "Recent";
+  String _activeCategoryChip = "All";
+  String _activeSocialCategoryChip = "POST";
 
   bool get _isMyProfile {
     final currentUser = UserStore.instance.currentUser;
@@ -236,7 +238,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildCategoryChips() {
-    final categories = ['Recent', 'Documents', 'Media', 'Contacts', 'Audio', 'Ideas'];
+    final categories = ['All', 'Documents', 'Media', 'Contacts', 'Audio', 'Ideas'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -251,29 +253,70 @@ class _ProfileScreenState extends State<ProfileScreen>
                   _activeCategoryChip = cat;
                 });
               },
+              behavior: HitTestBehavior.opaque,
               child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: const EdgeInsets.only(right: 24),
+                padding: const EdgeInsets.only(bottom: 6),
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? Colors.white : const Color(0xFF2D2D30),
-                    width: 1.0,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isSelected ? Colors.white : Colors.transparent,
+                      width: 2.0,
+                    ),
                   ),
                 ),
                 child: Text(
                   cat,
                   style: GoogleFonts.inter(
-                    color: isSelected ? Colors.black : const Color(0xFF8E8E93),
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    color: isSelected ? Colors.white : const Color(0xFF7C7C81),
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
               ),
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSocialCategoryChips() {
+    final categories = ['POST', 'FEED SAVE'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: categories.map((cat) {
+          final isSelected = _activeSocialCategoryChip == cat;
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _activeSocialCategoryChip = cat;
+              });
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              margin: const EdgeInsets.only(right: 24),
+              padding: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isSelected ? Colors.white : Colors.transparent,
+                    width: 2.0,
+                  ),
+                ),
+              ),
+              child: Text(
+                cat,
+                style: GoogleFonts.inter(
+                  color: isSelected ? Colors.white : const Color(0xFF7C7C81),
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -360,6 +403,16 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  String _getJoinedDate() {
+    if (!_isMyProfile) return 'Joined 15 Jun 2024';
+    final createdAt = UserStore.instance.currentUser?.createdAt ?? 0;
+    if (createdAt == 0) return 'Joined 1 Jan 2024';
+    final date = DateTime.fromMillisecondsSinceEpoch(createdAt);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final monthStr = (date.month >= 1 && date.month <= 12) ? months[date.month - 1] : '';
+    return 'Joined ${date.day} $monthStr ${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = UserStore.instance.currentUser;
@@ -394,7 +447,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             systemNavigationBarIconBrightness: Brightness.light,
           ),
           child: Scaffold(
-            backgroundColor: Colors.black,
+            backgroundColor: Colors.transparent,
             extendBodyBehindAppBar: true,
             body: Stack(
               children: [
@@ -627,7 +680,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            '20 june 024',
+                                            _getJoinedDate(),
                                             style: GoogleFonts.inter(
                                               color: const Color(0xFF7C7C81),
                                               fontSize: 14,
@@ -721,9 +774,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ),
 
-                              if (_activeTab == 1) ...[
+                              if (_activeTab == 0) ...[
                                 const SizedBox(height: 16),
                                 _buildCategoryChips(),
+                              ] else if (_activeTab == 1 && _isMyProfile) ...[
+                                const SizedBox(height: 16),
+                                _buildSocialCategoryChips(),
                               ],
 
                               const SizedBox(height: 18),
@@ -767,45 +823,86 @@ class _ProfileScreenState extends State<ProfileScreen>
     final bool isMyProfile = _isMyProfile;
     final query = _profileSearchQuery.toLowerCase().trim();
 
-    if (_activeTab == 0) {
+    if (_activeTab == 1) {
       if (isMyProfile) {
-        return ValueListenableBuilder<Set<String>>(
-          valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
-          builder: (context, savedSocialIds, _) {
-            final savedPredefined = PostStore.predefinedPosts
-                .where((p) => savedSocialIds.contains(p.id))
-                .toList();
-            final savedPublicUserPosts = PostStore.instance.posts
-                .where((p) => !p.savedInProfile && savedSocialIds.contains(p.id))
-                .toList();
-            var savedSocial = [...savedPredefined, ...savedPublicUserPosts];
-
-            if (query.isNotEmpty) {
-              savedSocial = savedSocial.where((item) {
-                if (item is UserPost) {
+        if (_activeSocialCategoryChip == 'POST') {
+          return ValueListenableBuilder<List<UserPost>>(
+            valueListenable: PostStore.instance.postsNotifier,
+            builder: (context, postsList, _) {
+              var userPublicPosts = postsList.where((p) => !p.savedInProfile).toList();
+              
+              if (query.isNotEmpty) {
+                userPublicPosts = userPublicPosts.where((item) {
                   return item.title.toLowerCase().contains(query) ||
                          item.body.toLowerCase().contains(query) ||
                          (item.url?.toLowerCase().contains(query) ?? false);
-                } else if (item is PostModel) {
+                }).toList();
+              }
+              
+              if (userPublicPosts.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Text(
+                      'No public posts found.',
+                      style: GoogleFonts.inter(color: const Color(0xFF7C7C81), fontSize: 14),
+                    ),
+                  ),
+                );
+              }
+
+              return ProfileMasonryGrid(
+                items: userPublicPosts, 
+                isOnline: _isOnline,
+                isSelectionMode: _isSelectionMode,
+                selectedIds: _selectedIds,
+                onSelectToggle: _toggleSelection,
+                onLongPress: _onLongPress,
+              );
+            },
+          );
+        } else {
+          // FEED SAVE
+          return ValueListenableBuilder<Set<String>>(
+            valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
+            builder: (context, savedSocialIds, _) {
+              final savedPredefined = PostStore.predefinedPosts
+                  .where((p) => savedSocialIds.contains(p.id))
+                  .toList();
+              var savedSocial = [...savedPredefined];
+
+              if (query.isNotEmpty) {
+                savedSocial = savedSocial.where((item) {
                   return (item.title?.toLowerCase().contains(query) ?? false) ||
                          (item.description?.toLowerCase().contains(query) ?? false) ||
                          (item.username?.toLowerCase().contains(query) ?? false) ||
                          (item.url?.toLowerCase().contains(query) ?? false);
-                }
-                return false;
-              }).toList();
-            }
+                }).toList();
+              }
 
-            return ProfileMasonryGrid(
-              items: savedSocial, 
-              isOnline: _isOnline,
-              isSelectionMode: _isSelectionMode,
-              selectedIds: _selectedIds,
-              onSelectToggle: _toggleSelection,
-              onLongPress: _onLongPress,
-            );
-          },
-        );
+              if (savedSocial.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Text(
+                      'No saved feed items.',
+                      style: GoogleFonts.inter(color: const Color(0xFF7C7C81), fontSize: 14),
+                    ),
+                  ),
+                );
+              }
+
+              return ProfileMasonryGrid(
+                items: savedSocial, 
+                isOnline: _isOnline,
+                isSelectionMode: _isSelectionMode,
+                selectedIds: _selectedIds,
+                onSelectToggle: _toggleSelection,
+                onLongPress: _onLongPress,
+              );
+            },
+          );
+        }
       } else {
         var friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
         if (query.isNotEmpty) {
@@ -994,7 +1091,7 @@ class _PremiumTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const tabs = ['Social save', 'Self save'];
+    const tabs = ['Self save', 'Social save'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -1307,9 +1404,8 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
       post.imagePath != null ? 'image' : (
       post.videoPath != null ? 'video' : (
       post.url != null ? 'link' : (
-      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : (
-      post.body.contains('```') ? 'code' : 'text'
-    )))));
+      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : 'text'
+    ))));
 
     if (resolvedType == 'image') {
       final path = post.imagePath;
@@ -1374,25 +1470,27 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
         child: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: isPdf ? Colors.redAccent.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
               ),
               child: Icon(
-                isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
-                color: isPdf ? Colors.redAccent : Colors.blue,
-                size: 18,
+                isPdf ? Icons.picture_as_pdf_rounded : Icons.description_rounded,
+                color: Colors.white,
+                size: 20,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1402,18 +1500,18 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                     name,
                     style: GoogleFonts.inter(
                       color: Colors.white,
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
-                    isPdf ? 'PDF' : 'DOC',
+                    isPdf ? 'PDF Document' : 'Text Document',
                     style: GoogleFonts.inter(
-                      color: const Color(0xFF7C7C81),
-                      fontSize: 9,
+                      color: const Color(0xFFAEAEB2),
+                      fontSize: 10,
                     ),
                   ),
                 ],
@@ -1425,23 +1523,43 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
     } else if (resolvedType == 'contact') {
       final name = post.contactName ?? 'Unknown';
       final phone = post.contactPhone ?? 'No number';
+      final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+      final gradients = [
+        [const Color(0xFF7B61FF), const Color(0xFF4A90E2)],
+        [const Color(0xFFE24A6A), const Color(0xFFFF8A00)],
+        [const Color(0xFF2ECC71), const Color(0xFF1ABC9C)],
+      ];
+      final grad = gradients[name.codeUnitAt(0) % gradients.length];
+
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFE5E5EA),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
         child: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFF8E8E93),
+                color: Colors.transparent,
+                border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1450,8 +1568,8 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                   Text(
                     name,
                     style: GoogleFonts.inter(
-                      color: Colors.black,
-                      fontSize: 12,
+                      color: Colors.white,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
@@ -1461,9 +1579,9 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                   Text(
                     phone,
                     style: GoogleFonts.inter(
-                      color: const Color(0xFF555555),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w400,
+                      color: const Color(0xFFAEAEB2),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1476,25 +1594,34 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
       );
     } else if (resolvedType == 'audio') {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
         child: Row(
           children: [
-            const Icon(Icons.mic, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.mic_rounded, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
             Expanded(
               child: SizedBox(
-                height: 14,
+                height: 16,
                 child: CustomPaint(
-                  painter: MiniWaveformPainter(),
+                  painter: MiniWaveformPainter(activeColor: Colors.white, inactiveColor: Colors.white24),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            const Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 28),
           ],
         ),
       );
@@ -1504,21 +1631,23 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
         child: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: Colors.purpleAccent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
               ),
-              child: const Icon(Icons.link_rounded, color: Colors.purpleAccent, size: 16),
+              child: const Icon(Icons.link_rounded, color: Colors.white, size: 20),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1528,18 +1657,18 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                     url,
                     style: GoogleFonts.inter(
                       color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     domain,
                     style: GoogleFonts.inter(
-                      color: const Color(0xFF7C7C81),
-                      fontSize: 9,
+                      color: const Color(0xFFAEAEB2),
+                      fontSize: 10,
                     ),
                   ),
                 ],
@@ -1551,11 +1680,12 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
     } else if (resolvedType == 'checklist') {
       final itemsList = post.checklistItems ?? [];
       return Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFFE5E5EA),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1563,27 +1693,33 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
           children: [
             for (int i = 0; i < math.min(itemsList.length, 5); i++)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
-                        shape: BoxShape.circle,
+                      margin: const EdgeInsets.only(top: 2),
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.check, size: 10, color: Colors.white),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         itemsList[i],
                         style: GoogleFonts.inter(
-                          color: Colors.black,
-                          fontSize: 11,
+                          color: const Color(0xFFD1D1D6),
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1595,41 +1731,81 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
       );
     } else if (resolvedType == 'code') {
       return Container(
-        padding: const EdgeInsets.all(12),
         width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFFE5E5EA),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
-        child: Text(
-          post.body.trim().isNotEmpty ? post.body.trim() : 'hello world',
-          style: const TextStyle(
-            fontFamily: 'Cascadia Code',
-            color: Color(0xFFB71C1C),
-            fontSize: 11,
-          ),
-          maxLines: 6,
-          overflow: TextOverflow.ellipsis,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                border: Border(bottom: BorderSide(color: const Color(0xFFFAF096), width: 1.0)),
+              ),
+              child: Row(
+                children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.transparent, border: Border.all(color: const Color(0xFFFAF096), width: 1), shape: BoxShape.circle)),
+                  const SizedBox(width: 6),
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.transparent, border: Border.all(color: const Color(0xFFFAF096), width: 1), shape: BoxShape.circle)),
+                  const SizedBox(width: 6),
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: Colors.transparent, border: Border.all(color: const Color(0xFFFAF096), width: 1), shape: BoxShape.circle)),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Code Snippet',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: ParsedTextWithCodeBlocks(
+                text: post.body,
+                charStyles: post.charStyles,
+                isPreviewMode: true,
+                defaultStyle: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
+                maxLinesForText: 5,
+                overflowForText: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       );
     } else {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2E),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
         ),
         alignment: Alignment.topLeft,
-        child: RichTextController.buildRichText(
-          post.body,
-          post.charStyles,
+        child: ParsedTextWithCodeBlocks(
+          text: post.body,
+          charStyles: post.charStyles,
+          isPreviewMode: true,
           defaultStyle: GoogleFonts.inter(
-            color: const Color(0xFFAEAEB2),
-            fontSize: 11,
-            fontWeight: FontWeight.w300,
+            color: const Color(0xFFD1D1D6),
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            height: 1.4,
           ),
-          maxLines: 5,
-          overflow: TextOverflow.ellipsis,
+          maxLinesForText: 6,
+          overflowForText: TextOverflow.ellipsis,
         ),
       );
     }
@@ -1645,6 +1821,25 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
         widget.onSelectToggle();
         return;
       }
+
+      if (widget.item is UserPost && (widget.item as UserPost).savedInProfile) {
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, _, _) => WritePostScreen(
+              isSaveItem: true,
+              editingPost: widget.item as UserPost,
+            ),
+            transitionsBuilder: (context, animation, _, child) => FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
+        return;
+      }
+
       Navigator.push(
         context,
         PageRouteBuilder(
@@ -1722,20 +1917,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                 ),
               ),
               const SizedBox(height: 4),
-              if (post.body.isNotEmpty && post.type != 'code' && post.type != 'checklist')
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    post.body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFFC7C7CC),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ),
+
               Padding(
                 padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12, top: 8),
                 child: Align(
@@ -1766,7 +1948,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
                   child: const Icon(
                     Icons.check,
                     size: 16,
-                    color: Colors.black,
+                    color: Colors.transparent,
                   ),
                 ),
               ),
@@ -1805,41 +1987,7 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
               width: double.infinity,
             );
           } else {
-            mediaWidget = Container(
-              height: 120,
-              padding: const EdgeInsets.all(12),
-              color: const Color(0xFF2A2A2E),
-              alignment: Alignment.topLeft,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    post.title.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: Text(
-                      post.body,
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFFAEAEB2),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w300,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+            mediaWidget = _buildVaultPreviewWidget(post);
           }
         } else {
           final post = widget.item as PostModel;
@@ -2132,10 +2280,19 @@ class ArrowPainter2 extends CustomPainter {
 
 
 class MiniWaveformPainter extends CustomPainter {
+  final Color? activeColor;
+  final Color? inactiveColor;
+
+  MiniWaveformPainter({this.activeColor, this.inactiveColor});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF8E8E93)
+      ..color = inactiveColor ?? const Color(0xFF8E8E93)
+      ..style = PaintingStyle.fill;
+    
+    final activePaint = Paint()
+      ..color = activeColor ?? const Color(0xFF8E8E93)
       ..style = PaintingStyle.fill;
     
     const int barCount = 12;
@@ -2154,7 +2311,7 @@ class MiniWaveformPainter extends CustomPainter {
           Rect.fromLTWH(x, y, barWidth, h),
           const Radius.circular(1),
         ),
-        paint,
+        i < barCount / 3 ? activePaint : paint,
       );
     }
   }

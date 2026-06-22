@@ -1,12 +1,15 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../utils/post_store.dart';
 import '../../utils/user_store.dart';
@@ -42,15 +45,34 @@ class _AttachItem {
         extension = null,
         duration = null;
 
-  _AttachItem.audio({required this.duration})
+  _AttachItem.audio({required this.duration, this.path, this.name = 'Audio Recording'})
       : type = _AttachType.audio,
-        name = 'Audio Recording',
-        path = null,
         extension = null,
         phone = null;
 }
 
+class EditorBlock {
+  final String type; // 'text' or 'code'
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  String lang;
+
+  EditorBlock({
+    required this.type,
+    TextEditingController? controller,
+    FocusNode? focusNode,
+    this.lang = 'Text',
+  })  : controller = controller ?? (type == 'text' ? RichTextController() : TextEditingController()),
+        focusNode = focusNode ?? FocusNode();
+
+  void dispose() {
+    controller.dispose();
+    focusNode.dispose();
+  }
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
+
 
 class WritePostScreen extends StatefulWidget {
   final bool isSaveItem;
@@ -66,11 +88,41 @@ class WritePostScreen extends StatefulWidget {
 class _WritePostScreenState extends State<WritePostScreen>
     with TickerProviderStateMixin {
   final _titleController = TextEditingController();
-  final _bodyController = RichTextController();
   final _urlController = TextEditingController();
 
   final _titleFocusNode = FocusNode();
-  final _bodyFocusNode = FocusNode();
+  
+  final List<EditorBlock> _blocks = [EditorBlock(type: 'text')];
+
+  RichTextController get _activeTextController {
+    for (var b in _blocks) {
+      if (b.type == 'text' && b.focusNode.hasFocus) {
+        return b.controller as RichTextController;
+      }
+    }
+    for (var b in _blocks) {
+      if (b.type == 'text') return b.controller as RichTextController;
+    }
+    if (_blocks.isEmpty) {
+      _blocks.add(EditorBlock(type: 'text'));
+    }
+    return _blocks.first.controller as RichTextController;
+  }
+
+  FocusNode get _activeFocusNode {
+    for (var b in _blocks) {
+      if (b.type == 'text' && b.focusNode.hasFocus) {
+        return b.focusNode;
+      }
+    }
+    for (var b in _blocks) {
+      if (b.type == 'text') return b.focusNode;
+    }
+    if (_blocks.isEmpty) {
+      _blocks.add(EditorBlock(type: 'text'));
+    }
+    return _blocks.first.focusNode;
+  }
 
   bool _saveInProfile = false;
   String? _pickedImagePath;
@@ -91,6 +143,57 @@ class _WritePostScreenState extends State<WritePostScreen>
   String? _audioDuration;
   final List<String> _checklistItemsList = [];
   final List<bool> _checklistStatesList = [];
+
+  EditorBlock _createCodeBlockFromRaw(String rawCode) {
+    String lang = 'Text';
+    String codeContent = rawCode;
+    final firstLineEnd = rawCode.indexOf('\n');
+    if (firstLineEnd != -1) {
+      final firstLine = rawCode.substring(0, firstLineEnd).trim();
+      if (firstLine.isNotEmpty && !firstLine.contains(' ') && firstLine.length < 15) {
+        lang = firstLine;
+        codeContent = rawCode.substring(firstLineEnd + 1);
+      }
+    }
+    return EditorBlock(type: 'code', lang: lang, controller: TextEditingController(text: codeContent.trim()));
+  }
+
+  void _parseBodyToBlocks(String body, [List<RichStyle>? charStyles]) {
+    _blocks.clear();
+    if (!body.contains('```')) {
+      final ctrl = RichTextController()..text = body;
+      if (charStyles != null) ctrl.charStyles.addAll(charStyles);
+      _blocks.add(EditorBlock(type: 'text', controller: ctrl));
+      return;
+    }
+    
+    int start = 0;
+    while (start < body.length) {
+      int codeStart = body.indexOf('```', start);
+      if (codeStart == -1) {
+        String text = body.substring(start);
+        if (text.isNotEmpty || _blocks.isEmpty) {
+          _blocks.add(EditorBlock(type: 'text', controller: RichTextController()..text = text));
+        }
+        break;
+      }
+      
+      if (codeStart > start) {
+        _blocks.add(EditorBlock(type: 'text', controller: RichTextController()..text = body.substring(start, codeStart)));
+      }
+      
+      int codeEnd = body.indexOf('```', codeStart + 3);
+      if (codeEnd == -1) {
+        String rawCode = body.substring(codeStart + 3);
+        _blocks.add(_createCodeBlockFromRaw(rawCode));
+        break;
+      } else {
+        String rawCode = body.substring(codeStart + 3, codeEnd);
+        _blocks.add(_createCodeBlockFromRaw(rawCode));
+        start = codeEnd + 3;
+      }
+    }
+  }
 
   Future<void> _parseAndLoadVcf(String path) async {
     try {
@@ -129,21 +232,19 @@ class _WritePostScreenState extends State<WritePostScreen>
   late Animation<Offset> _plusMenuSlide;
   bool _isPlusMenuOpen = false;
   bool _isFormattingToolOpen = false;
+  late bool _isEditingMode;
 
   @override
   void initState() {
     super.initState();
     _saveInProfile = widget.isSaveItem;
+    _isEditingMode = widget.editingPost == null;
 
     if (widget.editingPost != null) {
       final post = widget.editingPost!;
       _saveInProfile = post.savedInProfile;
       _titleController.text = post.title;
-      _bodyController.text = post.body;
-      if (post.charStyles != null) {
-        _bodyController.charStyles.clear();
-        _bodyController.charStyles.addAll(post.charStyles!);
-      }
+      _parseBodyToBlocks(post.body, post.charStyles);
       if (post.url != null) _urlController.text = post.url!;
       if (post.imagePath != null) _pickedImagePath = post.imagePath;
       if (post.videoPath != null) _pickedVideoPath = post.videoPath;
@@ -157,6 +258,34 @@ class _WritePostScreenState extends State<WritePostScreen>
       if (post.checklistItems != null && post.checklistStates != null) {
         _checklistItemsList.addAll(post.checklistItems!);
         _checklistStatesList.addAll(post.checklistStates!);
+      }
+
+      if (post.type == 'document' && post.filePath != null) {
+        final path = post.filePath!;
+        final name = path.split('/').last.split('\\').last;
+        _attachedItems.add(_AttachItem.document(
+          name: name,
+          path: path,
+          extension: path.split('.').last.toUpperCase(),
+        ));
+      } else if (post.type == 'audio' && post.filePath != null) {
+        _attachedItems.add(_AttachItem.audio(
+          duration: post.duration,
+        ));
+      } else if (post.type == 'contact') {
+        if (post.contactNames != null && post.contactPhones != null) {
+          for (int i = 0; i < post.contactNames!.length; i++) {
+            _attachedItems.add(_AttachItem.contact(
+              name: post.contactNames![i],
+              phone: post.contactPhones![i],
+            ));
+          }
+        } else {
+          _attachedItems.add(_AttachItem.contact(
+            name: post.contactName ?? 'Contact',
+            phone: post.contactPhone,
+          ));
+        }
       }
     } else if (widget.sharedData != null) {
       _saveInProfile = true; // Shared content is private (Save an Item) by default
@@ -187,11 +316,11 @@ class _WritePostScreenState extends State<WritePostScreen>
         } else if (text.contains('```')) {
           _sharedType = 'code';
           _titleController.text = 'Shared Code';
-          _bodyController.text = text;
+          _parseBodyToBlocks(text);
         } else {
           _sharedType = 'text';
           _titleController.text = 'Shared Idea';
-          _bodyController.text = text;
+          _parseBodyToBlocks(text);
         }
       } else if (type == 'image') {
         _sharedType = 'image';
@@ -205,7 +334,13 @@ class _WritePostScreenState extends State<WritePostScreen>
         _sharedType = 'audio';
         _sharedFilePath = data['filePath'] as String?;
         _audioDuration = '00:05';
-        _titleController.text = data['name'] as String? ?? 'Shared Audio';
+        final name = data['name'] as String? ?? 'Shared Audio';
+        _titleController.text = name;
+        if (_sharedFilePath != null) {
+          _attachedItems.add(_AttachItem.audio(
+            duration: _audioDuration,
+          ));
+        }
       } else if (type == 'document') {
         final filePath = data['filePath'] as String? ?? '';
         final lowerPath = filePath.toLowerCase();
@@ -217,7 +352,15 @@ class _WritePostScreenState extends State<WritePostScreen>
         } else {
           _sharedType = 'document';
           _sharedFilePath = filePath;
-          _titleController.text = data['name'] as String? ?? 'Shared Document';
+          final name = data['name'] as String? ?? 'Shared Document';
+          _titleController.text = name;
+          if (filePath.isNotEmpty) {
+            _attachedItems.add(_AttachItem.document(
+              name: name,
+              path: filePath,
+              extension: filePath.split('.').last.toUpperCase(),
+            ));
+          }
         }
       }
     }
@@ -237,7 +380,8 @@ class _WritePostScreenState extends State<WritePostScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.isSaveItem) {
-        _bodyFocusNode.requestFocus();
+        // Request focus to keep keyboard open
+        _activeFocusNode.requestFocus();
       } else {
         _titleFocusNode.requestFocus();
       }
@@ -247,10 +391,11 @@ class _WritePostScreenState extends State<WritePostScreen>
   @override
   void dispose() {
     _titleController.dispose();
-    _bodyController.dispose();
     _urlController.dispose();
     _titleFocusNode.dispose();
-    _bodyFocusNode.dispose();
+    for (var b in _blocks) {
+      b.dispose();
+    }
     _plusMenuController.dispose();
     super.dispose();
   }
@@ -325,7 +470,7 @@ class _WritePostScreenState extends State<WritePostScreen>
   }
 
   Widget _buildInlineFormattingToolbar() {
-    final activeStyle = _bodyController.getActiveStyle();
+    final activeStyle = _activeTextController.getActiveStyle();
 
     return Container(
       height: 50,
@@ -343,8 +488,8 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.format_bold,
               active: activeStyle.bold == true,
               onTap: () {
-                _bodyController.applyStyle(bold: !(activeStyle.bold == true));
-                _bodyFocusNode.requestFocus();
+                _activeTextController.applyStyle(bold: !(activeStyle.bold == true));
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -352,9 +497,9 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.format_italic,
               active: activeStyle.italic == true,
               onTap: () {
-                _bodyController
+                _activeTextController
                     .applyStyle(italic: !(activeStyle.italic == true));
-                _bodyFocusNode.requestFocus();
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -362,9 +507,9 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.format_underlined,
               active: activeStyle.underline == true,
               onTap: () {
-                _bodyController
+                _activeTextController
                     .applyStyle(underline: !(activeStyle.underline == true));
-                _bodyFocusNode.requestFocus();
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -372,9 +517,9 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.format_strikethrough,
               active: activeStyle.strikethrough == true,
               onTap: () {
-                _bodyController.applyStyle(
+                _activeTextController.applyStyle(
                     strikethrough: !(activeStyle.strikethrough == true));
-                _bodyFocusNode.requestFocus();
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -386,7 +531,7 @@ class _WritePostScreenState extends State<WritePostScreen>
               active: _bodyAlign == TextAlign.left,
               onTap: () {
                 setState(() => _bodyAlign = TextAlign.left);
-                _bodyFocusNode.requestFocus();
+                _activeFocusNode.requestFocus();
               },
             ),
             _buildToolbarToggle(
@@ -394,7 +539,7 @@ class _WritePostScreenState extends State<WritePostScreen>
               active: _bodyAlign == TextAlign.center,
               onTap: () {
                 setState(() => _bodyAlign = TextAlign.center);
-                _bodyFocusNode.requestFocus();
+                _activeFocusNode.requestFocus();
               },
             ),
             _buildToolbarToggle(
@@ -402,7 +547,7 @@ class _WritePostScreenState extends State<WritePostScreen>
               active: _bodyAlign == TextAlign.right,
               onTap: () {
                 setState(() => _bodyAlign = TextAlign.right);
-                _bodyFocusNode.requestFocus();
+                _activeFocusNode.requestFocus();
               },
             ),
             _buildToolbarDivider(),
@@ -410,28 +555,28 @@ class _WritePostScreenState extends State<WritePostScreen>
             // Font Sizes
             _buildSizeChip(
                 '12', activeStyle.fontSize == 12.0, () {
-              _bodyController.applyStyle(fontSize: 12.0);
-              _bodyFocusNode.requestFocus();
+              _activeTextController.applyStyle(fontSize: 12.0);
+              _activeFocusNode.requestFocus();
               setState(() {});
             }),
             _buildSizeChip(
                 '16',
                 activeStyle.fontSize == 16.0 || activeStyle.fontSize == null,
                 () {
-              _bodyController.applyStyle(fontSize: 16.0);
-              _bodyFocusNode.requestFocus();
+              _activeTextController.applyStyle(fontSize: 16.0);
+              _activeFocusNode.requestFocus();
               setState(() {});
             }),
             _buildSizeChip(
                 '20', activeStyle.fontSize == 20.0, () {
-              _bodyController.applyStyle(fontSize: 20.0);
-              _bodyFocusNode.requestFocus();
+              _activeTextController.applyStyle(fontSize: 20.0);
+              _activeFocusNode.requestFocus();
               setState(() {});
             }),
             _buildSizeChip(
                 '26', activeStyle.fontSize == 26.0, () {
-              _bodyController.applyStyle(fontSize: 26.0);
-              _bodyFocusNode.requestFocus();
+              _activeTextController.applyStyle(fontSize: 26.0);
+              _activeFocusNode.requestFocus();
               setState(() {});
             }),
             _buildToolbarDivider(),
@@ -441,8 +586,8 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.format_list_bulleted,
               active: false,
               onTap: () {
-                _bodyController.toggleList('• ');
-                _bodyFocusNode.requestFocus();
+                _activeTextController.toggleList('• ');
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -450,8 +595,8 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.format_list_numbered,
               active: false,
               onTap: () {
-                _bodyController.toggleList('1. ');
-                _bodyFocusNode.requestFocus();
+                _activeTextController.toggleList('1. ');
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -459,8 +604,8 @@ class _WritePostScreenState extends State<WritePostScreen>
               icon: Icons.checklist,
               active: false,
               onTap: () {
-                _bodyController.toggleList('[ ] ');
-                _bodyFocusNode.requestFocus();
+                _activeTextController.toggleList('[ ] ');
+                _activeFocusNode.requestFocus();
                 setState(() {});
               },
             ),
@@ -480,8 +625,8 @@ class _WritePostScreenState extends State<WritePostScreen>
             ].map((col) {
               final bool isAct = activeStyle.color == col;
               return _buildColorDot(col, isAct, () {
-                _bodyController.applyStyle(color: col);
-                _bodyFocusNode.requestFocus();
+                _activeTextController.applyStyle(color: col);
+                _activeFocusNode.requestFocus();
                 setState(() {});
               });
             }),
@@ -495,8 +640,8 @@ class _WritePostScreenState extends State<WritePostScreen>
                 Colors.transparent,
                 activeStyle.highlightColor == Colors.transparent ||
                     activeStyle.highlightColor == null, () {
-              _bodyController.applyStyle(clearHighlight: true);
-              _bodyFocusNode.requestFocus();
+              _activeTextController.applyStyle(clearHighlight: true);
+              _activeFocusNode.requestFocus();
               setState(() {});
             }, isHighlight: true),
             ...[
@@ -510,8 +655,8 @@ class _WritePostScreenState extends State<WritePostScreen>
               final Color hlCol = col.withValues(alpha: 0.3);
               final bool isAct = activeStyle.highlightColor == hlCol;
               return _buildColorDot(col, isAct, () {
-                _bodyController.applyStyle(highlightColor: hlCol);
-                _bodyFocusNode.requestFocus();
+                _activeTextController.applyStyle(highlightColor: hlCol);
+                _activeFocusNode.requestFocus();
                 setState(() {});
               }, isHighlight: true);
             }),
@@ -674,194 +819,46 @@ class _WritePostScreenState extends State<WritePostScreen>
     }
   }
 
-  // ── Audio Recorder ─────────────────────────────────────────────────────────
+  // ── Audio Picker ──────────────────────────────────────────────────────────
 
-  void _openAudioRecorder() {
-    // Close plus menu first
+  Future<void> _pickAudioFile() async {
     _togglePlusMenu();
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.audio);
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+        final name = result.files.single.name;
+        
+        String durText = '00:00';
+        try {
+          final player = AudioPlayer();
+          await player.setSource(DeviceFileSource(path));
+          final duration = await player.getDuration();
+          if (duration != null) {
+            final int m = duration.inSeconds ~/ 60;
+            final int s = duration.inSeconds % 60;
+            durText = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+          }
+          await player.dispose();
+        } catch (e) {
+          debugPrint("Could not get duration: $e");
+          durText = '00:45';
+        }
 
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext ctx) {
-        int durationSeconds = 0;
-        bool isRecording = false;
-        bool hasRecorded = false;
-        Timer? recordTimer;
-
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setSheetState) {
-            String formatDuration(int sec) {
-              final int m = sec ~/ 60;
-              final int s = sec % 60;
-              return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-            }
-
-            void startRecording() {
-              setSheetState(() {
-                isRecording = true;
-                hasRecorded = true;
-              });
-              recordTimer =
-                  Timer.periodic(const Duration(seconds: 1), (t) {
-                setSheetState(() => durationSeconds++);
-              });
-            }
-
-            void pauseRecording() {
-              recordTimer?.cancel();
-              setSheetState(() => isRecording = false);
-            }
-
-            return Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF48484A),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'RECORD AUDIO',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    formatDuration(durationSeconds),
-                    style: GoogleFonts.robotoMono(
-                      color: isRecording ? Colors.redAccent : Colors.white,
-                      fontSize: 52,
-                      fontWeight: FontWeight.w300,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 50,
-                    child: isRecording
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(18, (index) {
-                              final h = 10.0 +
-                                  (1.0 +
-                                          math.sin(
-                                              durationSeconds.toDouble() +
-                                                  index.toDouble())) *
-                                      15.0;
-                              return AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: 4,
-                                height: h,
-                                margin:
-                                    const EdgeInsets.symmetric(horizontal: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.redAccent,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              );
-                            }),
-                          )
-                        : Center(
-                            child: Container(
-                              height: 2,
-                              width: 140,
-                              color: Colors.white12,
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: 28),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          recordTimer?.cancel();
-                          Navigator.pop(ctx);
-                        },
-                        child: Text(
-                          'Cancel',
-                          style: GoogleFonts.inter(
-                              color: Colors.white54, fontSize: 15),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          if (isRecording) {
-                            pauseRecording();
-                          } else {
-                            startRecording();
-                          }
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isRecording ? Colors.white : Colors.red,
-                            border: Border.all(color: Colors.white, width: 4),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              isRecording
-                                  ? Icons.pause
-                                  : Icons.fiber_manual_record,
-                              color: isRecording ? Colors.black : Colors.white,
-                              size: 26,
-                            ),
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: hasRecorded && durationSeconds > 0
-                            ? () {
-                                recordTimer?.cancel();
-                                final dur = formatDuration(durationSeconds);
-                                Navigator.pop(ctx);
-                                // Add as attachment (preview card, not text)
-                                setState(() {
-                                  _attachedItems
-                                      .add(_AttachItem.audio(duration: dur));
-                                });
-                              }
-                            : null,
-                        child: Text(
-                          'Save',
-                          style: GoogleFonts.inter(
-                            color: hasRecorded && durationSeconds > 0
-                                ? Colors.white
-                                : Colors.white24,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+        setState(() {
+          _attachedItems.add(_AttachItem.audio(
+            duration: durText,
+            path: path,
+            name: name,
+          ));
+          _activeTextController.text += '\n\n[Audio Recording: $durText]';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Could not pick audio: $e');
+      }
+    }
   }
 
   // ── Attachment preview cards (shown inline in canvas) ──────────────────────
@@ -915,7 +912,17 @@ class _WritePostScreenState extends State<WritePostScreen>
       color = Colors.white70;
     }
 
-    return Container(
+    return GestureDetector(
+      onTap: () async {
+        try {
+          if (item.path != null) {
+            await OpenFilex.open(item.path!);
+          }
+        } catch (e) {
+          debugPrint('Error opening file: $e');
+        }
+      },
+      child: Container(
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
@@ -974,7 +981,7 @@ class _WritePostScreenState extends State<WritePostScreen>
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildContactPreviewCard(_AttachItem item, int idx) {
@@ -1153,87 +1160,103 @@ class _WritePostScreenState extends State<WritePostScreen>
   }
 
   Widget _buildPlusMenu() {
-    final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    final double screenHeight = MediaQuery.of(context).size.height;
-    final double bottomOffset =
-        60.0 + (_isFormattingToolOpen ? 50.0 : 0.0) + keyboardHeight + 16.0;
-    final double maxMenuHeight = screenHeight - bottomOffset - 120.0;
-
     return Container(
-      width: 190,
+      width: MediaQuery.of(context).size.width - 40,
       decoration: BoxDecoration(
-        color: const Color(0xFF2C2C2E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12, width: 0.5),
+        color: const Color(0xFF2C2C2E).withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: maxMenuHeight > 50.0 ? maxMenuHeight : 120.0,
-        ),
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildMenuItem('Document', Icons.description_outlined,
-                  _openDocumentSelector),
-              _buildMenuItem(
-                  'Contact', Icons.person_outline, _openContactSelector),
-              _buildMenuItem(
-                  'Record Audio', Icons.mic_none_outlined, _openAudioRecorder),
-              _buildMenuItem('Checklist', Icons.check_box_outlined, () {
-                _bodyController.toggleList('[ ] ');
-                _togglePlusMenu();
-              }),
-              _buildMenuItem('Bulleted List', Icons.format_list_bulleted, () {
-                _bodyController.toggleList('• ');
-                _togglePlusMenu();
-              }),
-              _buildMenuItem('To-do List', Icons.playlist_add_check, () {
-                _bodyController.toggleList('[ ] To-do item: ');
-                _togglePlusMenu();
-              }),
-              _buildMenuItem('Code Block', Icons.code_outlined, () {
-                _bodyController.text +=
-                    '\n```dart\n// Your code snippet here\n\n```\n';
-                _togglePlusMenu();
-              }),
-            ],
+      padding: const EdgeInsets.all(20),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 20,
+        alignment: WrapAlignment.center,
+        children: [
+          _buildMenuGridItem(
+            'Document',
+            Icons.description_rounded,
+            _openDocumentSelector,
           ),
-        ),
+          _buildMenuGridItem(
+            'Contact',
+            Icons.person_rounded,
+            _openContactSelector,
+          ),
+          _buildMenuGridItem(
+            'Audio',
+            Icons.audio_file_rounded,
+            _pickAudioFile,
+          ),
+          _buildMenuGridItem(
+            'Checklist',
+            Icons.check_box_rounded,
+            () {
+              _activeTextController.toggleList('[ ] ');
+              _togglePlusMenu();
+            },
+          ),
+          _buildMenuGridItem(
+            'Bullet List',
+            Icons.format_list_bulleted_rounded,
+            () {
+              _activeTextController.toggleList('• ');
+              _togglePlusMenu();
+            },
+          ),
+          _buildMenuGridItem(
+            'Code Block',
+            Icons.code_rounded,
+            () {
+              setState(() {
+                _blocks.add(EditorBlock(type: 'code', lang: 'dart'));
+                _blocks.add(EditorBlock(type: 'text'));
+              });
+              _togglePlusMenu();
+            },
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildMenuItem(String label, IconData icon, VoidCallback onTap) {
-    final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    final bool isKeyboardOpen = keyboardHeight > 0;
-    return InkWell(
+  Widget _buildMenuGridItem(String label, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-            horizontal: 16, vertical: isKeyboardOpen ? 5.0 : 10.0),
-        child: Row(
+      child: SizedBox(
+        width: 70,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
               ),
+              child: Center(
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
             ),
           ],
         ),
@@ -1243,30 +1266,48 @@ class _WritePostScreenState extends State<WritePostScreen>
 
   // ── Post / Save ────────────────────────────────────────────────────────────
 
+  String _serializeBody() {
+    return _blocks.map((b) {
+      if (b.type == 'code') {
+        return '```${b.lang}\n${b.controller.text.trim()}\n```';
+      }
+      return b.controller.text;
+    }).where((t) => t.isNotEmpty).join('\n\n');
+  }
+
+  List<RichStyle> _serializeCharStyles() {
+    List<RichStyle> allStyles = [];
+    for (int i = 0; i < _blocks.length; i++) {
+      var b = _blocks[i];
+      if (b.type == 'code') {
+        int len = '```${b.lang}\n${b.controller.text.trim()}\n```'.length;
+        if (i != _blocks.length - 1) len += 2; // \n\n
+        for (int j = 0; j < len; j++) {
+          allStyles.add(const RichStyle());
+        }
+      } else {
+        final ctrl = b.controller as RichTextController;
+        allStyles.addAll(ctrl.charStyles);
+        if (i != _blocks.length - 1) {
+          allStyles.add(const RichStyle()); // \n
+          allStyles.add(const RichStyle()); // \n
+        }
+      }
+    }
+    return allStyles;
+  }
+
   Future<void> _post() async {
     final title = _titleController.text.trim();
 
-    // Build body: text content + serialized attachment tokens
-    final StringBuffer bodyBuf =
-        StringBuffer(_bodyController.text.trim());
-    for (final item in _attachedItems) {
-      switch (item.type) {
-        case _AttachType.document:
-          bodyBuf.write('\n[Document: ${item.name}]');
-          break;
-        case _AttachType.contact:
-          bodyBuf.write('\n[Contact: ${item.name} (${item.phone})]');
-          break;
-        case _AttachType.audio:
-          bodyBuf.write('\n[Audio Recording: ${item.duration ?? "00:00"} min]');
-          break;
-      }
-    }
-    final body = bodyBuf.toString().trim();
+    // Build body: text content only. We no longer serialize attachments into the text.
+    final String body = _serializeBody();
 
     if (body.isEmpty &&
         _pickedImagePath == null &&
-        _pickedVideoPath == null) {
+        _pickedVideoPath == null &&
+        _attachedItems.isEmpty &&
+        _sharedFilePath == null) {
       _showSnack(widget.isSaveItem
           ? 'Please add some content, attachment or media!'
           : 'Please enter some content!');
@@ -1275,8 +1316,9 @@ class _WritePostScreenState extends State<WritePostScreen>
 
     if (!widget.isSaveItem &&
         _pickedImagePath == null &&
-        _pickedVideoPath == null) {
-      _showSnack('Please upload an image or video to post!');
+        _pickedVideoPath == null &&
+        _attachedItems.isEmpty) {
+      _showSnack('Please upload an image, video, or attachment to post!');
       return;
     }
 
@@ -1288,15 +1330,13 @@ class _WritePostScreenState extends State<WritePostScreen>
       final bodyLines = body.split('\n');
       if (bodyLines.isNotEmpty && bodyLines.first.trim().isNotEmpty) {
         resolvedTitle = bodyLines.first.trim();
-        if (resolvedTitle.startsWith('[')) {
-          // Attachment-only post → use attachment name
-          final match = RegExp(r'\[(?:Document|Contact|Audio Recording): ([^\]]+)\]')
-              .firstMatch(resolvedTitle);
-          resolvedTitle = match != null ? match.group(1)! : 'Saved Item';
-        }
         if (resolvedTitle.length > 30) {
           resolvedTitle = '${resolvedTitle.substring(0, 27)}...';
         }
+      } else if (_attachedItems.isNotEmpty) {
+        resolvedTitle = _attachedItems.first.name;
+      } else if (_sharedFilePath != null) {
+        resolvedTitle = _sharedFilePath!.split('/').last.split('\\').last;
       } else {
         resolvedTitle = 'Saved Item';
       }
@@ -1306,8 +1346,17 @@ class _WritePostScreenState extends State<WritePostScreen>
     String? resolvedContactName = _contactName;
     String? resolvedContactPhone = _contactPhone;
     String? resolvedDuration = _audioDuration;
+    List<String> resolvedContactNames = [];
+    List<String> resolvedContactPhones = [];
 
     if (_attachedItems.isNotEmpty) {
+      for (var item in _attachedItems) {
+        if (item.type == _AttachType.contact) {
+          resolvedContactNames.add(item.name);
+          resolvedContactPhones.add(item.phone ?? '');
+        }
+      }
+
       final first = _attachedItems.first;
       if (first.type == _AttachType.document) {
         resolvedFilePath = first.path;
@@ -1316,6 +1365,7 @@ class _WritePostScreenState extends State<WritePostScreen>
         resolvedContactPhone = first.phone;
       } else if (first.type == _AttachType.audio) {
         resolvedDuration = first.duration;
+        resolvedFilePath = first.path;
       }
     }
 
@@ -1333,11 +1383,13 @@ class _WritePostScreenState extends State<WritePostScreen>
       videoPath: _pickedVideoPath,
       savedInProfile: _saveInProfile,
       createdAt: widget.editingPost?.createdAt ?? DateTime.now(),
-      charStyles: List<RichStyle>.from(_bodyController.charStyles),
+      charStyles: _serializeCharStyles(),
       type: resolvedType,
       filePath: resolvedFilePath,
       contactName: resolvedContactName,
       contactPhone: resolvedContactPhone,
+      contactNames: resolvedContactNames.isNotEmpty ? resolvedContactNames : null,
+      contactPhones: resolvedContactPhones.isNotEmpty ? resolvedContactPhones : null,
       duration: resolvedDuration,
       checklistItems: _checklistItemsList.isNotEmpty ? _checklistItemsList : null,
       checklistStates: _checklistStatesList.isNotEmpty ? _checklistStatesList : null,
@@ -1365,7 +1417,7 @@ class _WritePostScreenState extends State<WritePostScreen>
       )) : (
         _urlController.text.isNotEmpty ? 'link' : (
         _checklistItemsList.isNotEmpty ? 'checklist' : (
-        _bodyController.text.contains('```') ? 'code' : 'text'
+        _blocks.any((b) => b.type == 'code') ? 'code' : 'text'
       ))
     ))));
   }
@@ -1385,6 +1437,212 @@ class _WritePostScreenState extends State<WritePostScreen>
     return trimmed.split(RegExp(r'\s+')).length;
   }
 
+  Widget _buildBodyInput(String resolvedType) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _blocks.asMap().entries.map((entry) {
+        int idx = entry.key;
+        EditorBlock block = entry.value;
+
+        if (block.type == 'code') {
+          return _buildEditableCodeBlock(block, idx);
+        }
+
+        return TextField(
+          controller: block.controller,
+          focusNode: block.focusNode,
+          readOnly: !_isEditingMode,
+          maxLines: null,
+          textAlign: _bodyAlign,
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+          ),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEditableCodeBlock(EditorBlock block, int index) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12.0, bottom: 12.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFF2D2D30),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      block.lang,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFD4D4D4),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98989E), size: 16),
+                  ],
+                ),
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: block.controller.text));
+                        _showSnack('Copied to clipboard');
+                      },
+                      child: const Icon(Icons.copy_rounded, color: Color(0xFF98989E), size: 14),
+                    ),
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          final removed = _blocks.removeAt(index);
+                          removed.dispose();
+                          if (_blocks.isEmpty) {
+                            _blocks.add(EditorBlock(type: 'text'));
+                          }
+                        });
+                      },
+                      child: const Icon(Icons.close, color: Color(0xFF98989E), size: 14),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: block.controller,
+              focusNode: block.focusNode,
+              readOnly: !_isEditingMode,
+              maxLines: null,
+              style: const TextStyle(
+                fontFamily: 'Cascadia Code',
+                color: Color(0xFFD4D4D4),
+                fontSize: 14,
+                height: 1.5,
+              ),
+              decoration: const InputDecoration(
+                hintText: '// Your code snippet here',
+                hintStyle: TextStyle(
+                  fontFamily: 'Cascadia Code',
+                  color: Color(0xFF7C7C81),
+                  fontSize: 14,
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                isDense: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _titleController,
+          focusNode: _titleFocusNode,
+          readOnly: !_isEditingMode,
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          onChanged: (_) => setState(() {}),
+          inputFormatters: [
+            WordLimitTextInputFormatter(6),
+          ],
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Heading',
+            hintStyle: GoogleFonts.inter(
+              color: const Color(0xFF7C7C81),
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+            ),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 6),
+            child: Text(
+              '${_getWordCount(_titleController.text)}/6 words',
+              style: GoogleFonts.inter(
+                color: _getWordCount(_titleController.text) >= 6
+                    ? const Color(0xFFFAF096)
+                    : const Color(0xFF7C7C81),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLinkInput() {
+    return TextField(
+      controller: _urlController,
+      readOnly: !_isEditingMode,
+      maxLines: 1,
+      keyboardType: TextInputType.url,
+      style: GoogleFonts.inter(
+        color: Colors.white,
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+      ),
+      decoration: InputDecoration(
+        hintText: 'add a link',
+        hintStyle: GoogleFonts.inter(
+          color: const Color(0xFF7C7C81),
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+        ),
+        prefixIcon: const Padding(
+          padding: EdgeInsets.only(right: 8.0),
+          child: Icon(Icons.link, color: Color(0xFF7C7C81), size: 20),
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -1392,220 +1650,36 @@ class _WritePostScreenState extends State<WritePostScreen>
     final resolvedType = _getResolvedType();
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: true,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: SafeArea(
-          top: false,
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      resizeToAvoidBottomInset: false, // We'll manage inset manually for the floating bar
+      body: Stack(
+        children: [
+          // ── CANVAS (Full Screen Scroll) ────────────────────────────
+          Positioned.fill(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 80,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 140, // Space for floating bar
+                left: 20,
+                right: 20,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── HEADER ─────────────────────────────────────────────────
-                  Container(
-                    padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top > 0
-                          ? MediaQuery.of(context).padding.top
-                          : 10,
-                      bottom: 12,
-                      left: 8,
-                      right: 16,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back,
-                              color: Colors.white, size: 24),
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(),
-                          splashRadius: 20,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.editingPost != null
-                              ? 'Edit Saved Item'
-                              : (_saveInProfile ? 'Save anything' : 'Write a Post'),
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const Spacer(),
-                        _isPosting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : TextButton(
-                                onPressed: _saveInProfile
-                                    ? _post
-                                    : ((_pickedImagePath == null &&
-                                            _pickedVideoPath == null)
-                                        ? () => _showSnack(
-                                            'Please upload an image or video to post!')
-                                        : _post),
-                                style: TextButton.styleFrom(
-                                  backgroundColor: (!_saveInProfile &&
-                                            _pickedImagePath == null &&
-                                            _pickedVideoPath == null)
-                                        ? Colors.white.withValues(alpha: 0.3)
-                                        : Colors.white,
-                                  foregroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 8),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                ),
-                                child: Text(
-                                  _saveInProfile ? 'Save' : 'Post',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: (!_saveInProfile &&
-                                            _pickedImagePath == null &&
-                                            _pickedVideoPath == null)
-                                        ? Colors.black38
-                                        : Colors.black,
-                                  ),
-                                ),
-                              ),
-                      ],
-                    ),
-                  ),
-
-                  // ── CANVAS ─────────────────────────────────────────────────
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Description (Body input)
-                          TextField(
-                            controller: _bodyController,
-                            focusNode: _bodyFocusNode,
-                            maxLines: null,
-                            textAlign: _bodyAlign,
-                            keyboardType: TextInputType.multiline,
-                            textCapitalization: TextCapitalization.sentences,
-                            style: resolvedType == 'code'
-                                ? const TextStyle(
-                                    fontFamily: 'Cascadia Code',
-                                    color: Color(0xFFB71C1C),
-                                    fontSize: 16,
-                                  )
-                                : GoogleFonts.inter(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                            decoration: InputDecoration(
-                              hintText: widget.isSaveItem ? 'save anything.....' : 'Description',
-                              hintStyle: GoogleFonts.inter(
-                                color: const Color(0xFF7C7C81),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-
-                          // Title input below description
-                          TextField(
-                            controller: _titleController,
-                            focusNode: _titleFocusNode,
-                            maxLines: null,
-                            keyboardType: TextInputType.multiline,
-                            textCapitalization: TextCapitalization.sentences,
-                            onChanged: (_) => setState(() {}),
-                            inputFormatters: [
-                              WordLimitTextInputFormatter(6),
-                            ],
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Title',
-                              hintStyle: GoogleFonts.inter(
-                                color: const Color(0xFF7C7C81),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 2, bottom: 6),
-                              child: Text(
-                                '${_getWordCount(_titleController.text)}/6 words',
-                                style: GoogleFonts.inter(
-                                  color: _getWordCount(_titleController.text) >= 6
-                                      ? const Color(0xFFFAF096)
-                                      : const Color(0xFF7C7C81),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-
-                          // Link input (always available and optional)
-                          TextField(
-                            controller: _urlController,
-                            maxLines: 1,
-                            keyboardType: TextInputType.url,
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'add a link',
-                              hintStyle: GoogleFonts.inter(
-                                color: const Color(0xFF7C7C81),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                              ),
-                              prefixIcon: const Padding(
-                                padding: EdgeInsets.only(right: 8.0),
-                                child: Icon(Icons.link,
-                                    color: Color(0xFF7C7C81), size: 20),
-                              ),
-                              prefixIconConstraints: const BoxConstraints(
-                                  minWidth: 0, minHeight: 0),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
+                  _buildTitleInput(),
+                  const SizedBox(height: 10),
+                  _buildBodyInput(resolvedType),
+                  const SizedBox(height: 10),
+                  if (!widget.isSaveItem) ...[
+                    _buildLinkInput(),
+                    const SizedBox(height: 10),
+                  ],
 
                           // ── Attachment preview cards ────────────────────────
                           _buildAttachmentPreviews(),
 
                           // ── Image preview ────────────────────────────────────
-                          if (!widget.isSaveItem && _pickedImagePath != null) ...[
+                          if (_pickedImagePath != null) ...[
                             const SizedBox(height: 20),
                             Stack(
                               children: [
@@ -1659,7 +1733,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                               ],
                             ),
                           ],
-                          if (!widget.isSaveItem && _pickedVideoPath != null) ...[
+                          if (_pickedVideoPath != null) ...[
                             const SizedBox(height: 20),
                             Stack(
                               children: [
@@ -1691,126 +1765,219 @@ class _WritePostScreenState extends State<WritePostScreen>
                               ],
                             ),
                           ],
-                          const SizedBox(height: 80),
                         ],
                       ),
                     ),
                   ),
 
-                  // ── BOTTOM TOOLBAR ──────────────────────────────────────────
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
+          // ── HEADER (Frosted Glass) ──────────────────────────────────
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top > 0
+                        ? MediaQuery.of(context).padding.top + 10
+                        : 20,
+                    bottom: 16,
+                    left: 12,
+                    right: 20,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (_isFormattingToolOpen) _buildInlineFormattingToolbar(),
-                      Container(
-                        color: widget.isSaveItem
-                            ? const Color(0xFF7C7C81)
-                            : const Color(0xFF4A4A4C),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        child: Row(
-                          children: [
-                            // Image picker
-                            IconButton(
-                              onPressed: _pickImage,
-                              icon: Icon(
-                                Icons.image,
-                                color: _pickedImagePath != null
-                                    ? const Color(0xFF6B9BF7)
-                                    : Colors.white,
-                                size: 24,
-                              ),
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.all(6),
-                            ),
-                            const SizedBox(width: 2),
-                            // Video picker
-                            IconButton(
-                              onPressed: _pickVideo,
-                              icon: Icon(
-                                Icons.smart_display,
-                                color: _pickedVideoPath != null
-                                    ? const Color(0xFF6B9BF7)
-                                    : Colors.white,
-                                size: 24,
-                              ),
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.all(6),
-                            ),
-                            const SizedBox(width: 2),
-                            // Formatting toolbar toggle
-                            IconButton(
-                              onPressed: _openRichTextEditor,
-                              icon: Icon(
-                                Icons.text_fields_rounded,
-                                color: _isFormattingToolOpen
-                                    ? const Color(0xFF6B9BF7)
-                                    : Colors.white,
-                                size: 24,
-                              ),
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.all(6),
-                            ),
-                            const SizedBox(width: 2),
-                            // Drawing canvas
-                            IconButton(
-                              onPressed: _openDrawingMode,
-                              icon: const Icon(
-                                Icons.edit_outlined,
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.editingPost != null
+                            ? 'Edit Item'
+                            : (_saveInProfile ? 'Save anything' : 'Write a Post'),
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (!_isEditingMode && (widget.editingPost != null || _saveInProfile)) ...[
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _isEditingMode = true;
+                              if (widget.isSaveItem) {
+                                _activeFocusNode.requestFocus();
+                              } else {
+                                _titleFocusNode.requestFocus();
+                              }
+                            });
+                          },
+                          child: const Icon(Icons.edit, color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 16),
+                      ],
+                      _isPosting
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
                                 color: Colors.white,
-                                size: 24,
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.all(6),
-                            ),
-                            const Spacer(),
-                            if (widget.isSaveItem)
-                              // Plus button
-                              GestureDetector(
-                                onTap: _togglePlusMenu,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _isPlusMenuOpen
-                                        ? const Color(0xFF6B9BF7)
-                                        : Colors.white,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    _isPlusMenuOpen ? Icons.close : Icons.add,
-                                    color: _isPlusMenuOpen
-                                        ? Colors.white
-                                        : Colors.black,
-                                    size: 24,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _saveInProfile
+                                      ? _post
+                                      : ((_pickedImagePath == null && _pickedVideoPath == null)
+                                          ? () => _showSnack('Please upload an image or video to post!')
+                                          : _post),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                    child: Text(
+                                      _saveInProfile ? 'Save' : 'Post',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                          ],
-                        ),
+                            ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── BOTTOM TOOLBAR (Floating) ──────────────────────────────
+          if (_isEditingMode)
+            Positioned(
+              bottom: MediaQuery.of(context).viewInsets.bottom > 0 ? MediaQuery.of(context).viewInsets.bottom + 12 : 24,
+            left: 20,
+            right: 20,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_isFormattingToolOpen) _buildInlineFormattingToolbar(),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E).withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        blurRadius: 0,
+                        spreadRadius: 1,
                       ),
                     ],
                   ),
-                ],
-              ),
-
-              // ── Plus Menu floating widget ──────────────────────────────────
-              if (_isPlusMenuOpen)
-                Positioned(
-                  bottom: 60.0 + (_isFormattingToolOpen ? 50.0 : 0.0) + 10.0,
-                  right: 16,
-                  child: FadeTransition(
-                    opacity: _plusMenuOpacity,
-                    child: SlideTransition(
-                      position: _plusMenuSlide,
-                      child: _buildPlusMenu(),
-                    ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Row(
+                    children: [
+                      // Image picker
+                      IconButton(
+                        onPressed: _pickImage,
+                        icon: Icon(
+                          Icons.image_outlined,
+                          color: _pickedImagePath != null ? const Color(0xFFFAF096) : Colors.white,
+                          size: 22,
+                        ),
+                        splashRadius: 20,
+                      ),
+                      // Video picker
+                      IconButton(
+                        onPressed: _pickVideo,
+                        icon: Icon(
+                          Icons.play_circle_outline,
+                          color: _pickedVideoPath != null ? const Color(0xFFFAF096) : Colors.white,
+                          size: 22,
+                        ),
+                        splashRadius: 20,
+                      ),
+                      // Formatting toolbar toggle
+                      IconButton(
+                        onPressed: _openRichTextEditor,
+                        icon: Icon(
+                          Icons.text_format_rounded,
+                          color: _isFormattingToolOpen ? const Color(0xFFFAF096) : Colors.white,
+                          size: 22,
+                        ),
+                        splashRadius: 20,
+                      ),
+                      // Drawing canvas
+                      IconButton(
+                        onPressed: _openDrawingMode,
+                        icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 22),
+                        splashRadius: 20,
+                      ),
+                      const Spacer(),
+                      if (widget.isSaveItem)
+                        // Plus button
+                        GestureDetector(
+                          onTap: _togglePlusMenu,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutBack,
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: _isPlusMenuOpen ? Colors.white : Colors.transparent,
+                              border: Border.all(color: const Color(0xFFFAF096), width: 1.0),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _isPlusMenuOpen ? Icons.close_rounded : Icons.add_rounded,
+                              color: _isPlusMenuOpen ? Colors.black : Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 4),
+                    ],
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
+
+          // ── Plus Menu floating widget ──────────────────────────────────
+          if (_isPlusMenuOpen)
+            Positioned(
+              bottom: (MediaQuery.of(context).viewInsets.bottom > 0 ? MediaQuery.of(context).viewInsets.bottom + 12 : 24) + 60 + (_isFormattingToolOpen ? 50.0 : 0.0),
+              right: 20,
+              left: 20, // Make it span more width for the grid
+              child: FadeTransition(
+                opacity: _plusMenuOpacity,
+                child: SlideTransition(
+                  position: _plusMenuSlide,
+                  child: _buildPlusMenu(),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

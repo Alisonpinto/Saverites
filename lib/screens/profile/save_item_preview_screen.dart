@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../utils/post_store.dart';
 import '../../widgets/running_video_player.dart';
+import '../post_detail/post_detail_screen.dart';
+import '../../widgets/parsed_text_with_code_blocks.dart';
 
 class SaveItemPreviewScreen extends StatelessWidget {
   final UserPost post;
@@ -40,6 +43,20 @@ class SaveItemPreviewScreen extends StatelessWidget {
       case 'document':
         final path = post.filePath;
         final name = path != null ? path.split('/').last.split('\\').last : 'Document';
+        if (path != null && name.toLowerCase().endsWith('.pdf') && File(path).existsSync()) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.65,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF2C2C2E)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SfPdfViewer.file(File(path)),
+            ),
+          );
+        }
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -65,6 +82,50 @@ class SaveItemPreviewScreen extends StatelessWidget {
           ),
         );
       case 'contact':
+        if (post.contactNames != null && post.contactNames!.isNotEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF2C2C2E)),
+            ),
+            child: Column(
+              children: List.generate(post.contactNames!.length, (index) {
+                final cName = post.contactNames![index];
+                final cPhone = (post.contactPhones != null && post.contactPhones!.length > index) 
+                    ? post.contactPhones![index] 
+                    : 'No Phone Number';
+                return Padding(
+                  padding: EdgeInsets.only(bottom: index == post.contactNames!.length - 1 ? 0 : 24),
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: const Color(0xFF2C2C2E),
+                        child: Text(
+                          cName.isNotEmpty ? cName[0].toUpperCase() : '?',
+                          style: GoogleFonts.inter(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        cName.isEmpty ? 'Unknown Contact' : cName,
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        cPhone,
+                        style: GoogleFonts.inter(color: const Color(0xFFAEAEB2), fontSize: 16),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          );
+        }
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
@@ -97,34 +158,9 @@ class SaveItemPreviewScreen extends StatelessWidget {
           ),
         );
       case 'audio':
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2C2C2E)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Audio Recording', style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(post.duration ?? '0:00', style: GoogleFonts.inter(color: const Color(0xFFAEAEB2), fontSize: 14)),
-                ],
-              ),
-            ],
-          ),
+        return AudioPlayerBlock(
+          durationText: post.duration ?? '0:00',
+          filePath: post.filePath,
         );
       case 'checklist':
         if (post.checklistItems != null && post.checklistItems!.isNotEmpty) {
@@ -144,8 +180,25 @@ class SaveItemPreviewScreen extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
                     children: [
-                      Icon(isChecked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                        color: isChecked ? Colors.green : const Color(0xFF555555), size: 20),
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: isChecked 
+                            ? const Color(0xFF4255FF) 
+                            : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isChecked 
+                              ? Colors.transparent 
+                              : const Color(0xFFC7C7CC), 
+                            width: 2.0
+                          ),
+                        ),
+                        child: isChecked 
+                          ? const Icon(Icons.check, color: Colors.white, size: 16) 
+                          : null,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -166,21 +219,13 @@ class SaveItemPreviewScreen extends StatelessWidget {
         }
         break;
       case 'code':
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2C2C2E)),
-          ),
-          child: Text(
-            post.body,
-            style: GoogleFonts.firaCode(
-              color: const Color(0xFFD4D4D4),
-              fontSize: 13,
-              height: 1.5,
-            ),
+        return ParsedTextWithCodeBlocks(
+          text: post.body,
+          charStyles: post.charStyles,
+          defaultStyle: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 16,
+            height: 1.5,
           ),
         );
       case 'link':
@@ -219,9 +264,10 @@ class SaveItemPreviewScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF2C2C2E)),
       ),
-      child: Text(
-        post.body,
-        style: GoogleFonts.inter(
+      child: ParsedTextWithCodeBlocks(
+        text: post.body,
+        charStyles: post.charStyles,
+        defaultStyle: GoogleFonts.inter(
           color: Colors.white,
           fontSize: 16,
           height: 1.5,
@@ -236,9 +282,8 @@ class SaveItemPreviewScreen extends StatelessWidget {
       post.imagePath != null ? 'image' : (
       post.videoPath != null ? 'video' : (
       post.url != null ? 'link' : (
-      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : (
-      post.body.contains('```') ? 'code' : 'text'
-    )))));
+      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : 'text'
+    ))));
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),

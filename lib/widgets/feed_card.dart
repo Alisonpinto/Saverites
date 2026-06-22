@@ -113,7 +113,7 @@ class _ActionButtonState extends State<_ActionButton> {
 
 /// A reusable premium card styled for the Memoria masonry layout.
 class FeedCard extends StatelessWidget {
-  final Widget imageWidget;
+  final Widget? imageWidget;
   final String title;
   final String username;
   final String? avatarAssetPath;
@@ -133,7 +133,7 @@ class FeedCard extends StatelessWidget {
 
   const FeedCard({
     super.key,
-    required this.imageWidget,
+    this.imageWidget,
     required this.title,
     this.username = '',
     this.avatarAssetPath,
@@ -180,17 +180,21 @@ class FeedCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // SECTION 1 — MEDIA
-            GestureDetector(
-              onTap: onImageTap ?? onCardTap,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
+            if (imageWidget != null) ...[
+              GestureDetector(
+                onTap: onImageTap ?? onCardTap,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(10),
+                    topRight: Radius.circular(10),
+                  ),
+                  child: imageWidget,
                 ),
-                child: imageWidget,
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ] else ...[
+              const SizedBox(height: 16),
+            ],
             
             // SECTION 2 — TITLE
             Padding(

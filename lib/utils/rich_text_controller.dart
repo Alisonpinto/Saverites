@@ -170,9 +170,54 @@ class RichTextController extends TextEditingController {
   set value(TextEditingValue newValue) {
     final oldVal = value;
     final oldText = oldVal.text;
-    final newText = newValue.text;
+    var newText = newValue.text;
+    var newSelection = newValue.selection;
 
     if (oldText != newText) {
+      // Check for Enter key press
+      if (newText.length == oldText.length + 1 && newSelection.isCollapsed) {
+        final insertedCharIdx = newSelection.start - 1;
+        if (insertedCharIdx >= 0 && newText[insertedCharIdx] == '\n') {
+          // Find the previous line
+          final prevLineStart = newText.lastIndexOf('\n', insertedCharIdx - 1) + 1;
+          final prevLine = newText.substring(prevLineStart, insertedCharIdx);
+          
+          String? prefixToInsert;
+          if (prevLine.startsWith('[ ] ')) {
+            if (prevLine.trim() == '[ ]') {
+              // Empty checklist item, remove the prefix on the previous line
+              newText = newText.replaceRange(prevLineStart, insertedCharIdx + 1, '\n');
+              newSelection = TextSelection.collapsed(offset: prevLineStart);
+            } else {
+              prefixToInsert = '[ ] ';
+            }
+          } else if (prevLine.startsWith('[x] ') || prevLine.startsWith('[X] ')) {
+            if (prevLine.trim().toLowerCase() == '[x]') {
+              newText = newText.replaceRange(prevLineStart, insertedCharIdx + 1, '\n');
+              newSelection = TextSelection.collapsed(offset: prevLineStart);
+            } else {
+              prefixToInsert = '[ ] ';
+            }
+          } else if (prevLine.startsWith('• ')) {
+            if (prevLine.trim() == '•') {
+              newText = newText.replaceRange(prevLineStart, insertedCharIdx + 1, '\n');
+              newSelection = TextSelection.collapsed(offset: prevLineStart);
+            } else {
+              prefixToInsert = '• ';
+            }
+          }
+          
+          if (prefixToInsert != null) {
+            newText = newText.replaceRange(insertedCharIdx + 1, insertedCharIdx + 1, prefixToInsert);
+            newSelection = TextSelection.collapsed(offset: insertedCharIdx + 1 + prefixToInsert.length);
+          }
+          
+          if (newText != newValue.text) {
+            newValue = newValue.copyWith(text: newText, selection: newSelection);
+          }
+        }
+      }
+
       _adjustCharStyles(oldText, newText, oldVal.selection, newValue.selection);
       _keepTypingStyle = false;
     } else if (oldVal.selection != newValue.selection) {
@@ -277,6 +322,52 @@ class RichTextController extends TextEditingController {
     return mask;
   }
 
+  static List<bool> _getCheckedItemMaskStatic(String text) {
+    final List<bool> mask = List<bool>.filled(text.length, false);
+    final exp = RegExp(r'^\[[xX]\]\s+(.*)$', multiLine: true);
+    for (final match in exp.allMatches(text)) {
+      // Apply strikethrough only to the text after the [x]
+      for (int i = match.start + 4; i < match.end; i++) {
+        mask[i] = true;
+      }
+    }
+    return mask;
+  }
+
+  static List<int> _getCheckboxMaskStatic(String text) {
+    final List<int> mask = List<int>.filled(text.length, 0);
+    final exp = RegExp(r'^\[([xX ]?)\] ', multiLine: true);
+    for (final match in exp.allMatches(text)) {
+      if (match.end <= text.length) {
+        mask[match.start] = (match.group(1) == ' ' ? 1 : 2);
+        mask[match.start + 1] = 3;
+        mask[match.start + 2] = 3;
+        mask[match.start + 3] = 3;
+      }
+    }
+    return mask;
+  }
+
+  void _toggleCheckboxAt(int startIndex) {
+    if (startIndex + 3 < text.length) {
+      final prefix = text.substring(startIndex, startIndex + 3);
+      String newPrefix = '';
+      if (prefix == '[ ]') {
+        newPrefix = '[x]';
+      } else if (prefix.toLowerCase() == '[x]') {
+        newPrefix = '[ ]';
+      }
+      if (newPrefix.isNotEmpty) {
+        final currentSelection = selection;
+        final newText = text.replaceRange(startIndex, startIndex + 3, newPrefix);
+        value = value.copyWith(
+          text: newText,
+          selection: currentSelection,
+        );
+      }
+    }
+  }
+
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
     if (text.isEmpty) {
@@ -285,13 +376,71 @@ class RichTextController extends TextEditingController {
 
     _syncCharStylesLength();
 
-    final codeMask = _getCodeBlockMask(text);
+    final codeMask = _getCodeBlockMaskStatic(text);
+    final checkedMask = _getCheckedItemMaskStatic(text);
+    final checkboxMask = _getCheckboxMaskStatic(text);
 
-    final List<TextSpan> children = [];
+    final List<InlineSpan> children = [];
     TextStyle? lastStyle;
     String currentChunk = "";
 
+    void flushChunk() {
+      if (currentChunk.isNotEmpty && lastStyle != null) {
+        children.add(TextSpan(text: currentChunk, style: lastStyle));
+        currentChunk = "";
+      }
+    }
+
     for (int i = 0; i < text.length; i++) {
+      if (checkboxMask[i] == 1 || checkboxMask[i] == 2) {
+        flushChunk();
+        bool isChecked = checkboxMask[i] == 2;
+        children.add(WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: GestureDetector(
+            onTap: () => _toggleCheckboxAt(i),
+            child: Container(
+              width: 22,
+              height: 22,
+              margin: const EdgeInsets.only(right: 8, bottom: 2),
+              decoration: BoxDecoration(
+                color: isChecked 
+                  ? const Color(0xFF4255FF) 
+                  : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isChecked 
+                    ? Colors.transparent 
+                    : const Color(0xFFC7C7CC), 
+                  width: 2.0
+                ),
+              ),
+              child: isChecked 
+                ? const Icon(Icons.check, color: Colors.white, size: 16) 
+                : null,
+            ),
+          ),
+        ));
+        lastStyle = null; // Force style break after WidgetSpan
+        continue;
+      }
+
+      if (checkboxMask[i] == 3) {
+        // Hidden characters
+        TextStyle hiddenStyle = const TextStyle(fontSize: 0.1, color: Colors.transparent, height: 0.0);
+        if (lastStyle == null) {
+          lastStyle = hiddenStyle;
+          currentChunk = text[i];
+        } else if (_isSameStyle(lastStyle, hiddenStyle)) {
+          currentChunk += text[i];
+        } else {
+          flushChunk();
+          lastStyle = hiddenStyle;
+          currentChunk = text[i];
+        }
+        continue;
+      }
+
       final activeStyle = charStyles[i];
 
       FontWeight fw = FontWeight.normal;
@@ -303,21 +452,22 @@ class RichTextController extends TextEditingController {
 
       final List<TextDecoration> decs = [];
       if (activeStyle.underline == true) decs.add(TextDecoration.underline);
-      if (activeStyle.strikethrough == true) decs.add(TextDecoration.lineThrough);
+      if (activeStyle.strikethrough == true || checkedMask[i]) decs.add(TextDecoration.lineThrough);
 
       TextStyle charStyle = (style ?? const TextStyle()).copyWith(
         fontWeight: fw,
         fontStyle: activeStyle.italic == true ? FontStyle.italic : FontStyle.normal,
         decoration: decs.isEmpty ? TextDecoration.none : TextDecoration.combine(decs),
         fontSize: activeStyle.fontSize ?? style?.fontSize ?? 16.0,
-        color: activeStyle.color ?? style?.color ?? Colors.white,
+        color: checkedMask[i] ? Colors.grey : (activeStyle.color ?? style?.color ?? Colors.white),
         backgroundColor: activeStyle.highlightColor ?? Colors.transparent,
       );
 
       if (codeMask[i]) {
         charStyle = charStyle.copyWith(
           fontFamily: 'Cascadia Code',
-          color: const Color(0xFFB71C1C),
+          color: const Color(0xFFD4D4D4),
+          backgroundColor: const Color(0xFF1E1E1E),
         );
       }
 
@@ -327,15 +477,13 @@ class RichTextController extends TextEditingController {
       } else if (_isSameStyle(lastStyle, charStyle)) {
         currentChunk += text[i];
       } else {
-        children.add(TextSpan(text: currentChunk, style: lastStyle));
+        flushChunk();
         lastStyle = charStyle;
         currentChunk = text[i];
       }
     }
 
-    if (currentChunk.isNotEmpty && lastStyle != null) {
-      children.add(TextSpan(text: currentChunk, style: lastStyle));
-    }
+    flushChunk();
 
     return TextSpan(style: style, children: children);
   }
@@ -359,6 +507,7 @@ class RichTextController extends TextEditingController {
     TextOverflow? overflow,
   }) {
     final List<bool> codeMask = _getCodeBlockMaskStatic(text);
+    final List<bool> checkedMask = _getCheckedItemMaskStatic(text);
 
     if (charStyles == null || charStyles.isEmpty || charStyles.length != text.length) {
       final List<TextSpan> children = [];
@@ -367,10 +516,18 @@ class RichTextController extends TextEditingController {
 
       for (int i = 0; i < text.length; i++) {
         TextStyle charStyle = defaultStyle;
+        if (checkedMask[i]) {
+          charStyle = charStyle.copyWith(
+            decoration: TextDecoration.lineThrough,
+            color: Colors.grey,
+          );
+        }
         if (codeMask[i]) {
-          charStyle = defaultStyle.copyWith(
+          charStyle = charStyle.copyWith(
             fontFamily: 'Cascadia Code',
-            color: const Color(0xFFB71C1C),
+            color: const Color(0xFFD4D4D4),
+            backgroundColor: const Color(0xFF1E1E1E),
+            decoration: TextDecoration.none, // code blocks don't typically get strike
           );
         }
 
@@ -378,7 +535,8 @@ class RichTextController extends TextEditingController {
           lastStyle = charStyle;
           currentChunk = text[i];
         } else if (lastStyle.fontFamily == charStyle.fontFamily &&
-                   lastStyle.color == charStyle.color) {
+                   lastStyle.color == charStyle.color &&
+                   lastStyle.decoration == charStyle.decoration) {
           currentChunk += text[i];
         } else {
           children.add(TextSpan(text: currentChunk, style: lastStyle));
@@ -413,21 +571,22 @@ class RichTextController extends TextEditingController {
 
       final List<TextDecoration> decs = [];
       if (activeStyle.underline == true) decs.add(TextDecoration.underline);
-      if (activeStyle.strikethrough == true) decs.add(TextDecoration.lineThrough);
+      if (activeStyle.strikethrough == true || checkedMask[i]) decs.add(TextDecoration.lineThrough);
 
       TextStyle charStyle = defaultStyle.copyWith(
         fontWeight: fw,
         fontStyle: activeStyle.italic == true ? FontStyle.italic : FontStyle.normal,
         decoration: decs.isEmpty ? TextDecoration.none : TextDecoration.combine(decs),
         fontSize: activeStyle.fontSize ?? defaultStyle.fontSize,
-        color: activeStyle.color ?? defaultStyle.color,
+        color: checkedMask[i] ? Colors.grey : (activeStyle.color ?? defaultStyle.color),
         backgroundColor: activeStyle.highlightColor ?? Colors.transparent,
       );
 
       if (codeMask[i]) {
         charStyle = charStyle.copyWith(
           fontFamily: 'Cascadia Code',
-          color: const Color(0xFFB71C1C),
+          color: const Color(0xFFD4D4D4),
+          backgroundColor: const Color(0xFF1E1E1E),
         );
       }
 

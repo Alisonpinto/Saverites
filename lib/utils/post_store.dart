@@ -38,6 +38,8 @@ class UserPost {
   String? filePath;        // local file path for document/audio/vcf
   final String? contactName;     // contact full name
   final String? contactPhone;    // contact phone number
+  final List<String>? contactNames;
+  final List<String>? contactPhones;
   final String? duration;        // audio duration
   final List<String>? checklistItems; // checklist entries
   final List<bool>? checklistStates;  // checkbox states
@@ -62,6 +64,8 @@ class UserPost {
     this.filePath,
     this.contactName,
     this.contactPhone,
+    this.contactNames,
+    this.contactPhones,
     this.duration,
     this.checklistItems,
     this.checklistStates,
@@ -121,6 +125,8 @@ class UserPost {
       'filePath': filePath,
       'contactName': contactName,
       'contactPhone': contactPhone,
+      'contactNames': contactNames,
+      'contactPhones': contactPhones,
       'duration': duration,
       'checklistItems': checklistItems,
       'checklistStates': checklistStates,
@@ -196,6 +202,8 @@ class UserPost {
       filePath: filePath,
       contactName: json['contactName'] as String?,
       contactPhone: json['contactPhone'] as String?,
+      contactNames: (json['contactNames'] as List?)?.cast<String>(),
+      contactPhones: (json['contactPhones'] as List?)?.cast<String>(),
       duration: json['duration'] as String?,
       checklistItems: (json['checklistItems'] as List?)?.cast<String>(),
       checklistStates: (json['checklistStates'] as List?)?.cast<bool>(),
@@ -431,6 +439,14 @@ class PostStore {
     saveToLocal();
   }
 
+  /// Unhides a previously hidden post.
+  void unhidePost(String postId) {
+    final current = Set<String>.from(hiddenPostIds);
+    current.remove(postId);
+    hiddenPostIdsNotifier.value = current;
+    saveToLocal();
+  }
+
   /// Helper to get post details (title and author) for notifications.
   Map<String, String> getPostDetails(String postId) {
     // 1. Search in predefinedPosts
@@ -502,6 +518,8 @@ class PostStore {
           filePath: post.filePath,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
+          contactNames: post.contactNames,
+          contactPhones: post.contactPhones,
           duration: post.duration,
           checklistItems: post.checklistItems,
           checklistStates: post.checklistStates,
@@ -535,6 +553,8 @@ class PostStore {
           filePath: post.filePath,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
+          contactNames: post.contactNames,
+          contactPhones: post.contactPhones,
           duration: post.duration,
           checklistItems: post.checklistItems,
           checklistStates: post.checklistStates,
@@ -569,6 +589,8 @@ class PostStore {
           filePath: post.filePath,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
+          contactNames: post.contactNames,
+          contactPhones: post.contactPhones,
           duration: post.duration,
           checklistItems: post.checklistItems,
           checklistStates: post.checklistStates,
@@ -610,6 +632,8 @@ class PostStore {
           filePath: post.filePath,
           contactName: post.contactName,
           contactPhone: post.contactPhone,
+          contactNames: post.contactNames,
+          contactPhones: post.contactPhones,
           duration: post.duration,
           checklistItems: post.checklistItems,
           checklistStates: post.checklistStates,

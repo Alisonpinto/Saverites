@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'dart:ui';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../widgets/parsed_text_with_code_blocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/post_model.dart';
@@ -1138,6 +1140,341 @@ class _FeedPostTileState extends State<_FeedPostTile> {
     return count.toString();
   }
 
+  Widget _buildVaultPreviewWidget(UserPost post) {
+    final String resolvedType = post.type ?? (
+      post.imagePath != null ? 'image' : (
+      post.videoPath != null ? 'video' : (
+      post.url != null ? 'link' : (
+      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : 'text'
+    ))));
+
+    if (resolvedType == 'image') {
+      final path = post.imagePath;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: path != null
+            ? Image.file(
+                File(path),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 120,
+                  color: const Color(0xFF2A2A2E),
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white54, size: 28),
+                  ),
+                ),
+              )
+            : Container(
+                height: 120,
+                color: const Color(0xFF2A2A2E),
+                child: const Center(
+                  child: Icon(Icons.image_outlined, color: Colors.white54, size: 28),
+                ),
+              ),
+      );
+    } else if (resolvedType == 'video') {
+      final path = post.videoPath;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: path != null
+            ? SizedBox(
+                height: 120,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    RunningVideoPlayer(file: File(path)),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+                    ),
+                  ],
+                ),
+              )
+            : Container(
+                height: 120,
+                color: const Color(0xFF2A2A2E),
+                child: const Center(
+                  child: Icon(Icons.video_file_outlined, color: Colors.white54, size: 28),
+                ),
+              ),
+      );
+    } else if (resolvedType == 'document') {
+      final path = post.filePath;
+      final name = path != null ? path.split('/').last.split('\\').last : 'document.pdf';
+      final isPdf = name.toLowerCase().endsWith('.pdf');
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isPdf ? Colors.redAccent.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
+                color: isPdf ? Colors.redAccent : Colors.blue,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isPdf ? 'PDF' : 'DOC',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'contact') {
+      final name = post.contactName ?? 'Unknown';
+      final phone = post.contactPhone ?? 'No number';
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF8E8E93),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: Colors.black,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    phone,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF555555),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'audio') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.mic, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SizedBox(
+                height: 14,
+                child: CustomPaint(
+                  painter: MiniWaveformPainter(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'link') {
+      final url = post.url ?? '';
+      final domain = Uri.tryParse(url)?.host ?? 'link';
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.link_rounded, color: Colors.purpleAccent, size: 16),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    url,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    domain,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'checklist') {
+      final itemsList = post.checklistItems ?? [];
+      return Container(
+        padding: const EdgeInsets.all(12),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < math.min(itemsList.length, 5); i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        itemsList[i],
+                        style: GoogleFonts.inter(
+                          color: Colors.black,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    } else if (resolvedType == 'code') {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.topLeft,
+        child: ParsedTextWithCodeBlocks(
+          text: post.body,
+          charStyles: post.charStyles,
+          isPreviewMode: true,
+          defaultStyle: GoogleFonts.inter(
+            color: const Color(0xFFAEAEB2),
+            fontSize: 11,
+            fontWeight: FontWeight.w300,
+          ),
+          maxLinesForText: 5,
+          overflowForText: TextOverflow.ellipsis,
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2E),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.topLeft,
+        child: ParsedTextWithCodeBlocks(
+          text: post.body,
+          charStyles: post.charStyles,
+          isPreviewMode: true,
+          defaultStyle: GoogleFonts.inter(
+            color: const Color(0xFFAEAEB2),
+            fontSize: 11,
+            fontWeight: FontWeight.w300,
+          ),
+          maxLinesForText: 5,
+          overflowForText: TextOverflow.ellipsis,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final showShimmer = !widget.isOnline || _showShimmer;
@@ -1219,42 +1556,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
               ),
             );
           } else {
-            mediaWidget = Container(
-              height: 120,
-              padding: const EdgeInsets.all(12),
-              color: const Color(0xFF2A2A2E),
-              alignment: Alignment.topLeft,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    post.title.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: RichTextController.buildRichText(
-                      post.body,
-                      post.charStyles,
-                      defaultStyle: GoogleFonts.inter(
-                        color: const Color(0xFFAEAEB2),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w300,
-                      ),
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            );
+            mediaWidget = _buildVaultPreviewWidget(post);
           }
         } else {
           final post = widget.item as PostModel;

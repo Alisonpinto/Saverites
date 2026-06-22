@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   gal
   local_auth_windows
   share_plus
+  syncfusion_pdfviewer_windows
   url_launcher_windows
 )
 

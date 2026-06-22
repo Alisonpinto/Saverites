@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../../models/post_model.dart';
 import '../../utils/post_store.dart';
@@ -15,6 +16,7 @@ import '../../utils/rich_text_controller.dart';
 import '../post/write_post_screen.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 
 /// Unified full-screen detail view for any post (user-created or predefined social post).
 ///
@@ -286,9 +288,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           style: GoogleFonts.inter(color: Colors.white),
                         ),
                         backgroundColor: const Color(0xFF48484A),
-                        duration: const Duration(seconds: 2),
+                        duration: const Duration(seconds: 4), // slightly longer to allow undo
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        action: SnackBarAction(
+                          label: 'UNDO',
+                          textColor: const Color(0xFFFAF096),
+                          onPressed: () {
+                            PostStore.instance.unhidePost(id);
+                          },
+                        ),
                       ),
                     );
                     Navigator.pop(context);
@@ -637,14 +646,14 @@ Thank you for helping keep Memoria safe.
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (widget.userPost != null && widget.userPost!.savedInProfile) ...[
+                  if (widget.userPost != null) ...[
                     GestureDetector(
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => WritePostScreen(
-                              isSaveItem: true,
+                              isSaveItem: widget.userPost!.savedInProfile,
                               editingPost: widget.userPost,
                             ),
                           ),
@@ -925,7 +934,10 @@ Thank you for helping keep Memoria safe.
           case BlockType.contact:
             return _buildContactBlock(block.meta?['details'] ?? 'Alex Rivers (+1 555-0199)');
           case BlockType.audio:
-            return AudioPlayerBlock(durationText: block.meta?['duration'] ?? '0:45 min');
+            return AudioPlayerBlock(
+              durationText: block.meta?['duration'] ?? '0:45 min',
+              filePath: widget.userPost?.filePath,
+            );
           case BlockType.code:
             return _buildCodeBlock(block.text, block.meta?['lang'] ?? 'dart');
           case BlockType.text:
@@ -969,23 +981,23 @@ Thank you for helping keep Memoria safe.
           GestureDetector(
             onTap: () => _toggleChecklistBlock(block),
             child: Container(
-              margin: const EdgeInsets.only(top: 2, right: 10),
-              width: 18,
-              height: 18,
+              width: 22,
+              height: 22,
+              margin: const EdgeInsets.only(top: 2, right: 12),
               decoration: BoxDecoration(
                 color: block.isChecked 
-                  ? (isTodo ? const Color(0xFFBF5AF2) : const Color(0xFF6B9BF7)) 
+                  ? const Color(0xFF4255FF) 
                   : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: block.isChecked 
                     ? Colors.transparent 
-                    : const Color(0xFF8E8E93), 
-                  width: 1.5
+                    : const Color(0xFFC7C7CC), 
+                  width: 2.0
                 ),
               ),
               child: block.isChecked 
-                ? const Icon(Icons.check, color: Colors.black, size: 12) 
+                ? const Icon(Icons.check, color: Colors.white, size: 16) 
                 : null,
             ),
           ),
@@ -1125,7 +1137,16 @@ Thank you for helping keep Memoria safe.
     );
   }
 
-  void _openDocumentReader(String docName) {
+  Future<void> _openDocumentReader(String docName) async {
+    final path = widget.userPost?.filePath;
+    if (path != null && await File(path).exists()) {
+      try {
+        await OpenFilex.open(path);
+        return;
+      } catch (e) {
+        debugPrint('Error opening file: $e');
+      }
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1365,19 +1386,36 @@ Thank you for helping keep Memoria safe.
   }
 
   Widget _buildCodeBlock(String code, String lang) {
-    void copyCode() {
-      Clipboard.setData(ClipboardData(text: code));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 1),
-          backgroundColor: const Color(0xFF2C2C2E),
-          content: Text(
-            'Copied to Clipboard!',
-            style: GoogleFonts.inter(color: Colors.white),
-          ),
+    return _PostDetailCodeBlockWidget(code: code, lang: lang);
+  }
+}
+
+class _PostDetailCodeBlockWidget extends StatefulWidget {
+  final String code;
+  final String lang;
+
+  const _PostDetailCodeBlockWidget({required this.code, required this.lang});
+
+  @override
+  State<_PostDetailCodeBlockWidget> createState() => _PostDetailCodeBlockWidgetState();
+}
+
+class _PostDetailCodeBlockWidgetState extends State<_PostDetailCodeBlockWidget> {
+  bool isExpanded = false;
+
+  void copyCode() {
+    Clipboard.setData(ClipboardData(text: widget.code));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 1),
+        backgroundColor: const Color(0xFF2C2C2E),
+        content: Text(
+          'Copied to Clipboard!',
+          style: GoogleFonts.inter(color: Colors.white),
         ),
-      );
-    }
+      ),
+    );
+  }
 
     TextSpan highlightCode(String rawCode) {
       final keywords = RegExp(r'\b(class|import|void|final|const|return|if|else|var|let|function|def|int|double|String|bool|Map|List|static|override)\b');
@@ -1435,106 +1473,101 @@ Thank you for helping keep Memoria safe.
       return TextSpan(children: spans);
     }
 
-    final lines = code.split('\n');
+  @override
+  Widget build(BuildContext context) {
+    final lines = widget.code.split('\n');
+    final bool isLong = lines.length > 8 || widget.code.length > 300;
+
+    final displayCode = isExpanded ? widget.code : (isLong ? lines.take(8).join('\n') + (lines.length > 8 ? '\n...' : '') : widget.code);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Container(
+        width: double.infinity,
         decoration: BoxDecoration(
           color: const Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white10, width: 0.5),
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
           children: [
-            Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF2D2D2D),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 40.0, bottom: 16.0),
+              child: SelectableText.rich(
+                highlightCode(displayCode),
+                style: GoogleFonts.firaCode(
+                  fontSize: 13,
+                  height: 1.5,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  ...List.generate(3, (idx) {
-                    final color = idx == 0 ? Colors.redAccent : (idx == 1 ? Colors.amberAccent : Colors.greenAccent);
-                    return Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.8),
-                        shape: BoxShape.circle,
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2E).withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.lang,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF98989E),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
-                    );
-                  }),
-                  const SizedBox(width: 8),
-                  Text(
-                    lang.toUpperCase(),
-                    style: GoogleFonts.inter(
-                      color: Colors.white60,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
-                      letterSpacing: 0.5,
                     ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: copyCode,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.copy, color: Colors.white60, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Copy',
-                          style: GoogleFonts.inter(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w500),
-                        ),
-                      ],
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98989E), size: 14),
+                    const SizedBox(width: 8),
+                    Container(width: 1, height: 12, color: const Color(0xFF48484A)),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: copyCode,
+                      child: const Icon(Icons.copy_rounded, color: Color(0xFF98989E), size: 14),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    const Icon(Icons.more_horiz, color: Color(0xFF98989E), size: 14),
+                  ],
+                ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: List.generate(lines.length, (index) {
-                      return SizedBox(
-                        height: 18,
-                        child: Text(
-                          '${index + 1}',
-                          style: GoogleFonts.robotoMono(
-                            color: Colors.white24,
-                            fontSize: 12,
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: SelectableText.rich(
-                        highlightCode(code),
-                        style: GoogleFonts.robotoMono(
+            if (isLong)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      isExpanded = !isExpanded;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2C2C2E).withValues(alpha: 0.9),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        isExpanded ? 'Show Less' : 'Show More',
+                        style: GoogleFonts.inter(
+                          color: Colors.white70,
                           fontSize: 12,
-                          height: 1.5,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1576,10 +1609,11 @@ List<ContentBlock> parseBody(String body) {
   
   for (int i = 0; i < lines.length; i++) {
     final line = lines[i];
+    final trimmedLine = line.trim();
     final int lineStart = currentCharIndex;
     final int lineEnd = currentCharIndex + line.length;
     
-    if (line.trim().startsWith('```')) {
+    if (trimmedLine.startsWith('```')) {
       if (inCodeBlock) {
         blocks.add(ContentBlock(
           type: BlockType.code,
@@ -1593,7 +1627,7 @@ List<ContentBlock> parseBody(String body) {
       } else {
         inCodeBlock = true;
         codeStartIndex = lineStart;
-        codeLanguage = line.trim().substring(3).trim();
+        codeLanguage = trimmedLine.substring(3).trim();
         if (codeLanguage.isEmpty) codeLanguage = 'code';
       }
       currentCharIndex += line.length + 1;
@@ -1606,7 +1640,7 @@ List<ContentBlock> parseBody(String body) {
       continue;
     }
     
-    final checklistMatch = RegExp(r'^\[([ xX])\]\s*(.*)$').firstMatch(line);
+    final checklistMatch = RegExp(r'^\[([ xX])\]\s*(.*)$').firstMatch(trimmedLine);
     if (checklistMatch != null) {
       final String checkChar = checklistMatch.group(1)!;
       final String content = checklistMatch.group(2)!;
@@ -1623,7 +1657,7 @@ List<ContentBlock> parseBody(String body) {
       continue;
     }
     
-    final docMatch = RegExp(r'^\[Document:\s*([^\]]+)\]$').firstMatch(line);
+    final docMatch = RegExp(r'^\[Document:\s*([^\]]+)\]$').firstMatch(trimmedLine);
     if (docMatch != null) {
       final String docName = docMatch.group(1)!;
       blocks.add(ContentBlock(
@@ -1637,7 +1671,7 @@ List<ContentBlock> parseBody(String body) {
       continue;
     }
     
-    final contactMatch = RegExp(r'^\[Contact:\s*([^\]]+)\]$').firstMatch(line);
+    final contactMatch = RegExp(r'^\[Contact:\s*([^\]]+)\]$').firstMatch(trimmedLine);
     if (contactMatch != null) {
       final String contactDetails = contactMatch.group(1)!;
       blocks.add(ContentBlock(
@@ -1651,7 +1685,7 @@ List<ContentBlock> parseBody(String body) {
       continue;
     }
     
-    final audioMatch = RegExp(r'^\[(?:Audio Recording|Audio):\s*([^\]]+)\]$').firstMatch(line);
+    final audioMatch = RegExp(r'^\[(?:Audio Recording|Audio):\s*([^\]]+)\]$').firstMatch(trimmedLine);
     if (audioMatch != null) {
       final String audioDetails = audioMatch.group(1)!;
       blocks.add(ContentBlock(
@@ -1689,17 +1723,19 @@ List<ContentBlock> parseBody(String body) {
 
 class AudioPlayerBlock extends StatefulWidget {
   final String durationText;
-  const AudioPlayerBlock({super.key, required this.durationText});
+  final String? filePath;
+  const AudioPlayerBlock({super.key, required this.durationText, this.filePath});
 
   @override
   State<AudioPlayerBlock> createState() => _AudioPlayerBlockState();
 }
 
 class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
+  final AudioPlayer _player = AudioPlayer();
   bool _isPlaying = false;
-  int _elapsedSeconds = 0;
-  int _totalSeconds = 45;
-  Timer? _playbackTimer;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  int _fallbackTotalSeconds = 45;
 
   @override
   void initState() {
@@ -1709,35 +1745,77 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
     if (parts.length == 2) {
       final int m = int.tryParse(parts[0]) ?? 0;
       final int s = int.tryParse(parts[1]) ?? 45;
-      _totalSeconds = (m * 60) + s;
+      _fallbackTotalSeconds = (m * 60) + s;
     }
+
+    _player.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = state == PlayerState.playing;
+        });
+      }
+    });
+
+    _player.onDurationChanged.listen((newDuration) {
+      if (mounted) {
+        setState(() {
+          _duration = newDuration;
+        });
+      }
+    });
+
+    _player.onPositionChanged.listen((newPosition) {
+      if (mounted) {
+        setState(() {
+          _position = newPosition;
+        });
+      }
+    });
+
+    _player.onPlayerComplete.listen((event) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _playbackTimer?.cancel();
+    _player.dispose();
     super.dispose();
   }
 
-  void _togglePlay() {
-    if (_isPlaying) {
-      _playbackTimer?.cancel();
-      setState(() => _isPlaying = false);
-    } else {
-      setState(() => _isPlaying = true);
-      _playbackTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (_elapsedSeconds >= _totalSeconds) {
-          _playbackTimer?.cancel();
-          setState(() {
-            _isPlaying = false;
-            _elapsedSeconds = 0;
-          });
-        } else {
-          setState(() {
-            _elapsedSeconds++;
-          });
-        }
-      });
+  Future<void> _togglePlay() async {
+    debugPrint("--- AudioPlayer _togglePlay tapped ---");
+    debugPrint("widget.filePath: ${widget.filePath}");
+    
+    if (widget.filePath == null || widget.filePath!.isEmpty) {
+      debugPrint("Error: No audio file path provided");
+      return;
+    }
+    
+    final file = File(widget.filePath!);
+    final exists = await file.exists();
+    debugPrint("File exists at path: $exists");
+    if (!exists) {
+      debugPrint("Error: Audio file does not exist at path: ${widget.filePath}");
+      return;
+    }
+    
+    try {
+      if (_isPlaying) {
+        debugPrint("Pausing audio...");
+        await _player.pause();
+      } else {
+        debugPrint("Playing audio from file source...");
+        await _player.play(DeviceFileSource(widget.filePath!));
+        debugPrint("Play command sent successfully.");
+      }
+    } catch (e) {
+      debugPrint("Error playing audio: $e");
     }
   }
 
@@ -1749,7 +1827,9 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
 
   @override
   Widget build(BuildContext context) {
-    final double percent = _totalSeconds > 0 ? (_elapsedSeconds / _totalSeconds) : 0.0;
+    final int totalSec = _duration.inSeconds > 0 ? _duration.inSeconds : _fallbackTotalSeconds;
+    final int elapsedSec = _position.inSeconds;
+    final double percent = totalSec > 0 ? (elapsedSec / totalSec) : 0.0;
     
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1791,7 +1871,7 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
                         style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                       ),
                       Text(
-                        '${_formatDuration(_elapsedSeconds)} / ${_formatDuration(_totalSeconds)}',
+                        '${_formatDuration(elapsedSec)} / ${_formatDuration(totalSec)}',
                         style: GoogleFonts.robotoMono(color: Colors.white30, fontSize: 11),
                       ),
                     ],

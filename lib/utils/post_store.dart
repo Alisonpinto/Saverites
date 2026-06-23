@@ -724,7 +724,7 @@ class PostStore {
   static final List<PostModel> predefinedPosts = [
     const PostModel(
       id: 'welcome-post',
-      mediaAssetPath: 'assets/images/app_logo_memoria.png',
+      mediaAssetPath: 'assets/images/logo.jpeg',
       likesCount: 0,
       savesCount: 0,
       sharesCount: 0,

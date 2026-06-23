@@ -3,19 +3,19 @@
 <plist version="1.0">
 <dict>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Memoria requires access to the photo library to pick images and videos for posts.</string>
+	<string>Saverites requires access to the photo library to pick images and videos for posts.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Memoria requires access to the photo library to save downloaded images and videos.</string>
+	<string>Saverites requires access to the photo library to save downloaded images and videos.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Memoria requires access to the camera to take photos and videos for posts.</string>
+	<string>Saverites requires access to the camera to take photos and videos for posts.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Memoria requires access to the microphone to record video audio for posts.</string>
+	<string>Saverites requires access to the microphone to record video audio for posts.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Memoria</string>
+	<string>Saverites</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,7 +23,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Memoria</string>
+	<string>Saverites</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

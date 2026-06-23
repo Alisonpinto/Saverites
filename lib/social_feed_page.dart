@@ -168,7 +168,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
                             
                             // Make it spin slightly if it's actively refreshing
                             Widget logo = Image.asset(
-                              'assets/images/app_logo_memoria.png',
+                              'assets/images/logo.jpeg',
                               width: 36,
                               height: 36,
                               color: Colors.white, // Applying white to ensure it fits the premium dark theme

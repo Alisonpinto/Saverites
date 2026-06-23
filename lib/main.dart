@@ -55,7 +55,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _handleDeepLink(Uri uri) {
-    if (uri.scheme == 'memoria' && uri.host == 'post') {
+    if (uri.scheme == 'saverites' && uri.host == 'post') {
       final String? postId = uri.queryParameters['id'];
       if (postId != null) {
         _navigateToPost(postId);
@@ -102,7 +102,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       navigatorKey: MyApp.navigatorKey,
-      title: 'Memoria',
+      title: 'Saverites',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,

@@ -1,6 +1,6 @@
 {
-    "name": "Memoria",
-    "short_name": "Memoria",
+    "name": "Saverites",
+    "short_name": "Saverites",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

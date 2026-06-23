@@ -364,7 +364,7 @@ class _LoginScreenState extends State<LoginScreen>
                       children: [
                         // ── Logo ──────────────────────────────────────────────
                         Image.asset(
-                          'assets/images/app_logo_memoria.png',
+                          'assets/images/logo.jpeg',
                           height: 44,
                           fit: BoxFit.contain,
                         ),

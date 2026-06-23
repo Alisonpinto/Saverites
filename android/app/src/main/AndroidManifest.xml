@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
-        android:label="Memoria"
+        android:label="Saverites"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -36,13 +36,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             
-            <!-- Deep Link Intent Filter for memoria:// -->
+            <!-- Deep Link Intent Filter for saverites:// -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <!-- Accepts URIs that begin with "memoria://post" -->
-                <data android:scheme="memoria" android:host="post" />
+                <!-- Accepts URIs that begin with "saverites://post" -->
+                <data android:scheme="saverites" android:host="post" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>

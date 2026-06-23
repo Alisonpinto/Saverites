@@ -336,16 +336,7 @@ class _LoginScreenState extends State<LoginScreen>
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF6E6E73),
-              Color(0xFF1A1A1B),
-              Color(0xFF000000),
-            ],
-            stops: [0.0, 0.22, 1.0],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          color: Color(0xFF000000),
         ),
         child: SafeArea(
           child: Center(
@@ -450,10 +441,10 @@ class _LoginScreenState extends State<LoginScreen>
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: Colors.white.withValues(alpha: 0.12),
           width: 1,
         ),
       ),
@@ -735,7 +726,7 @@ class _RegisterForm extends StatelessWidget {
           child: Container(
             height: 50,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E20),
+              color: const Color(0xFF141414),
               borderRadius: BorderRadius.circular(13),
               border: Border.all(color: borderColor, width: 1.2),
             ),
@@ -933,10 +924,10 @@ class _InputBox extends StatelessWidget {
     return Container(
       height: 50,
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E20),
+        color: const Color(0xFF141414),
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: Colors.white.withValues(alpha: 0.10),
           width: 1,
         ),
       ),

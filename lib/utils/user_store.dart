@@ -159,14 +159,7 @@ class UserStore {
 
   static String generateRandomUserId() {
     final prefixes = [
-      'memoria',
-      'memo',
-      'memento',
-      'recollect',
-      'keeper',
-      'echo',
-      'muse',
-      'remind',
+      'saverites',
     ];
     final rng = Random();
     final prefix = prefixes[rng.nextInt(prefixes.length)];

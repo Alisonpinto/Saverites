@@ -724,13 +724,13 @@ class PostStore {
   static final List<PostModel> predefinedPosts = [
     const PostModel(
       id: 'welcome-post',
-      mediaAssetPath: 'assets/images/logo.jpeg',
+      mediaAssetPath: 'assets/images/logo.png',
       likesCount: 0,
       savesCount: 0,
       sharesCount: 0,
       cardHeight: 180,
-      title: 'Welcome to Memoria!',
-      username: 'memoria_team',
+      title: 'Welcome to Saverites!',
+      username: 'saverites_team',
       avatarAssetPath: null,
       description: 'Your feed is currently empty. Start by posting something or saving an item to your profile!',
       url: null,

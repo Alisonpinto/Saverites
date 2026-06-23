@@ -297,7 +297,7 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = false);
 
     if (result.success) {
-      _showSuccess('Welcome to Memoria, ${result.user!.name}! 🎉');
+      _showSuccess('Welcome to Saverites, ${result.user!.name}! 🎉');
       await Future.delayed(const Duration(milliseconds: 600));
       if (mounted) _goAfterRegister();
     } else {
@@ -364,8 +364,8 @@ class _LoginScreenState extends State<LoginScreen>
                       children: [
                         // ── Logo ──────────────────────────────────────────────
                         Image.asset(
-                          'assets/images/logo.jpeg',
-                          height: 44,
+                          'assets/images/logo.png',
+                          height: 80,
                           fit: BoxFit.contain,
                         ),
 
@@ -751,7 +751,7 @@ class _RegisterForm extends StatelessWidget {
                       fontSize: 14,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'e.g. memoria_xyz',
+                      hintText: 'e.g. saverites_xyz',
                       hintStyle: GoogleFonts.inter(
                         color: const Color(0xFF515151),
                         fontSize: 13,

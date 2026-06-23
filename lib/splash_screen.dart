@@ -18,6 +18,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
@@ -25,13 +26,20 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1200),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animController,
-        curve: Curves.easeIn,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeIn),
+      ),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0.0, 1.0, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -108,45 +116,48 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         child: Center(
           child: FadeTransition(
             opacity: _fadeAnimation,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                IntrinsicWidth(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'me',
-                        softWrap: false,
-                        maxLines: 1,
-                        style: GoogleFonts.jotiOne(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.white,
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  IntrinsicWidth(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'save',
+                          softWrap: false,
+                          maxLines: 1,
+                          style: GoogleFonts.outfit(
+                            fontSize: 44,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        height: 1,
-                        color: Colors.white,
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Container(
+                          height: 2.5,
+                          color: const Color(0xFFFAF096),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  'moria',
-                  softWrap: false,
-                  maxLines: 1,
-                  style: GoogleFonts.inter(
-                    fontSize: 36,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
+                  Text(
+                    'rites',
+                    softWrap: false,
+                    maxLines: 1,
+                    style: GoogleFonts.outfit(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w300,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

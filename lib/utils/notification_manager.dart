@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
@@ -15,38 +17,45 @@ class NotificationManager {
   NotificationManager._();
   static final NotificationManager instance = NotificationManager._();
 
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   /// Persistent audio player — must be kept at class level so it is NOT
   /// garbage-collected before the sound finishes playing.
   final AudioPlayer _soundPlayer = AudioPlayer();
-  
+
   /// Reactive notifier for the list of notifications shown in the app.
   /// Starts with empty list.
   final ValueNotifier<List<NotificationModel>> notificationsNotifier =
       ValueNotifier<List<NotificationModel>>([]);
 
   List<NotificationModel> get notifications => notificationsNotifier.value;
-  
+
   /// Current unread count
   int get unreadCount => notifications.where((n) => !n.isRead).length;
 
   Timer? _simulationTimer;
+  Timer? _remoteSyncTimer;
+
+  static const String _kvdbUrlNotifications =
+      'https://jsonblob.com/api/jsonBlob/019ef90e-eef0-7a1b-84d0-c64ada57d67c';
 
   /// Initialize local notification plugins and set the initial launcher icon badge count.
   Future<void> init() async {
     // 1. Configure local notifications settings
-    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const DarwinInitializationSettings iOSSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const DarwinInitializationSettings iOSSettings =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
     const InitializationSettings initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iOSSettings,
     );
-    
+
     try {
       await _localNotifications.initialize(
         settings: initSettings,
@@ -54,10 +63,12 @@ class NotificationManager {
           debugPrint("Notification clicked: ${response.payload}");
         },
       );
-      
+
       // Request notification permissions for Android 13+
       await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.requestNotificationsPermission();
     } catch (e) {
       debugPrint("Error initializing local notifications: $e");
@@ -88,8 +99,8 @@ class NotificationManager {
     // 4. Start periodic reminder check timer (runs every 10 seconds)
     // _startReminderTimer();
 
-    // 5. Start mock push notification loop (triggers every 25 seconds)
-    // startSimulation();
+    // 5. Start remote sync timer for dynamic notifications
+    startRemoteSyncTimer();
   }
 
   /// Periodically simulates incoming actions from "friends"
@@ -104,12 +115,159 @@ class NotificationManager {
     _simulationTimer?.cancel();
   }
 
+  /// Periodically fetch remote notifications
+  void startRemoteSyncTimer() {
+    _remoteSyncTimer?.cancel();
+    // Sync immediately, then every 10 seconds
+    syncOnlineNotifications();
+    _remoteSyncTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      syncOnlineNotifications();
+    });
+  }
+
+  void stopRemoteSyncTimer() {
+    _remoteSyncTimer?.cancel();
+  }
+
+  Future<void> syncOnlineNotifications() async {
+    try {
+      final response = await http
+          .get(Uri.parse(_kvdbUrlNotifications))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          final List<NotificationModel> remoteNotifications = [];
+          for (var item in decoded) {
+            try {
+              remoteNotifications.add(
+                NotificationModel.fromJson(item as Map<String, dynamic>),
+              );
+            } catch (e) {
+              debugPrint("Error parsing remote notification: $e");
+            }
+          }
+
+          final currentUser = UserStore.instance.currentUser?.userId;
+          if (currentUser == null) return;
+
+          // Filter notifications intended for this user
+          final incomingForMe = remoteNotifications
+              .where((n) => n.toUserId == currentUser)
+              .toList();
+
+          // Merge with local: simple approach, we only add new ones based on ID
+          final currentIds = notificationsNotifier.value
+              .map((n) => n.id)
+              .toSet();
+          bool hasNew = false;
+
+          // Add new incoming notifications
+          final List<NotificationModel> newlyFetched = [];
+          for (var notif in incomingForMe) {
+            if (!currentIds.contains(notif.id)) {
+              newlyFetched.add(notif);
+              hasNew = true;
+            }
+          }
+
+          if (hasNew) {
+            notificationsNotifier.value = [
+              ...newlyFetched,
+              ...notificationsNotifier.value,
+            ];
+            _playNotificationSound();
+            _updateLauncherBadge();
+
+            // Show local heads-up for the most recent one
+            await showLocalNotification(
+              id: Random().nextInt(100000),
+              title: newlyFetched.first.username,
+              body: newlyFetched.first.previewText,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error syncing remote notifications: $e");
+    }
+  }
+
+  Future<void> uploadNotificationOnline(NotificationModel notif) async {
+    try {
+      List<dynamic> jsonList = [];
+      try {
+        final response = await http
+            .get(Uri.parse(_kvdbUrlNotifications))
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is List) {
+            jsonList = decoded;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error fetching notifications for upload: $e");
+        return;
+      }
+
+      // Add the new notification
+      jsonList.insert(0, notif.toJson());
+
+      // Limit array size to prevent bloat over time (e.g., keep last 100)
+      if (jsonList.length > 100) {
+        jsonList = jsonList.sublist(0, 100);
+      }
+
+      final putResponse = await http
+          .put(
+            Uri.parse(_kvdbUrlNotifications),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(jsonList),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (putResponse.statusCode != 200 && putResponse.statusCode != 201) {
+        debugPrint(
+          "Failed to upload notification: ${putResponse.statusCode} ${putResponse.body}",
+        );
+      }
+    } catch (e) {
+      debugPrint("Error uploading remote notification: $e");
+    }
+  }
+
   final List<Map<String, String>> _mockActivities = [
-    {'username': 'emma.visuals', 'action': 'liked your post', 'initial': 'E', 'color': '0xFF9B59B6'},
-    {'username': 'dan_code', 'action': 'commented: "Clean work! 🚀"', 'initial': 'D', 'color': '0xFF2ECC71'},
-    {'username': 'jess.shoots', 'action': 'shared your post', 'initial': 'J', 'color': '0xFFFF1744'},
-    {'username': 'zack.fit', 'action': 'started following you', 'initial': 'Z', 'color': '0xFFF1C40F'},
-    {'username': 'sara.m', 'action': 'posted a new photo', 'initial': 'S', 'color': '0xFF7B61FF'},
+    {
+      'username': 'emma.visuals',
+      'action': 'liked your post',
+      'initial': 'E',
+      'color': '0xFF9B59B6',
+    },
+    {
+      'username': 'dan_code',
+      'action': 'commented: "Clean work! 🚀"',
+      'initial': 'D',
+      'color': '0xFF2ECC71',
+    },
+    {
+      'username': 'jess.shoots',
+      'action': 'shared your post',
+      'initial': 'J',
+      'color': '0xFFFF1744',
+    },
+    {
+      'username': 'zack.fit',
+      'action': 'started following you',
+      'initial': 'Z',
+      'color': '0xFFF1C40F',
+    },
+    {
+      'username': 'sara.m',
+      'action': 'posted a new photo',
+      'initial': 'S',
+      'color': '0xFF7B61FF',
+    },
   ];
 
   void _playNotificationSound() async {
@@ -131,7 +289,7 @@ class NotificationManager {
     final rand = Random();
     final activity = _mockActivities[rand.nextInt(_mockActivities.length)];
     final String id = 'sim-${DateTime.now().millisecondsSinceEpoch}';
-    
+
     final newNotif = NotificationModel(
       id: id,
       avatarSeed: activity['username'], // use username as DiceBear seed
@@ -145,9 +303,9 @@ class NotificationManager {
 
     // Prepend to notifications list
     notificationsNotifier.value = [newNotif, ...notifications];
-    
+
     _playNotificationSound();
-    
+
     // Update dynamic badge indicators
     _updateLauncherBadge();
 
@@ -168,6 +326,8 @@ class NotificationManager {
     required String action, // 'liked', 'shared', 'saved'
     required String postTitle,
     String? author,
+    String? postAuthorId,
+    String? postId,
     bool isIncoming = false,
     String? remoteUsername,
     Color? remoteAvatarColor,
@@ -209,9 +369,13 @@ class NotificationManager {
       avatarColor = action == 'liked'
           ? const Color(0xFFE24A6A)
           : action == 'shared'
-              ? const Color(0xFF7B61FF)
-              : const Color(0xFF2ECC71);
-      initial = action == 'liked' ? 'L' : action == 'shared' ? 'S' : 'B';
+          ? const Color(0xFF7B61FF)
+          : const Color(0xFF2ECC71);
+      initial = action == 'liked'
+          ? 'L'
+          : action == 'shared'
+          ? 'S'
+          : 'B';
       avatarAsset = null;
 
       if (action == 'liked') {
@@ -226,7 +390,8 @@ class NotificationManager {
       }
     }
 
-    final String currentUserId = UserStore.instance.currentUser?.userId ?? 'You';
+    final String currentUserId =
+        UserStore.instance.currentUser?.userId ?? 'You';
 
     final newNotif = NotificationModel(
       id: id,
@@ -238,16 +403,42 @@ class NotificationManager {
       previewText: isIncoming
           ? body
           : (action == 'liked'
-              ? 'liked $actorName\'s post: "$postTitle"'
-              : action == 'shared'
-                  ? 'shared $actorName\'s post: "$postTitle"'
-                  : 'saved $actorName\'s post: "$postTitle"'),
+                ? 'liked $actorName\'s post: "$postTitle"'
+                : action == 'shared'
+                ? 'shared $actorName\'s post: "$postTitle"'
+                : 'saved $actorName\'s post: "$postTitle"'),
       timestamp: 'now',
       isRead: false,
+      toUserId: isIncoming ? currentUserId : postAuthorId,
+      postId: postId,
+      actionType: action,
     );
 
-    // Prepend to notifications list
+    // Prepend to local notifications list if it's incoming or if it's our own action
     notificationsNotifier.value = [newNotif, ...notifications];
+
+    // If we performed the action and the author is someone else, push it online
+    if (!isIncoming && postAuthorId != null && postAuthorId != currentUserId) {
+      // Create the version that will be "incoming" for the other user
+      final remoteNotif = NotificationModel(
+        id: 'remote-${DateTime.now().millisecondsSinceEpoch}',
+        avatarSeed: DiceAvatar.seedNotifier.value,
+        avatarInitial: initial,
+        avatarColor: avatarColor,
+        username: currentUserId,
+        previewText: (action == 'liked'
+            ? 'liked your post: "$postTitle"'
+            : action == 'shared'
+            ? 'shared your post: "$postTitle"'
+            : 'saved your post: "$postTitle"'),
+        timestamp: 'now',
+        isRead: false,
+        toUserId: postAuthorId,
+        postId: postId,
+        actionType: action,
+      );
+      uploadNotificationOnline(remoteNotif);
+    }
 
     // Always trigger sound, badge, and native heads-up OS notification for all actions.
     _playNotificationSound();
@@ -277,7 +468,8 @@ class NotificationManager {
     final String id = 'vault-${DateTime.now().millisecondsSinceEpoch}';
     const Color vaultColor = Color(0xFFF39C12);
     const String vaultInitial = 'V';
-    final String body = 'You added a new memory: "$title". Review it in Self Save.';
+    final String body =
+        'You added a new memory: "$title". Review it in Self Save.';
 
     final newNotif = NotificationModel(
       id: id,
@@ -326,15 +518,16 @@ class NotificationManager {
       debugPrint("Error reading notification setting: $e");
     }
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'memoria_notifications_silent',
-      'Memoria Notifications',
-      channelDescription: 'Notifications for likes, comments, and posts',
-      importance: Importance.max,
-      priority: Priority.high,
-      ticker: 'ticker',
-      playSound: false, // Disable system default sound
-    );
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'memoria_notifications_silent',
+          'Memoria Notifications',
+          channelDescription: 'Notifications for likes, comments, and posts',
+          importance: Importance.max,
+          priority: Priority.high,
+          ticker: 'ticker',
+          playSound: false, // Disable system default sound
+        );
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
@@ -377,8 +570,6 @@ class NotificationManager {
     _updateLauncherBadge();
   }
 
-
-
   Future<void> triggerSavedItemsCheck() async {
     await checkAndTriggerSavedItemsReminder();
   }
@@ -389,24 +580,30 @@ class NotificationManager {
       final enabled = prefs.getBool('notificationsEnabled') ?? true;
       if (!enabled) return;
 
-      final interval = prefs.getString('savedItemsReminderInterval') ?? 'Always';
+      final interval =
+          prefs.getString('savedItemsReminderInterval') ?? 'Always';
       if (interval == 'Never') return;
 
       // Check if there are any saved items
       final savedPredefinedCount = PostStore.instance.savedSocialPostIds.length;
-      final savedUserPosts = PostStore.instance.posts.where((p) => p.savedInProfile).toList();
+      final savedUserPosts = PostStore.instance.posts
+          .where((p) => p.savedInProfile)
+          .toList();
       final totalSaved = savedPredefinedCount + savedUserPosts.length;
 
       if (totalSaved == 0) return;
 
       // Get the last reminder timestamp
-      final lastReminderMs = prefs.getInt('lastSavedItemsReminderTimestamp') ?? 0;
+      final lastReminderMs =
+          prefs.getInt('lastSavedItemsReminderTimestamp') ?? 0;
       final lastReminder = DateTime.fromMillisecondsSinceEpoch(lastReminderMs);
       final now = DateTime.now();
 
       Duration checkDuration;
       if (interval == 'Always') {
-        checkDuration = const Duration(seconds: 45); // periodic checking for testing
+        checkDuration = const Duration(
+          seconds: 45,
+        ); // periodic checking for testing
       } else if (interval == '2 Days') {
         checkDuration = const Duration(days: 2);
       } else if (interval == '1 Week') {
@@ -419,21 +616,27 @@ class NotificationManager {
 
       if (now.difference(lastReminder) >= checkDuration) {
         // Record the timestamp
-        await prefs.setInt('lastSavedItemsReminderTimestamp', now.millisecondsSinceEpoch);
+        await prefs.setInt(
+          'lastSavedItemsReminderTimestamp',
+          now.millisecondsSinceEpoch,
+        );
 
         // Pick a random saved item title if available
         String title = "your saved items";
         String? localImagePath;
         String? assetImagePath;
 
-        if (savedUserPosts.isNotEmpty && (savedPredefinedCount == 0 || Random().nextBool())) {
+        if (savedUserPosts.isNotEmpty &&
+            (savedPredefinedCount == 0 || Random().nextBool())) {
           final rand = Random();
           final post = savedUserPosts[rand.nextInt(savedUserPosts.length)];
           title = '"${post.title}"';
           localImagePath = post.imagePath;
         } else if (PostStore.instance.savedSocialPostIds.isNotEmpty) {
           final socialSaves = PostStore.predefinedPosts
-              .where((p) => PostStore.instance.savedSocialPostIds.contains(p.id))
+              .where(
+                (p) => PostStore.instance.savedSocialPostIds.contains(p.id),
+              )
               .toList();
           if (socialSaves.isNotEmpty) {
             final rand = Random();
@@ -445,7 +648,7 @@ class NotificationManager {
 
         final body = 'Remember to review your saved item: $title';
         final String notifId = 'reminder-${now.millisecondsSinceEpoch}';
-        
+
         final newNotif = NotificationModel(
           id: notifId,
           avatarSeed: 'memoria_reminder', // consistent reminder avatar seed
@@ -459,7 +662,7 @@ class NotificationManager {
 
         // Prepend to notifications list
         notificationsNotifier.value = [newNotif, ...notifications];
-        
+
         _playNotificationSound();
         _updateLauncherBadge();
 

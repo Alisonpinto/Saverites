@@ -542,19 +542,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _buildRow(
                                   icon: Icons.help_outline_rounded,
                                   label: _t('helpSupport'),
-                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/support'),
+                                  onTap: () => _openLink('https://saveriteswebsite.vercel.app/support'),
                                 ),
                                 _buildDivider(),
                                 _buildRow(
                                   icon: Icons.people_outline_rounded,
                                   label: _t('aboutDevs'),
-                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/about-developer'),
+                                  onTap: () => _openLink('https://saveriteswebsite.vercel.app/about-developer'),
                                 ),
                                 _buildDivider(),
                                 _buildRow(
                                   icon: Icons.info_outline_rounded,
                                   label: _t('aboutMemoria'),
-                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/'),
+                                  onTap: () => _openLink('https://saveriteswebsite.vercel.app/'),
                                 ),
                               ],
                             ),
@@ -576,13 +576,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _buildRow(
                                   icon: Icons.description_outlined,
                                   label: _t('terms'),
-                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/terms-and-conditions'),
+                                  onTap: () => _openLink('https://saveriteswebsite.vercel.app/terms-and-conditions'),
                                 ),
                                 _buildDivider(),
                                 _buildRow(
                                   icon: Icons.shield_outlined,
                                   label: _t('privacy'),
-                                  onTap: () => _openLink('https://memoria-website-sigma.vercel.app/privacy-policy'),
+                                  onTap: () => _openLink('https://saveriteswebsite.vercel.app/privacy-policy'),
                                 ),
                               ],
                             ),

@@ -25,11 +25,7 @@ class PostDetailScreen extends StatefulWidget {
   final UserPost? userPost;
   final PostModel? postModel;
 
-  const PostDetailScreen({
-    super.key,
-    this.userPost,
-    this.postModel,
-  });
+  const PostDetailScreen({super.key, this.userPost, this.postModel});
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -56,7 +52,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     PostStore.instance.postsNotifier.removeListener(_onStoreChanged);
-    PostStore.instance.savedSocialPostIdsNotifier.removeListener(_onStoreChanged);
+    PostStore.instance.savedSocialPostIdsNotifier.removeListener(
+      _onStoreChanged,
+    );
     PostStore.instance.likedPostIdsNotifier.removeListener(_onStoreChanged);
     super.dispose();
   }
@@ -78,10 +76,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   String get id => widget.userPost?.id ?? widget.postModel!.id;
   String get title => currentUserPost?.title ?? widget.postModel?.title ?? '';
-  String get description => currentUserPost?.body ?? widget.postModel?.description ?? '';
+  String get description =>
+      currentUserPost?.body ?? widget.postModel?.description ?? '';
   List<RichStyle>? get charStyles => currentUserPost?.charStyles;
-  String get username => widget.userPost != null ? (currentUserPost?.username ?? 'gangster_vagas') : (widget.postModel?.username ?? 'Unknown user');
-  String? get avatarAssetPath => widget.userPost != null ? null : widget.postModel?.avatarAssetPath;
+  String get username => widget.userPost != null
+      ? (currentUserPost?.username ?? 'gangster_vagas')
+      : (widget.postModel?.username ?? 'Unknown user');
+  String? get avatarAssetPath =>
+      widget.userPost != null ? null : widget.postModel?.avatarAssetPath;
   String? get url => widget.userPost?.url ?? widget.postModel?.url;
   bool get _liked => PostStore.instance.likedPostIds.contains(id);
 
@@ -90,11 +92,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       final posts = PostStore.instance.posts;
       final idx = posts.indexWhere((p) => p.id == widget.userPost!.id);
       if (idx != -1) {
-        return posts[idx].savedInProfile;
+        if (posts[idx].savedInProfile) return true;
+        return PostStore.instance.savedSocialPostIds.contains(
+          widget.userPost!.id,
+        );
       }
-      return widget.userPost!.savedInProfile;
+      if (widget.userPost!.savedInProfile) return true;
+      return PostStore.instance.savedSocialPostIds.contains(
+        widget.userPost!.id,
+      );
     } else {
-      return PostStore.instance.savedSocialPostIds.contains(widget.postModel!.id);
+      return PostStore.instance.savedSocialPostIds.contains(
+        widget.postModel!.id,
+      );
     }
   }
 
@@ -113,7 +123,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   void _toggleSave() {
     if (widget.userPost != null) {
-      PostStore.instance.toggleSavedInProfile(id);
+      final posts = PostStore.instance.posts;
+      final idx = posts.indexWhere((p) => p.id == widget.userPost!.id);
+      bool isVault = false;
+      if (idx != -1) {
+        isVault = posts[idx].savedInProfile;
+      } else {
+        isVault = widget.userPost!.savedInProfile;
+      }
+
+      if (isVault) {
+        PostStore.instance.toggleSavedInProfile(id);
+      } else {
+        PostStore.instance.toggleSavedSocialPost(id);
+      }
     } else {
       PostStore.instance.toggleSavedSocialPost(id);
     }
@@ -144,7 +167,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Future<void> _launchUrl(String urlString) async {
     String normalized = urlString.trim();
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    if (!normalized.startsWith('http://') &&
+        !normalized.startsWith('https://')) {
       normalized = 'https://$normalized';
     }
     final Uri parseUrl = Uri.parse(normalized);
@@ -192,8 +216,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         final tempDir = await getTemporaryDirectory();
         final fileName = assetPath.split('/').last;
         final file = File('${tempDir.path}/$fileName');
-        await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
-        if (assetPath.toLowerCase().endsWith('.mp4') || assetPath.toLowerCase().endsWith('.mov')) {
+        await file.writeAsBytes(
+          byteData.buffer.asUint8List(
+            byteData.offsetInBytes,
+            byteData.lengthInBytes,
+          ),
+        );
+        if (assetPath.toLowerCase().endsWith('.mp4') ||
+            assetPath.toLowerCase().endsWith('.mov')) {
           await Gal.putVideo(file.path);
         } else {
           await Gal.putImage(file.path);
@@ -209,7 +239,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             ),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -223,7 +255,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             ),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -290,9 +324,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           style: GoogleFonts.inter(color: Colors.white),
                         ),
                         backgroundColor: const Color(0xFF48484A),
-                        duration: const Duration(seconds: 4), // slightly longer to allow undo
+                        duration: const Duration(
+                          seconds: 4,
+                        ), // slightly longer to allow undo
                         behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         action: SnackBarAction(
                           label: 'UNDO',
                           textColor: const Color(0xFFFAF096),
@@ -332,7 +370,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       'Copyright violation',
       'Prohibited content',
       'Sharing personal info',
-      'Other'
+      'Other',
     ];
 
     showModalBottomSheet(
@@ -399,7 +437,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: const BoxDecoration(
                             border: Border(
-                              bottom: BorderSide(color: Color(0xFF2C2C2E), width: 1),
+                              bottom: BorderSide(
+                                color: Color(0xFF2C2C2E),
+                                width: 1,
+                              ),
                             ),
                           ),
                           child: Row(
@@ -410,7 +451,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: isSelected ? Colors.white : const Color(0xFF48484A),
+                                    color: isSelected
+                                        ? Colors.white
+                                        : const Color(0xFF48484A),
                                     width: isSelected ? 6 : 1.5,
                                   ),
                                 ),
@@ -438,11 +481,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             ? null
                             : () async {
                                 Navigator.pop(ctx);
-                                
-                                final String subject = Uri.encodeComponent('Memoria Report - $selectedReason');
-                                final String postId = widget.userPost?.id ?? widget.postModel?.id ?? 'Unknown ID';
-                                final String reportedAt = DateTime.now().toString();
-                                final String bodyText = '''MEMORIA
+
+                                final String subject = Uri.encodeComponent(
+                                  'Memoria Report - $selectedReason',
+                                );
+                                final String postId =
+                                    widget.userPost?.id ??
+                                    widget.postModel?.id ??
+                                    'Unknown ID';
+                                final String reportedAt = DateTime.now()
+                                    .toString();
+                                final String bodyText =
+                                    '''MEMORIA
 
 Community Report Submission
 
@@ -457,19 +507,29 @@ This report was submitted from the Memoria mobile application.
 Thank you for helping keep Memoria safe.
 
 — Team Memoria''';
-                                final String body = Uri.encodeComponent(bodyText);
-                                final Uri emailUri = Uri.parse('mailto:etamax2026@gmail.com?subject=$subject&body=$body');
+                                final String body = Uri.encodeComponent(
+                                  bodyText,
+                                );
+                                final Uri emailUri = Uri.parse(
+                                  'mailto:etamax2026@gmail.com?subject=$subject&body=$body',
+                                );
 
                                 try {
-                                  final bool launched = await launchUrl(emailUri);
+                                  final bool launched = await launchUrl(
+                                    emailUri,
+                                  );
                                   if (launched) {
                                     if (context.mounted) {
                                       showDialog(
                                         context: context,
                                         builder: (context) => AlertDialog(
-                                          backgroundColor: const Color(0xFF1C1C1E),
+                                          backgroundColor: const Color(
+                                            0xFF1C1C1E,
+                                          ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
                                           ),
                                           title: Text(
                                             'Thank You',
@@ -488,7 +548,8 @@ Thank you for helping keep Memoria safe.
                                           ),
                                           actions: [
                                             TextButton(
-                                              onPressed: () => Navigator.pop(context),
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
                                               child: Text(
                                                 'Done',
                                                 style: GoogleFonts.inter(
@@ -511,13 +572,19 @@ Thank you for helping keep Memoria safe.
                                       SnackBar(
                                         content: Text(
                                           'Unable to open email app. Please contact support manually.',
-                                          style: GoogleFonts.inter(color: Colors.white),
+                                          style: GoogleFonts.inter(
+                                            color: Colors.white,
+                                          ),
                                         ),
-                                        backgroundColor: const Color(0xFFEB4335),
+                                        backgroundColor: const Color(
+                                          0xFFEB4335,
+                                        ),
                                         duration: const Duration(seconds: 3),
                                         behavior: SnackBarBehavior.floating,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                       ),
                                     );
@@ -534,7 +601,9 @@ Thank you for helping keep Memoria safe.
                         child: Text(
                           'Submit Report',
                           style: GoogleFonts.inter(
-                            color: selectedReason == null ? const Color(0xFFAEAEB2) : Colors.black,
+                            color: selectedReason == null
+                                ? const Color(0xFFAEAEB2)
+                                : Colors.black,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -599,29 +668,38 @@ Thank you for helping keep Memoria safe.
                         assetPath: widget.postModel?.mediaAssetPath,
                       )
                     : (widget.userPost?.imagePath != null
-                        ? Image.file(
-                            File(widget.userPost!.imagePath!),
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: const Color(0xFF2A2A2E),
-                                child: const Center(
-                                  child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                                ),
-                              );
-                            },
-                          )
-                        : (widget.postModel?.mediaAssetPath != null && widget.postModel!.mediaAssetPath.isNotEmpty
-                            ? Image.asset(
-                                widget.postModel!.mediaAssetPath,
-                                fit: BoxFit.contain,
-                              )
-                            : Container(
-                                color: const Color(0xFF2A2A2E),
-                                child: const Center(
-                                  child: Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                                ),
-                              ))),
+                          ? Image.file(
+                              File(widget.userPost!.imagePath!),
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: const Color(0xFF2A2A2E),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.broken_image,
+                                      color: Colors.white54,
+                                      size: 48,
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : (widget.postModel?.mediaAssetPath != null &&
+                                    widget.postModel!.mediaAssetPath.isNotEmpty
+                                ? Image.asset(
+                                    widget.postModel!.mediaAssetPath,
+                                    fit: BoxFit.contain,
+                                  )
+                                : Container(
+                                    color: const Color(0xFF2A2A2E),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.broken_image,
+                                        color: Colors.white54,
+                                        size: 48,
+                                      ),
+                                    ),
+                                  ))),
               ),
             ),
 
@@ -638,7 +716,11 @@ Thank you for helping keep Memoria safe.
                     color: Colors.black.withValues(alpha: 0.4),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+                  child: const Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
               ),
             ),
@@ -668,7 +750,11 @@ Thank you for helping keep Memoria safe.
                           color: Colors.black.withValues(alpha: 0.4),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.edit, color: Colors.white, size: 26),
+                        child: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 26,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -682,7 +768,11 @@ Thank you for helping keep Memoria safe.
                         color: Colors.black.withValues(alpha: 0.4),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.more_vert, color: Colors.white, size: 26),
+                      child: const Icon(
+                        Icons.more_vert,
+                        color: Colors.white,
+                        size: 26,
+                      ),
                     ),
                   ),
                 ],
@@ -703,7 +793,11 @@ Thank you for helping keep Memoria safe.
                       topRight: Radius.circular(28),
                     ),
                     boxShadow: [
-                      BoxShadow(color: Colors.black54, blurRadius: 20, offset: Offset(0, -5)),
+                      BoxShadow(
+                        color: Colors.black54,
+                        blurRadius: 20,
+                        offset: Offset(0, -5),
+                      ),
                     ],
                   ),
                   child: SingleChildScrollView(
@@ -745,7 +839,9 @@ Thank you for helping keep Memoria safe.
                               child: avatarAssetPath == null
                                   ? Center(
                                       child: Text(
-                                        username.isNotEmpty ? username[0].toUpperCase() : 'U',
+                                        username.isNotEmpty
+                                            ? username[0].toUpperCase()
+                                            : 'U',
                                         style: GoogleFonts.inter(
                                           color: Colors.white,
                                           fontSize: 16,
@@ -794,7 +890,10 @@ Thank you for helping keep Memoria safe.
                             onTap: () => _launchUrl(url!),
                             behavior: HitTestBehavior.opaque,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF2C2C2E),
                                 borderRadius: BorderRadius.circular(8),
@@ -824,15 +923,20 @@ Thank you for helping keep Memoria safe.
                           children: [
                             // Likes
                             GestureDetector(
-                              onTap: () => PostStore.instance.toggleLikedPost(id),
+                              onTap: () =>
+                                  PostStore.instance.toggleLikedPost(id),
                               behavior: HitTestBehavior.opaque,
                               child: Row(
                                 children: [
                                   BouncingIcon(
                                     trigger: _liked,
                                     child: Icon(
-                                      _liked ? Icons.favorite : Icons.favorite_border,
-                                      color: _liked ? const Color(0xFFE52E5E) : const Color(0xFFAEAEB2),
+                                      _liked
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      color: _liked
+                                          ? const Color(0xFFE52E5E)
+                                          : const Color(0xFFAEAEB2),
                                       size: 22,
                                     ),
                                   ),
@@ -840,7 +944,9 @@ Thank you for helping keep Memoria safe.
                                   Text(
                                     _format(_liked ? _likes + 1 : _likes),
                                     style: GoogleFonts.inter(
-                                        color: _liked ? const Color(0xFFE52E5E) : const Color(0xFFAEAEB2),
+                                      color: _liked
+                                          ? const Color(0xFFE52E5E)
+                                          : const Color(0xFFAEAEB2),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -888,8 +994,12 @@ Thank you for helping keep Memoria safe.
                                   BouncingIcon(
                                     trigger: isSaved,
                                     child: Icon(
-                                      isSaved ? Icons.bookmark : Icons.bookmark_border,
-                                      color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
+                                      isSaved
+                                          ? Icons.bookmark
+                                          : Icons.bookmark_border,
+                                      color: isSaved
+                                          ? const Color(0xFFFFEE00)
+                                          : const Color(0xFFAEAEB2),
                                       size: 22,
                                     ),
                                   ),
@@ -897,7 +1007,9 @@ Thank you for helping keep Memoria safe.
                                   Text(
                                     _format(isSaved ? _saves + 1 : _saves),
                                     style: GoogleFonts.inter(
-                                        color: isSaved ? const Color(0xFFFFEE00) : const Color(0xFFAEAEB2),
+                                      color: isSaved
+                                          ? const Color(0xFFFFEE00)
+                                          : const Color(0xFFAEAEB2),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -927,14 +1039,16 @@ Thank you for helping keep Memoria safe.
       children: List.generate(blocks.length, (idx) {
         final block = blocks[idx];
         final sliceStyles = getSlice(styles, block.startIndex, block.endIndex);
-        
+
         switch (block.type) {
           case BlockType.checklist:
             return _buildChecklistItemBlock(block, sliceStyles);
           case BlockType.document:
             return _buildDocumentBlock(block.meta?['name'] ?? 'Document.pdf');
           case BlockType.contact:
-            return _buildContactBlock(block.meta?['details'] ?? 'Alex Rivers (+1 555-0199)');
+            return _buildContactBlock(
+              block.meta?['details'] ?? 'Alex Rivers (+1 555-0199)',
+            );
           case BlockType.audio:
             return AudioPlayerBlock(
               durationText: block.meta?['duration'] ?? '0:45 min',
@@ -946,7 +1060,9 @@ Thank you for helping keep Memoria safe.
             if (block.text.trim().isEmpty) {
               return const SizedBox(height: 8);
             }
-            final isBullet = block.text.trim().startsWith('•') || block.text.trim().startsWith('-');
+            final isBullet =
+                block.text.trim().startsWith('•') ||
+                block.text.trim().startsWith('-');
             return Padding(
               padding: EdgeInsets.only(bottom: 6, left: isBullet ? 12.0 : 0.0),
               child: RichTextController.buildRichText(
@@ -971,10 +1087,13 @@ Thank you for helping keep Memoria safe.
     return styles.sublist(start, end);
   }
 
-  Widget _buildChecklistItemBlock(ContentBlock block, List<RichStyle>? sliceStyles) {
+  Widget _buildChecklistItemBlock(
+    ContentBlock block,
+    List<RichStyle>? sliceStyles,
+  ) {
     final bool isTodo = block.text.contains('To-do item:');
     final String cleanText = block.text.replaceAll('To-do item:', '').trim();
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -987,20 +1106,20 @@ Thank you for helping keep Memoria safe.
               height: 22,
               margin: const EdgeInsets.only(top: 2, right: 12),
               decoration: BoxDecoration(
-                color: block.isChecked 
-                  ? const Color(0xFF4255FF) 
-                  : Colors.transparent,
+                color: block.isChecked
+                    ? const Color(0xFF4255FF)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: block.isChecked 
-                    ? Colors.transparent 
-                    : const Color(0xFFC7C7CC), 
-                  width: 2.0
+                  color: block.isChecked
+                      ? Colors.transparent
+                      : const Color(0xFFC7C7CC),
+                  width: 2.0,
                 ),
               ),
-              child: block.isChecked 
-                ? const Icon(Icons.check, color: Colors.white, size: 16) 
-                : null,
+              child: block.isChecked
+                  ? const Icon(Icons.check, color: Colors.white, size: 16)
+                  : null,
             ),
           ),
           if (isTodo) ...[
@@ -1010,7 +1129,10 @@ Thank you for helping keep Memoria safe.
               decoration: BoxDecoration(
                 color: const Color(0xFFBF5AF2).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: const Color(0xFFBF5AF2).withValues(alpha: 0.3), width: 0.5),
+                border: Border.all(
+                  color: const Color(0xFFBF5AF2).withValues(alpha: 0.3),
+                  width: 0.5,
+                ),
               ),
               child: Text(
                 'TO-DO',
@@ -1027,14 +1149,18 @@ Thank you for helping keep Memoria safe.
               opacity: block.isChecked ? 0.45 : 1.0,
               child: RichTextController.buildRichText(
                 cleanText,
-                sliceStyles != null && sliceStyles.length > (block.text.length - cleanText.length)
+                sliceStyles != null &&
+                        sliceStyles.length >
+                            (block.text.length - cleanText.length)
                     ? sliceStyles.sublist(sliceStyles.length - cleanText.length)
                     : sliceStyles,
                 defaultStyle: GoogleFonts.inter(
                   color: const Color(0xFFAEAEB2),
                   fontSize: 15,
                   fontWeight: FontWeight.w300,
-                  decoration: block.isChecked ? TextDecoration.lineThrough : TextDecoration.none,
+                  decoration: block.isChecked
+                      ? TextDecoration.lineThrough
+                      : TextDecoration.none,
                 ),
               ),
             ),
@@ -1055,11 +1181,19 @@ Thank you for helping keep Memoria safe.
       } else if (prefix == '[x]' || prefix == '[X]') {
         newPrefix = '[ ]';
       }
-      
+
       if (newPrefix.isNotEmpty) {
-        final newText = currentText.replaceRange(targetPos, targetPos + 3, newPrefix);
+        final newText = currentText.replaceRange(
+          targetPos,
+          targetPos + 3,
+          newPrefix,
+        );
         if (widget.userPost != null) {
-          PostStore.instance.updatePostText(widget.userPost!.id, newText, widget.userPost!.charStyles);
+          PostStore.instance.updatePostText(
+            widget.userPost!.id,
+            newText,
+            widget.userPost!.charStyles,
+          );
         }
       }
     }
@@ -1177,7 +1311,10 @@ Thank you for helping keep Memoria safe.
                 children: [
                   Container(
                     color: const Color(0xFF1C1C1E),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     child: Row(
                       children: [
                         IconButton(
@@ -1198,7 +1335,11 @@ Thank you for helping keep Memoria safe.
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
                           onPressed: () {
                             if (currentZoom > 50) {
                               setModalState(() => currentZoom -= 25);
@@ -1207,10 +1348,17 @@ Thank you for helping keep Memoria safe.
                         ),
                         Text(
                           '${currentZoom.toInt()}%',
-                          style: GoogleFonts.robotoMono(color: Colors.white70, fontSize: 13),
+                          style: GoogleFonts.robotoMono(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.add_circle_outline, color: Colors.white70, size: 20),
+                          icon: const Icon(
+                            Icons.add_circle_outline,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
                           onPressed: () {
                             if (currentZoom < 200) {
                               setModalState(() => currentZoom += 25);
@@ -1251,7 +1399,11 @@ Thank you for helping keep Memoria safe.
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                Divider(color: Colors.black12, thickness: 1.5, height: 24 * (currentZoom / 100)),
+                                Divider(
+                                  color: Colors.black12,
+                                  thickness: 1.5,
+                                  height: 24 * (currentZoom / 100),
+                                ),
                                 Text(
                                   'MEMORIA VAULT FILE\nClassification: Confidential\n\n'
                                   'This document is stored as a reference attachment within the Memoria vault.\n\n'
@@ -1270,7 +1422,10 @@ Thank you for helping keep Memoria safe.
                                 Center(
                                   child: Text(
                                     '- Page 1 of 1 -',
-                                    style: GoogleFonts.inter(color: Colors.black38, fontSize: 10 * (currentZoom / 100)),
+                                    style: GoogleFonts.inter(
+                                      color: Colors.black38,
+                                      fontSize: 10 * (currentZoom / 100),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1297,7 +1452,7 @@ Thank you for helping keep Memoria safe.
       name = match.group(1)!.trim();
       phone = (match.group(2) ?? '').trim();
     }
-    
+
     final String initial = name.isNotEmpty ? name[0].toUpperCase() : 'C';
 
     void performCall() async {
@@ -1384,11 +1539,19 @@ Thank you for helping keep Memoria safe.
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.phone_outlined, color: Color(0xFF6B9BF7), size: 20),
+              icon: const Icon(
+                Icons.phone_outlined,
+                color: Color(0xFF6B9BF7),
+                size: 20,
+              ),
               onPressed: performCall,
             ),
             IconButton(
-              icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFBF5AF2), size: 20),
+              icon: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: Color(0xFFBF5AF2),
+                size: 20,
+              ),
               onPressed: performMessage,
             ),
           ],
@@ -1409,10 +1572,12 @@ class _PostDetailCodeBlockWidget extends StatefulWidget {
   const _PostDetailCodeBlockWidget({required this.code, required this.lang});
 
   @override
-  State<_PostDetailCodeBlockWidget> createState() => _PostDetailCodeBlockWidgetState();
+  State<_PostDetailCodeBlockWidget> createState() =>
+      _PostDetailCodeBlockWidgetState();
 }
 
-class _PostDetailCodeBlockWidgetState extends State<_PostDetailCodeBlockWidget> {
+class _PostDetailCodeBlockWidgetState
+    extends State<_PostDetailCodeBlockWidget> {
   bool isExpanded = false;
 
   void copyCode() {
@@ -1429,68 +1594,89 @@ class _PostDetailCodeBlockWidgetState extends State<_PostDetailCodeBlockWidget> 
     );
   }
 
-    TextSpan highlightCode(String rawCode) {
-      final keywords = RegExp(r'\b(class|import|void|final|const|return|if|else|var|let|function|def|int|double|String|bool|Map|List|static|override)\b');
-      final comments = RegExp(r'(//.*|#.*)');
-      final strings = RegExp(r'(\u0022[^\u0022]*\u0022|\u0027[^\u0027]*\u0027)');
-      
-      final List<TextSpan> spans = [];
-      final lines = rawCode.split('\n');
-      
-      for (int i = 0; i < lines.length; i++) {
-        final line = lines[i];
-        int currentPos = 0;
-        
-        final List<RegExpMatch> matches = [];
-        matches.addAll(keywords.allMatches(line));
-        matches.addAll(comments.allMatches(line));
-        matches.addAll(strings.allMatches(line));
-        matches.sort((a, b) => a.start.compareTo(b.start));
-        
-        final List<RegExpMatch> cleanMatches = [];
-        int lastEnd = 0;
-        for (final match in matches) {
-          if (match.start >= lastEnd) {
-            cleanMatches.add(match);
-            lastEnd = match.end;
-          }
-        }
+  TextSpan highlightCode(String rawCode) {
+    final keywords = RegExp(
+      r'\b(class|import|void|final|const|return|if|else|var|let|function|def|int|double|String|bool|Map|List|static|override)\b',
+    );
+    final comments = RegExp(r'(//.*|#.*)');
+    final strings = RegExp(r'(\u0022[^\u0022]*\u0022|\u0027[^\u0027]*\u0027)');
 
-        for (final match in cleanMatches) {
-          if (match.start > currentPos) {
-            spans.add(TextSpan(text: line.substring(currentPos, match.start), style: const TextStyle(color: Color(0xFFDCDCAA))));
-          }
-          
-          final textMatch = line.substring(match.start, match.end);
-          Color c = Colors.white;
-          if (keywords.hasMatch(textMatch)) {
-            c = const Color(0xFF569CD6);
-          } else if (comments.hasMatch(textMatch)) {
-            c = const Color(0xFF6A9955);
-          } else if (strings.hasMatch(textMatch)) {
-            c = const Color(0xFFCE9178);
-          }
-          spans.add(TextSpan(text: textMatch, style: TextStyle(color: c)));
-          currentPos = match.end;
-        }
-        
-        if (currentPos < line.length) {
-          spans.add(TextSpan(text: line.substring(currentPos), style: const TextStyle(color: Color(0xFFDCDCAA))));
-        }
-        
-        if (i < lines.length - 1) {
-          spans.add(const TextSpan(text: '\n'));
+    final List<TextSpan> spans = [];
+    final lines = rawCode.split('\n');
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      int currentPos = 0;
+
+      final List<RegExpMatch> matches = [];
+      matches.addAll(keywords.allMatches(line));
+      matches.addAll(comments.allMatches(line));
+      matches.addAll(strings.allMatches(line));
+      matches.sort((a, b) => a.start.compareTo(b.start));
+
+      final List<RegExpMatch> cleanMatches = [];
+      int lastEnd = 0;
+      for (final match in matches) {
+        if (match.start >= lastEnd) {
+          cleanMatches.add(match);
+          lastEnd = match.end;
         }
       }
-      return TextSpan(children: spans);
+
+      for (final match in cleanMatches) {
+        if (match.start > currentPos) {
+          spans.add(
+            TextSpan(
+              text: line.substring(currentPos, match.start),
+              style: const TextStyle(color: Color(0xFFDCDCAA)),
+            ),
+          );
+        }
+
+        final textMatch = line.substring(match.start, match.end);
+        Color c = Colors.white;
+        if (keywords.hasMatch(textMatch)) {
+          c = const Color(0xFF569CD6);
+        } else if (comments.hasMatch(textMatch)) {
+          c = const Color(0xFF6A9955);
+        } else if (strings.hasMatch(textMatch)) {
+          c = const Color(0xFFCE9178);
+        }
+        spans.add(
+          TextSpan(
+            text: textMatch,
+            style: TextStyle(color: c),
+          ),
+        );
+        currentPos = match.end;
+      }
+
+      if (currentPos < line.length) {
+        spans.add(
+          TextSpan(
+            text: line.substring(currentPos),
+            style: const TextStyle(color: Color(0xFFDCDCAA)),
+          ),
+        );
+      }
+
+      if (i < lines.length - 1) {
+        spans.add(const TextSpan(text: '\n'));
+      }
     }
+    return TextSpan(children: spans);
+  }
 
   @override
   Widget build(BuildContext context) {
     final lines = widget.code.split('\n');
     final bool isLong = lines.length > 8 || widget.code.length > 300;
 
-    final displayCode = isExpanded ? widget.code : (isLong ? lines.take(8).join('\n') + (lines.length > 8 ? '\n...' : '') : widget.code);
+    final displayCode = isExpanded
+        ? widget.code
+        : (isLong
+              ? lines.take(8).join('\n') + (lines.length > 8 ? '\n...' : '')
+              : widget.code);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1503,13 +1689,15 @@ class _PostDetailCodeBlockWidgetState extends State<_PostDetailCodeBlockWidget> 
         child: Stack(
           children: [
             Padding(
-              padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 40.0, bottom: 16.0),
+              padding: const EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                top: 40.0,
+                bottom: 16.0,
+              ),
               child: SelectableText.rich(
                 highlightCode(displayCode),
-                style: GoogleFonts.firaCode(
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: GoogleFonts.firaCode(fontSize: 13, height: 1.5),
               ),
             ),
             Positioned(
@@ -1533,16 +1721,32 @@ class _PostDetailCodeBlockWidgetState extends State<_PostDetailCodeBlockWidget> 
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98989E), size: 14),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Color(0xFF98989E),
+                      size: 14,
+                    ),
                     const SizedBox(width: 8),
-                    Container(width: 1, height: 12, color: const Color(0xFF48484A)),
+                    Container(
+                      width: 1,
+                      height: 12,
+                      color: const Color(0xFF48484A),
+                    ),
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: copyCode,
-                      child: const Icon(Icons.copy_rounded, color: Color(0xFF98989E), size: 14),
+                      child: const Icon(
+                        Icons.copy_rounded,
+                        color: Color(0xFF98989E),
+                        size: 14,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(Icons.more_horiz, color: Color(0xFF98989E), size: 14),
+                    const Icon(
+                      Icons.more_horiz,
+                      color: Color(0xFF98989E),
+                      size: 14,
+                    ),
                   ],
                 ),
               ),
@@ -1611,29 +1815,31 @@ class ContentBlock {
 List<ContentBlock> parseBody(String body) {
   final List<ContentBlock> blocks = [];
   final List<String> lines = body.split('\n');
-  
+
   bool inCodeBlock = false;
   String codeLanguage = '';
   List<String> codeLines = [];
   int codeStartIndex = 0;
-  
+
   int currentCharIndex = 0;
-  
+
   for (int i = 0; i < lines.length; i++) {
     final line = lines[i];
     final trimmedLine = line.trim();
     final int lineStart = currentCharIndex;
     final int lineEnd = currentCharIndex + line.length;
-    
+
     if (trimmedLine.startsWith('```')) {
       if (inCodeBlock) {
-        blocks.add(ContentBlock(
-          type: BlockType.code,
-          text: codeLines.join('\n'),
-          meta: {'lang': codeLanguage},
-          startIndex: codeStartIndex,
-          endIndex: lineEnd,
-        ));
+        blocks.add(
+          ContentBlock(
+            type: BlockType.code,
+            text: codeLines.join('\n'),
+            meta: {'lang': codeLanguage},
+            startIndex: codeStartIndex,
+            endIndex: lineEnd,
+          ),
+        );
         inCodeBlock = false;
         codeLines = [];
       } else {
@@ -1645,98 +1851,122 @@ List<ContentBlock> parseBody(String body) {
       currentCharIndex += line.length + 1;
       continue;
     }
-    
+
     if (inCodeBlock) {
       codeLines.add(line);
       currentCharIndex += line.length + 1;
       continue;
     }
-    
-    final checklistMatch = RegExp(r'^\[([ xX])\]\s*(.*)$').firstMatch(trimmedLine);
+
+    final checklistMatch = RegExp(
+      r'^\[([ xX])\]\s*(.*)$',
+    ).firstMatch(trimmedLine);
     if (checklistMatch != null) {
       final String checkChar = checklistMatch.group(1)!;
       final String content = checklistMatch.group(2)!;
       final bool isChecked = checkChar.toLowerCase() == 'x';
-      
-      blocks.add(ContentBlock(
-        type: BlockType.checklist,
-        text: content,
-        isChecked: isChecked,
-        startIndex: lineStart,
-        endIndex: lineEnd,
-      ));
+
+      blocks.add(
+        ContentBlock(
+          type: BlockType.checklist,
+          text: content,
+          isChecked: isChecked,
+          startIndex: lineStart,
+          endIndex: lineEnd,
+        ),
+      );
       currentCharIndex += line.length + 1;
       continue;
     }
-    
-    final docMatch = RegExp(r'^\[Document:\s*([^\]]+)\]$').firstMatch(trimmedLine);
+
+    final docMatch = RegExp(
+      r'^\[Document:\s*([^\]]+)\]$',
+    ).firstMatch(trimmedLine);
     if (docMatch != null) {
       final String docName = docMatch.group(1)!;
-      blocks.add(ContentBlock(
-        type: BlockType.document,
-        text: line,
-        meta: {'name': docName},
-        startIndex: lineStart,
-        endIndex: lineEnd,
-      ));
+      blocks.add(
+        ContentBlock(
+          type: BlockType.document,
+          text: line,
+          meta: {'name': docName},
+          startIndex: lineStart,
+          endIndex: lineEnd,
+        ),
+      );
       currentCharIndex += line.length + 1;
       continue;
     }
-    
-    final contactMatch = RegExp(r'^\[Contact:\s*([^\]]+)\]$').firstMatch(trimmedLine);
+
+    final contactMatch = RegExp(
+      r'^\[Contact:\s*([^\]]+)\]$',
+    ).firstMatch(trimmedLine);
     if (contactMatch != null) {
       final String contactDetails = contactMatch.group(1)!;
-      blocks.add(ContentBlock(
-        type: BlockType.contact,
-        text: line,
-        meta: {'details': contactDetails},
-        startIndex: lineStart,
-        endIndex: lineEnd,
-      ));
+      blocks.add(
+        ContentBlock(
+          type: BlockType.contact,
+          text: line,
+          meta: {'details': contactDetails},
+          startIndex: lineStart,
+          endIndex: lineEnd,
+        ),
+      );
       currentCharIndex += line.length + 1;
       continue;
     }
-    
-    final audioMatch = RegExp(r'^\[(?:Audio Recording|Audio):\s*([^\]]+)\]$').firstMatch(trimmedLine);
+
+    final audioMatch = RegExp(
+      r'^\[(?:Audio Recording|Audio):\s*([^\]]+)\]$',
+    ).firstMatch(trimmedLine);
     if (audioMatch != null) {
       final String audioDetails = audioMatch.group(1)!;
-      blocks.add(ContentBlock(
-        type: BlockType.audio,
-        text: line,
-        meta: {'duration': audioDetails},
-        startIndex: lineStart,
-        endIndex: lineEnd,
-      ));
+      blocks.add(
+        ContentBlock(
+          type: BlockType.audio,
+          text: line,
+          meta: {'duration': audioDetails},
+          startIndex: lineStart,
+          endIndex: lineEnd,
+        ),
+      );
       currentCharIndex += line.length + 1;
       continue;
     }
-    
-    blocks.add(ContentBlock(
-      type: BlockType.text,
-      text: line,
-      startIndex: lineStart,
-      endIndex: lineEnd,
-    ));
+
+    blocks.add(
+      ContentBlock(
+        type: BlockType.text,
+        text: line,
+        startIndex: lineStart,
+        endIndex: lineEnd,
+      ),
+    );
     currentCharIndex += line.length + 1;
   }
-  
+
   if (inCodeBlock) {
-    blocks.add(ContentBlock(
-      type: BlockType.code,
-      text: codeLines.join('\n'),
-      meta: {'lang': codeLanguage},
-      startIndex: codeStartIndex,
-      endIndex: currentCharIndex,
-    ));
+    blocks.add(
+      ContentBlock(
+        type: BlockType.code,
+        text: codeLines.join('\n'),
+        meta: {'lang': codeLanguage},
+        startIndex: codeStartIndex,
+        endIndex: currentCharIndex,
+      ),
+    );
   }
-  
+
   return blocks;
 }
 
 class AudioPlayerBlock extends StatefulWidget {
   final String durationText;
   final String? filePath;
-  const AudioPlayerBlock({super.key, required this.durationText, this.filePath});
+  const AudioPlayerBlock({
+    super.key,
+    required this.durationText,
+    this.filePath,
+  });
 
   @override
   State<AudioPlayerBlock> createState() => _AudioPlayerBlockState();
@@ -1803,20 +2033,22 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
   Future<void> _togglePlay() async {
     debugPrint("--- AudioPlayer _togglePlay tapped ---");
     debugPrint("widget.filePath: ${widget.filePath}");
-    
+
     if (widget.filePath == null || widget.filePath!.isEmpty) {
       debugPrint("Error: No audio file path provided");
       return;
     }
-    
+
     final file = File(widget.filePath!);
     final exists = await file.exists();
     debugPrint("File exists at path: $exists");
     if (!exists) {
-      debugPrint("Error: Audio file does not exist at path: ${widget.filePath}");
+      debugPrint(
+        "Error: Audio file does not exist at path: ${widget.filePath}",
+      );
       return;
     }
-    
+
     try {
       if (_isPlaying) {
         debugPrint("Pausing audio...");
@@ -1839,10 +2071,12 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
 
   @override
   Widget build(BuildContext context) {
-    final int totalSec = _duration.inSeconds > 0 ? _duration.inSeconds : _fallbackTotalSeconds;
+    final int totalSec = _duration.inSeconds > 0
+        ? _duration.inSeconds
+        : _fallbackTotalSeconds;
     final int elapsedSec = _position.inSeconds;
     final double percent = totalSec > 0 ? (elapsedSec / totalSec) : 0.0;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Container(
@@ -1880,11 +2114,18 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
                     children: [
                       Text(
                         'Audio Note',
-                        style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       Text(
                         '${_formatDuration(elapsedSec)} / ${_formatDuration(totalSec)}',
-                        style: GoogleFonts.robotoMono(color: Colors.white30, fontSize: 11),
+                        style: GoogleFonts.robotoMono(
+                          color: Colors.white30,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -1892,7 +2133,9 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.maxWidth;
-                      final barCount = (width / 6).floor() > 0 ? (width / 6).floor() : 1;
+                      final barCount = (width / 6).floor() > 0
+                          ? (width / 6).floor()
+                          : 1;
                       return SizedBox(
                         height: 24,
                         child: Row(
@@ -1900,14 +2143,16 @@ class _AudioPlayerBlockState extends State<AudioPlayerBlock> {
                           children: List.generate(barCount, (index) {
                             final double progressPercent = index / barCount;
                             final bool isFilled = progressPercent <= percent;
-                            final double heightVal = 4.0 + (1.0 + math.sin(index.toDouble() * 0.5)) * 8.0;
-                            
+                            final double heightVal =
+                                4.0 +
+                                (1.0 + math.sin(index.toDouble() * 0.5)) * 8.0;
+
                             return Container(
                               width: 3,
                               height: heightVal,
                               decoration: BoxDecoration(
-                                color: isFilled 
-                                    ? const Color(0xFF6B9BF7) 
+                                color: isFilled
+                                    ? const Color(0xFF6B9BF7)
                                     : Colors.white12,
                                 borderRadius: BorderRadius.circular(1.5),
                               ),

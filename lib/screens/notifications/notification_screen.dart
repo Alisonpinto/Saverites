@@ -10,6 +10,8 @@ import '../../utils/post_store.dart';
 
 import '../../utils/notification_manager.dart';
 import '../profile/profile_screen.dart';
+import '../post_detail/post_detail_screen.dart';
+import '../../models/post_model.dart';
 
 class NotificationScreen extends StatefulWidget {
   final bool showBottomNav;
@@ -40,7 +42,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return ValueListenableBuilder<List<UserPost>>(
       valueListenable: PostStore.instance.postsNotifier,
       builder: (context, postsList, _) {
-        final savedUserPosts = postsList.where((p) => p.savedInProfile).toList();
+        final savedUserPosts = postsList
+            .where((p) => p.savedInProfile)
+            .toList();
         if (savedUserPosts.isEmpty) return const SizedBox.shrink();
 
         return Padding(
@@ -50,11 +54,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF1C1C1E),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.05),
+                width: 0.5,
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.security_rounded, color: Color(0xFF2ECC71), size: 18),
+                const Icon(
+                  Icons.security_rounded,
+                  color: Color(0xFF2ECC71),
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -103,7 +114,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 // ── Notification list ─────────────────────────────────────────
                 Expanded(
                   child: ValueListenableBuilder<List<NotificationModel>>(
-                    valueListenable: NotificationManager.instance.notificationsNotifier,
+                    valueListenable:
+                        NotificationManager.instance.notificationsNotifier,
                     builder: (context, notificationsList, _) {
                       return ListView.builder(
                         padding: EdgeInsets.zero,
@@ -115,19 +127,57 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             // Even-index rows get the alternate (slightly lighter) bg.
                             isAlternate: index.isEven,
                             onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ProfileScreen(
-                                    username: notificationsList[index].username,
-                                    avatarAssetPath: notificationsList[index].avatarAssetPath,
-                                    avatarInitial: notificationsList[index].avatarInitial,
-                                    avatarColor: notificationsList[index].avatarColor,
-                                    showBottomNav: false,
-                                    showBackButton: true,
+                              final notif = notificationsList[index];
+                              bool pushedPost = false;
+                              if (notif.postId != null) {
+                                // Try finding UserPost
+                                final idx = PostStore.instance.posts.indexWhere(
+                                  (p) => p.id == notif.postId,
+                                );
+                                if (idx != -1) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PostDetailScreen(
+                                        userPost: PostStore.instance.posts[idx],
+                                      ),
+                                    ),
+                                  );
+                                  pushedPost = true;
+                                } else {
+                                  // Try finding PredefinedPost
+                                  final pIdx = PostStore.predefinedPosts
+                                      .indexWhere((p) => p.id == notif.postId);
+                                  if (pIdx != -1) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PostDetailScreen(
+                                          postModel:
+                                              PostStore.predefinedPosts[pIdx],
+                                        ),
+                                      ),
+                                    );
+                                    pushedPost = true;
+                                  }
+                                }
+                              }
+
+                              if (!pushedPost) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProfileScreen(
+                                      username: notif.username,
+                                      avatarAssetPath: notif.avatarAssetPath,
+                                      avatarInitial: notif.avatarInitial,
+                                      avatarColor: notif.avatarColor,
+                                      showBottomNav: false,
+                                      showBackButton: true,
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
+                              }
                             },
                           );
                         },
@@ -148,7 +198,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       if (index == 3) {
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const ProfileScreen(),
+                          ),
                         );
                       } else if (index == 0 || index == 1) {
                         Navigator.pop(context, index);
@@ -199,11 +251,7 @@ class _NotificationHeader extends StatelessWidget {
                   Navigator.of(context).pop();
                 }
               },
-              icon: const Icon(
-                Icons.arrow_back,
-                color: Colors.white,
-                size: 24,
-              ),
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(),
               splashRadius: 20,

@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:any_link_preview/any_link_preview.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../utils/post_store.dart';
 import '../../widgets/running_video_player.dart';
+import '../../widgets/interactive_video_player.dart';
 import '../post_detail/post_detail_screen.dart';
 import '../../widgets/parsed_text_with_code_blocks.dart';
 
@@ -36,7 +38,7 @@ class SaveItemPreviewScreen extends StatelessWidget {
         if (path != null) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: RunningVideoPlayer(file: File(path)),
+            child: InteractiveVideoPlayer(file: File(path)),
           );
         }
         break;
@@ -238,29 +240,55 @@ class SaveItemPreviewScreen extends StatelessWidget {
           ),
         );
       case 'link':
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2C2C2E)),
+        final String displayUrl = post.url ?? post.body;
+        return AnyLinkPreview(
+          link: displayUrl,
+          displayDirection: UIDirection.uiDirectionHorizontal,
+          showMultimedia: true,
+          bodyMaxLines: 3,
+          bodyTextOverflow: TextOverflow.ellipsis,
+          titleStyle: GoogleFonts.inter(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
           ),
-          child: Row(
-            children: [
-              const Icon(Icons.link_rounded, color: Colors.blueAccent, size: 28),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  post.url ?? post.body,
-                  style: GoogleFonts.inter(
-                    color: Colors.blueAccent,
-                    fontSize: 15,
-                    decoration: TextDecoration.underline,
+          bodyStyle: GoogleFonts.inter(
+            color: const Color(0xFFAEAEB2),
+            fontSize: 12,
+          ),
+          errorWidget: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF2C2C2E)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.link_rounded, color: Colors.blueAccent, size: 28),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    displayUrl,
+                    style: GoogleFonts.inter(
+                      color: Colors.blueAccent,
+                      fontSize: 15,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          errorImage: "https://via.placeholder.com/150",
+          cache: const Duration(days: 7),
+          backgroundColor: const Color(0xFF1C1C1E),
+          borderRadius: 12,
+          removeElevation: true,
+          boxShadow: const [],
+          onTap: () {
+            // Can be left empty, AnyLinkPreview will try to launch the url
+          },
         );
     }
     

@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:any_link_preview/any_link_preview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -14,6 +16,8 @@ import 'package:open_filex/open_filex.dart';
 import '../../utils/post_store.dart';
 import '../../utils/user_store.dart';
 import '../../widgets/running_video_player.dart';
+import '../../widgets/interactive_video_player.dart';
+import '../post_detail/post_detail_screen.dart';
 import '../../utils/rich_text_controller.dart';
 import 'drawing_canvas.dart';
 
@@ -1073,78 +1077,9 @@ class _WritePostScreenState extends State<WritePostScreen>
   Widget _buildAudioPreviewCard(_AttachItem item, int idx) {
     return Container(
       margin: const EdgeInsets.only(top: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12, width: 0.5),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.mic, color: Colors.redAccent, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Audio Recording',
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.play_circle_filled,
-                        color: Colors.redAccent, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Container(
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: Colors.white12,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      item.duration ?? '00:00',
-                      style: GoogleFonts.robotoMono(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => setState(() => _attachedItems.removeAt(idx)),
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(Icons.close, color: Colors.white54, size: 14),
-            ),
-          ),
-        ],
+      child: AudioPlayerBlock(
+        durationText: item.duration ?? '0:00',
+        filePath: item.path,
       ),
     );
   }
@@ -1688,37 +1623,79 @@ class _WritePostScreenState extends State<WritePostScreen>
                   _buildBodyInput(resolvedType),
                   const SizedBox(height: 10),
                   if (_urlController.text.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2C2C2E),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.link, color: Color(0xFF8E8E93), size: 16),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              _urlController.text,
-                              style: GoogleFonts.inter(
-                                color: const Color(0xFF8E8E93),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                    Builder(
+                      builder: (context) {
+                        return AnyLinkPreview(
+                          link: _urlController.text,
+                          displayDirection: UIDirection.uiDirectionHorizontal,
+                          showMultimedia: true,
+                          bodyMaxLines: 3,
+                          bodyTextOverflow: TextOverflow.ellipsis,
+                          titleStyle: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                          bodyStyle: GoogleFonts.inter(
+                            color: const Color(0xFFAEAEB2),
+                            fontSize: 12,
+                          ),
+                          errorWidget: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2C2C2E),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.link, color: Color(0xFF8E8E93), size: 16),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    _urlController.text,
+                                    style: GoogleFonts.inter(
+                                      color: const Color(0xFF8E8E93),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (_isEditingMode) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () => setState(() => _urlController.clear()),
+                                    child: const Icon(Icons.close, color: Color(0xFF8E8E93), size: 16),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (_isEditingMode) ...[
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => setState(() => _urlController.clear()),
-                              child: const Icon(Icons.close, color: Color(0xFF8E8E93), size: 16),
-                            ),
-                          ],
-                        ],
-                      ),
+                          errorImage: "https://via.placeholder.com/150",
+                          cache: const Duration(days: 7),
+                          backgroundColor: const Color(0xFF2C2C2E),
+                          borderRadius: 8,
+                          removeElevation: true,
+                          boxShadow: const [],
+                          onTap: () async {
+                            String urlString = _urlController.text.trim();
+                            if (!urlString.startsWith('http://') && !urlString.startsWith('https://')) {
+                              urlString = 'https://$urlString';
+                            }
+                            final Uri uri = Uri.parse(urlString);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } else {
+                              try {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              } catch (e) {
+                                debugPrint('Could not launch $uri');
+                              }
+                            }
+                          },
+                        );
+                      },
                     ),
                     const SizedBox(height: 10),
                   ],
@@ -1787,7 +1764,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(14),
-                                  child: RunningVideoPlayer(
+                                  child: InteractiveVideoPlayer(
                                     file: File(_pickedVideoPath!),
                                     height: 200,
                                   ),

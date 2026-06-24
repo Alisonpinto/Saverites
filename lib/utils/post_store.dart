@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -34,16 +35,17 @@ class UserPost {
   final List<RichStyle>? charStyles;
 
   // New fields for Save to Memoria workflow:
-  final String? type;            // "image", "video", "document", "audio", "contact", "link", "text", "checklist", "code"
-  String? filePath;        // local file path for document/audio/vcf
+  final String?
+  type; // "image", "video", "document", "audio", "contact", "link", "text", "checklist", "code"
+  String? filePath; // local file path for document/audio/vcf
   final List<String>? filePaths; // multiple local file paths for documents
-  final String? contactName;     // contact full name
-  final String? contactPhone;    // contact phone number
+  final String? contactName; // contact full name
+  final String? contactPhone; // contact phone number
   final List<String>? contactNames;
   final List<String>? contactPhones;
-  final String? duration;        // audio duration
+  final String? duration; // audio duration
   final List<String>? checklistItems; // checklist entries
-  final List<bool>? checklistStates;  // checkbox states
+  final List<bool>? checklistStates; // checkbox states
 
   final String? imageBase64;
   final String? videoBase64;
@@ -91,16 +93,6 @@ class UserPost {
       }
     }
     String? vidB64 = videoBase64;
-    if (!kIsWeb && vidB64 == null && videoPath != null) {
-      final file = File(videoPath!);
-      if (file.existsSync()) {
-        try {
-          vidB64 = base64Encode(file.readAsBytesSync());
-        } catch (e) {
-          debugPrint("Error reading video bytes: $e");
-        }
-      }
-    }
     String? fileB64Val = fileBase64;
     if (!kIsWeb && fileB64Val == null && filePath != null) {
       final file = File(filePath!);
@@ -264,13 +256,23 @@ class PostStore {
   PostStore._();
   static final PostStore instance = PostStore._();
 
-  static const String _kvdbUrl = 'https://jsonblob.com/api/jsonBlob/019ed7cb-fda2-716d-b43c-b868d304b6fd';
+  static const String _kvdbUrl =
+      'https://jsonblob.com/api/jsonBlob/019efaa9-2383-7603-9108-c047a557f72a';
 
   /// All published posts, newest first.
   final ValueNotifier<List<UserPost>> postsNotifier =
       ValueNotifier<List<UserPost>>([]);
 
   List<UserPost> get posts => postsNotifier.value;
+
+  Timer? _syncTimer;
+
+  void startSyncTimer() {
+    if (_syncTimer != null) return;
+    _syncTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      syncOnlinePosts();
+    });
+  }
 
   /// Set of saved predefined post IDs.
   final ValueNotifier<Set<String>> savedSocialPostIdsNotifier =
@@ -289,6 +291,11 @@ class PostStore {
       ValueNotifier<Set<String>>({});
 
   Set<String> get hiddenPostIds => hiddenPostIdsNotifier.value;
+
+  Future<void> init() async {
+    await loadFromLocal();
+    startSyncTimer();
+  }
 
   Future<void> loadFromLocal() async {
     try {
@@ -337,10 +344,15 @@ class PostStore {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('liked_post_ids', likedPostIds.toList());
-      await prefs.setStringList('saved_social_post_ids', savedSocialPostIds.toList());
+      await prefs.setStringList(
+        'saved_social_post_ids',
+        savedSocialPostIds.toList(),
+      );
       await prefs.setStringList('hidden_post_ids', hiddenPostIds.toList());
 
-      final postsJson = jsonEncode(postsNotifier.value.map((p) => p.toJson()).toList());
+      final postsJson = jsonEncode(
+        postsNotifier.value.map((p) => p.toJson()).toList(),
+      );
       await prefs.setString('user_posts', postsJson);
     } catch (e) {
       debugPrint("Error saving to local: $e");
@@ -349,7 +361,9 @@ class PostStore {
 
   Future<void> syncOnlinePosts() async {
     try {
-      final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(Uri.parse(_kvdbUrl))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is List) {
@@ -366,7 +380,9 @@ class PostStore {
           // Keep local private posts (savedInProfile == true)
           // Merge local public posts with online public posts (matching by ID)
           final List<UserPost> currentPosts = List.from(postsNotifier.value);
-          final privatePosts = currentPosts.where((p) => p.savedInProfile).toList();
+          final privatePosts = currentPosts
+              .where((p) => p.savedInProfile)
+              .toList();
 
           final Map<String, UserPost> mergedMap = {};
           // First add online posts
@@ -383,7 +399,7 @@ class PostStore {
           // Combine private and merged public posts
           final List<UserPost> finalPosts = [
             ...privatePosts,
-            ...mergedMap.values.where((p) => !p.savedInProfile)
+            ...mergedMap.values.where((p) => !p.savedInProfile),
           ];
 
           // Sort by createdAt descending
@@ -392,7 +408,8 @@ class PostStore {
           // Only update if something actually changed (avoid unnecessary rebuilds)
           final currentIds = postsNotifier.value.map((p) => p.id).toList();
           final finalIds = finalPosts.map((p) => p.id).toList();
-          if (currentIds.length != finalIds.length || !currentIds.every((id) => finalIds.contains(id))) {
+          if (currentIds.length != finalIds.length ||
+              !currentIds.every((id) => finalIds.contains(id))) {
             postsNotifier.value = finalPosts;
             await saveToLocal();
           }
@@ -409,7 +426,9 @@ class PostStore {
       List<dynamic> jsonList = [];
       bool fetchSuccess = false;
       try {
-        final response = await http.get(Uri.parse(_kvdbUrl)).timeout(const Duration(seconds: 10));
+        final response = await http
+            .get(Uri.parse(_kvdbUrl))
+            .timeout(const Duration(seconds: 10));
         if (response.statusCode == 200) {
           final decoded = jsonDecode(response.body);
           if (decoded is List) {
@@ -430,18 +449,22 @@ class PostStore {
       // 2. Prepend our new post. Keep base64 data intact so that
       // other users can download and view media files properly.
       final postMap = newPost.toJson();
-      
+
       jsonList.insert(0, postMap);
 
       // 3. Write back with a reasonable timeout
-      final putResponse = await http.put(
-        Uri.parse(_kvdbUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(jsonList),
-      ).timeout(const Duration(seconds: 15));
+      final putResponse = await http
+          .put(
+            Uri.parse(_kvdbUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(jsonList),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (putResponse.statusCode != 200 && putResponse.statusCode != 201) {
-        debugPrint("Failed to upload: ${putResponse.statusCode} ${putResponse.body}");
+        debugPrint(
+          "Failed to upload: ${putResponse.statusCode} ${putResponse.body}",
+        );
       } else {
         debugPrint("Post uploaded successfully.");
       }
@@ -469,6 +492,8 @@ class PostStore {
         action: 'liked',
         postTitle: details['title']!,
         author: details['author']!,
+        postAuthorId: details['author']!,
+        postId: postId,
       );
     }
   }
@@ -494,7 +519,10 @@ class PostStore {
     // 1. Search in predefinedPosts
     for (final p in predefinedPosts) {
       if (p.id == postId) {
-        return {'title': p.title ?? 'Untitled Post', 'author': p.username ?? 'someone'};
+        return {
+          'title': p.title ?? 'Untitled Post',
+          'author': p.username ?? 'someone',
+        };
       }
     }
     // 2. Search in user posts
@@ -518,7 +546,10 @@ class PostStore {
     if (post.savedInProfile) {
       NotificationManager.instance.triggerVaultReminderNotification(post.title);
     } else {
-      savedSocialPostIdsNotifier.value = {post.id, ...savedSocialPostIdsNotifier.value};
+      savedSocialPostIdsNotifier.value = {
+        post.id,
+        ...savedSocialPostIdsNotifier.value,
+      };
       saveToLocal();
     }
   }
@@ -536,7 +567,9 @@ class PostStore {
 
   /// Removes multiple posts by ID and notifies all listeners.
   void removeUserPosts(Set<String> postIds) {
-    postsNotifier.value = postsNotifier.value.where((post) => !postIds.contains(post.id)).toList();
+    postsNotifier.value = postsNotifier.value
+        .where((post) => !postIds.contains(post.id))
+        .toList();
     saveToLocal();
   }
 
@@ -662,7 +695,11 @@ class PostStore {
   }
 
   /// Updates the body text and styling of a post and notifies listeners.
-  void updatePostText(String postId, String newBody, List<RichStyle>? charStyles) {
+  void updatePostText(
+    String postId,
+    String newBody,
+    List<RichStyle>? charStyles,
+  ) {
     postsNotifier.value = postsNotifier.value.map((post) {
       if (post.id == postId) {
         return UserPost(
@@ -716,6 +753,8 @@ class PostStore {
         action: 'saved',
         postTitle: details['title']!,
         author: details['author']!,
+        postAuthorId: details['author']!,
+        postId: postId,
       );
     }
   }
@@ -732,7 +771,8 @@ class PostStore {
       title: 'Welcome to Saverites!',
       username: 'saverites_team',
       avatarAssetPath: null,
-      description: 'Your feed is currently empty. Start by posting something or saving an item to your profile!',
+      description:
+          'Your feed is currently empty. Start by posting something or saving an item to your profile!',
       url: null,
     ),
   ];

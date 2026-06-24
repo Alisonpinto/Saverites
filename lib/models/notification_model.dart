@@ -37,6 +37,15 @@ class NotificationModel {
   /// Whether the notification has been seen by the user.
   final bool isRead;
 
+  /// The user ID this notification is intended for
+  final String? toUserId;
+
+  /// The post ID this notification relates to (for deep linking)
+  final String? postId;
+
+  /// The type of action (e.g. 'liked', 'shared', 'saved')
+  final String? actionType;
+
   const NotificationModel({
     required this.id,
     this.avatarAssetPath,
@@ -47,5 +56,44 @@ class NotificationModel {
     required this.previewText,
     required this.timestamp,
     this.isRead = false,
+    this.toUserId,
+    this.postId,
+    this.actionType,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'avatarAssetPath': avatarAssetPath,
+      'avatarSeed': avatarSeed,
+      'avatarInitial': avatarInitial,
+      'avatarColor': avatarColor.value,
+      'username': username,
+      'previewText': previewText,
+      'timestamp': timestamp,
+      'isRead': isRead,
+      'toUserId': toUserId,
+      'postId': postId,
+      'actionType': actionType,
+    };
+  }
+
+  factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    return NotificationModel(
+      id: json['id'] as String,
+      avatarAssetPath: json['avatarAssetPath'] as String?,
+      avatarSeed: json['avatarSeed'] as String?,
+      avatarInitial: json['avatarInitial'] as String? ?? '?',
+      avatarColor: json['avatarColor'] != null
+          ? Color(json['avatarColor'] as int)
+          : const Color(0xFF7B61FF),
+      username: json['username'] as String? ?? 'Unknown',
+      previewText: json['previewText'] as String? ?? '',
+      timestamp: json['timestamp'] as String? ?? 'now',
+      isRead: json['isRead'] as bool? ?? false,
+      toUserId: json['toUserId'] as String?,
+      postId: json['postId'] as String?,
+      actionType: json['actionType'] as String?,
+    );
+  }
 }

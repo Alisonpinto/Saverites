@@ -11,13 +11,15 @@ import 'screens/post_detail/post_detail_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationManager.instance.init();
+  await PostStore.instance.init();
   runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -47,11 +49,14 @@ class _MyAppState extends State<MyApp> {
     }
 
     // Handle incoming URIs while app is open
-    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
-      _handleDeepLink(uri);
-    }, onError: (err) {
-      debugPrint('Deep link error: $err');
-    });
+    _linkSubscription = _appLinks.uriLinkStream.listen(
+      (uri) {
+        _handleDeepLink(uri);
+      },
+      onError: (err) {
+        debugPrint('Deep link error: $err');
+      },
+    );
   }
 
   void _handleDeepLink(Uri uri) {
@@ -71,7 +76,9 @@ class _MyAppState extends State<MyApp> {
       retries++;
     }
 
-    final userPost = PostStore.instance.posts.where((p) => p.id == postId).firstOrNull;
+    final userPost = PostStore.instance.posts
+        .where((p) => p.id == postId)
+        .firstOrNull;
     if (userPost != null) {
       final context = MyApp.navigatorKey.currentContext;
       if (context != null) {
@@ -86,7 +93,9 @@ class _MyAppState extends State<MyApp> {
       final context = MyApp.navigatorKey.currentContext;
       if (context != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Post not found or is no longer available.')),
+          const SnackBar(
+            content: Text('Post not found or is no longer available.'),
+          ),
         );
       }
     }

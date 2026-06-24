@@ -44,7 +44,6 @@ class _FeedScreenState extends State<FeedScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = "";
   bool _isAddMenuOpen = false;
-  Timer? _syncTimer;
 
   @override
   void initState() {
@@ -57,19 +56,7 @@ class _FeedScreenState extends State<FeedScreen> {
     // Listen for new posts and hidden posts to rebuild
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
     PostStore.instance.hiddenPostIdsNotifier.addListener(_onPostsChanged);
-    
-    // Load local cached posts AND trigger online sync in parallel for faster startup
-    PostStore.instance.loadFromLocal();
-    PostStore.instance.syncOnlinePosts();
 
-    // Background polling: sync every 8 seconds so new posts from other users
-    // appear quickly without manual pull-to-refresh
-    _syncTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (_isOnline) {
-        PostStore.instance.syncOnlinePosts();
-      }
-    });
-    
     // Initialize share intent listener
     _initShareIntentListener();
   }
@@ -77,7 +64,6 @@ class _FeedScreenState extends State<FeedScreen> {
   @override
   void dispose() {
     _connectivityTimer?.cancel();
-    _syncTimer?.cancel();
     _searchController.dispose();
     PostStore.instance.postsNotifier.removeListener(_onPostsChanged);
     PostStore.instance.hiddenPostIdsNotifier.removeListener(_onPostsChanged);
@@ -110,7 +96,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
     final prefs = await SharedPreferences.getInstance();
     final skipConfirm = prefs.getBool('skip_exit_confirmation') ?? false;
-    
+
     if (skipConfirm) {
       SystemNavigator.pop();
       return;
@@ -141,7 +127,10 @@ class _FeedScreenState extends State<FeedScreen> {
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -212,9 +201,13 @@ class _FeedScreenState extends State<FeedScreen> {
                                   height: 20,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: dontShowAgain ? const Color(0xFFFAF096) : Colors.transparent,
+                                    color: dontShowAgain
+                                        ? const Color(0xFFFAF096)
+                                        : Colors.transparent,
                                     border: Border.all(
-                                      color: dontShowAgain ? const Color(0xFFFAF096) : Colors.white.withValues(alpha: 0.3),
+                                      color: dontShowAgain
+                                          ? const Color(0xFFFAF096)
+                                          : Colors.white.withValues(alpha: 0.3),
                                       width: 1.5,
                                     ),
                                   ),
@@ -250,7 +243,9 @@ class _FeedScreenState extends State<FeedScreen> {
                             child: TextButton(
                               style: TextButton.styleFrom(
                                 backgroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(24),
                                 ),
@@ -273,7 +268,9 @@ class _FeedScreenState extends State<FeedScreen> {
                             child: TextButton(
                               style: TextButton.styleFrom(
                                 backgroundColor: Colors.transparent,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(24),
                                   side: BorderSide(
@@ -284,15 +281,21 @@ class _FeedScreenState extends State<FeedScreen> {
                               ),
                               onPressed: () async {
                                 if (dontShowAgain) {
-                                  final prefs = await SharedPreferences.getInstance();
-                                  await prefs.setBool('skip_exit_confirmation', true);
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
+                                  await prefs.setBool(
+                                    'skip_exit_confirmation',
+                                    true,
+                                  );
                                 }
                                 SystemNavigator.pop();
                               },
                               child: Text(
                                 'Exit',
                                 style: GoogleFonts.inter(
-                                  color: const Color(0xFFFF453A).withValues(alpha: 0.85),
+                                  color: const Color(
+                                    0xFFFF453A,
+                                  ).withValues(alpha: 0.85),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -312,7 +315,9 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  static const _shareChannel = MethodChannel('com.example.memoria_flutter/share_intent');
+  static const _shareChannel = MethodChannel(
+    'com.example.memoria_flutter/share_intent',
+  );
 
   Future<void> _initShareIntentListener() async {
     // 1. Listen for new intents when the app is already open (warm-start)
@@ -343,30 +348,20 @@ class _FeedScreenState extends State<FeedScreen> {
         pageBuilder: (context, animation, secondaryAnimation) =>
             WritePostScreen(isSaveItem: true, sharedData: data),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final slideAnimation = Tween<Offset>(
-            begin: const Offset(0.0, 0.08),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            ),
-          );
+          final slideAnimation =
+              Tween<Offset>(
+                begin: const Offset(0.0, 0.08),
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              );
           final fadeAnimation = Tween<double>(
             begin: 0.0,
             end: 1.0,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeIn,
-            ),
-          );
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeIn));
           return FadeTransition(
             opacity: fadeAnimation,
-            child: SlideTransition(
-              position: slideAnimation,
-              child: child,
-            ),
+            child: SlideTransition(position: slideAnimation, child: child),
           );
         },
         transitionDuration: const Duration(milliseconds: 400),
@@ -376,8 +371,9 @@ class _FeedScreenState extends State<FeedScreen> {
 
   Future<void> _checkConnectivity() async {
     try {
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 2));
+      final result = await InternetAddress.lookup(
+        'google.com',
+      ).timeout(const Duration(seconds: 2));
       final online = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
       if (mounted && _isOnline != online) {
         setState(() => _isOnline = online);
@@ -391,11 +387,15 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userPublicPosts = PostStore.instance.posts.where((p) => !p.savedInProfile).toList();
-    final List<dynamic> allItems = [
-      ...userPublicPosts,
-      ..._shuffledPredefinedPosts,
-    ].where((item) => !PostStore.instance.hiddenPostIds.contains(item.id)).toList();
+    final userPublicPosts = PostStore.instance.posts
+        .where((p) => !p.savedInProfile)
+        .toList();
+    final List<dynamic> allItems =
+        [...userPublicPosts, ..._shuffledPredefinedPosts]
+            .where(
+              (item) => !PostStore.instance.hiddenPostIds.contains(item.id),
+            )
+            .toList();
 
     final filteredItems = allItems.where((item) {
       if (_searchQuery.trim().isEmpty) return true;
@@ -424,302 +424,394 @@ class _FeedScreenState extends State<FeedScreen> {
           systemNavigationBarIconBrightness: Brightness.light,
           systemNavigationBarDividerColor: Colors.transparent,
         ),
-      child: Scaffold(
-        key: _scaffoldKey,
-        drawerScrimColor: Colors.black.withValues(alpha: 0.4),
-        backgroundColor: const Color(0xFF121212),
-        drawer: PremiumDrawer(
-          currentTab: _currentTab,
-          onTabSelected: (index) {
-            setState(() {
-              _currentTab = index;
-            });
-          },
-          onSaveItemTap: () {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) => const WritePostScreen(isSaveItem: true),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  final slideAnimation = Tween<Offset>(
-                    begin: const Offset(0.0, 0.08),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-                  final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeIn));
-                  return FadeTransition(opacity: fadeAnimation, child: SlideTransition(position: slideAnimation, child: child));
-                },
-                transitionDuration: const Duration(milliseconds: 400),
-              ),
-            );
-          },
-          onHelpTap: () async {
-            final uri = Uri.parse('https://memoria-website-sigma.vercel.app/support');
-            try {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            } catch (e) {
-              debugPrint("Could not launch $uri");
-            }
-          },
-          onSettingsTap: () {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (ctx, anim, x) => const SettingsScreen(),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(
-                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                    ),
-                    child: child,
-                  ),
-                ),
-                transitionDuration: const Duration(milliseconds: 450),
-              ),
-            );
-          },
-          onLogoutTap: () async {
-            final navigator = Navigator.of(context);
-            final scaffoldMessenger = ScaffoldMessenger.of(context);
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('isLoggedIn', false);
-            scaffoldMessenger.showSnackBar(
-              SnackBar(
-                content: Text(
-                  TranslationManager.t('loggingOut'),
-                  style: GoogleFonts.inter(color: Colors.white),
-                ),
-                backgroundColor: const Color(0xFFEB4335),
-                duration: const Duration(milliseconds: 800),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            );
-            Future.delayed(const Duration(milliseconds: 800), () {
-              navigator.pushAndRemoveUntil(
+        child: Scaffold(
+          key: _scaffoldKey,
+          drawerScrimColor: Colors.black.withValues(alpha: 0.4),
+          backgroundColor: const Color(0xFF121212),
+          drawer: PremiumDrawer(
+            currentTab: _currentTab,
+            onTabSelected: (index) {
+              setState(() {
+                _currentTab = index;
+              });
+            },
+            onSaveItemTap: () {
+              Navigator.push(
+                context,
                 PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-                      CurvedAnimation(parent: animation, curve: Curves.easeIn),
-                    );
-                    return FadeTransition(opacity: fadeAnimation, child: child);
-                  },
-                  transitionDuration: const Duration(milliseconds: 500),
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const WritePostScreen(isSaveItem: true),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                        final slideAnimation =
+                            Tween<Offset>(
+                              begin: const Offset(0.0, 0.08),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutCubic,
+                              ),
+                            );
+                        final fadeAnimation =
+                            Tween<double>(begin: 0.0, end: 1.0).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeIn,
+                              ),
+                            );
+                        return FadeTransition(
+                          opacity: fadeAnimation,
+                          child: SlideTransition(
+                            position: slideAnimation,
+                            child: child,
+                          ),
+                        );
+                      },
+                  transitionDuration: const Duration(milliseconds: 400),
                 ),
-                (route) => false,
               );
-            });
-          },
-        ),
-        body: Stack(
-          children: [
-            IndexedStack(
-              index: _currentTab,
-              children: [
-                Column(
-                  children: [
-                    FeedHeader(
-                      onMenuTap: () {
-                        _scaffoldKey.currentState?.openDrawer();
-                      },
-                      onSearchChanged: (query) {
-                        setState(() {
-                          _searchQuery = query;
-                        });
-                      },
-                      onNotificationTap: () {
-                        setState(() {
-                          _currentTab = 2;
-                        });
-                      },
-                    ),
-                    Expanded(
-                      child: _isRefreshing
-                          ? _buildShimmerGrid()
-                          : RefreshIndicator(
-                              onRefresh: () async {
-                                _refreshFeed();
-                                // Wait for sync to finish to dismiss indicator
-                                await Future.delayed(const Duration(milliseconds: 500));
-                              },
-                              color: const Color(0xFF7B61FF),
-                              backgroundColor: const Color(0xFF1C1C1E),
-                              child: SingleChildScrollView(
-                                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                                padding: const EdgeInsets.all(16),
-                              child: ValueListenableBuilder<Set<String>>(
-                                valueListenable: PostStore.instance.savedSocialPostIdsNotifier,
-                                builder: (context, savedSocialIds, _) {
-                                  return filteredItems.isEmpty && _searchQuery.trim().isNotEmpty
-                                      ? Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(top: 80),
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                const Icon(Icons.search_off, color: Color(0xFF7C7C81), size: 48),
-                                                const SizedBox(height: 12),
-                                                Text(
-                                                  'No items match your search',
-                                                  style: GoogleFonts.inter(
-                                                    color: const Color(0xFF7C7C81),
-                                                    fontSize: 14,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      : Center(
-                                          child: Container(
-                                            constraints: const BoxConstraints(maxWidth: 500),
-                                            child: Row(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                // Left Column
-                                                Expanded(
-                                                  child: Column(
-                                                    children: _buildStaggeredList(filteredItems, left: true),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 16),
-                                                // Right Column
-                                                Expanded(
-                                                  child: Column(
-                                                    children: _buildStaggeredList(filteredItems, left: false),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
+            },
+            onHelpTap: () async {
+              final uri = Uri.parse(
+                'https://memoria-website-sigma.vercel.app/support',
+              );
+              try {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              } catch (e) {
+                debugPrint("Could not launch $uri");
+              }
+            },
+            onSettingsTap: () {
+              Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (ctx, anim, x) => const SettingsScreen(),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) =>
+                          FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position:
+                                  Tween<Offset>(
+                                    begin: const Offset(0, 0.04),
+                                    end: Offset.zero,
+                                  ).animate(
+                                    CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                    ),
+                                  ),
+                              child: child,
+                            ),
+                          ),
+                  transitionDuration: const Duration(milliseconds: 450),
+                ),
+              );
+            },
+            onLogoutTap: () async {
+              final navigator = Navigator.of(context);
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('isLoggedIn', false);
+              scaffoldMessenger.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    TranslationManager.t('loggingOut'),
+                    style: GoogleFonts.inter(color: Colors.white),
+                  ),
+                  backgroundColor: const Color(0xFFEB4335),
+                  duration: const Duration(milliseconds: 800),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              );
+              Future.delayed(const Duration(milliseconds: 800), () {
+                navigator.pushAndRemoveUntil(
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        const LoginScreen(),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
+                          final fadeAnimation =
+                              Tween<double>(begin: 0.0, end: 1.0).animate(
+                                CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeIn,
+                                ),
+                              );
+                          return FadeTransition(
+                            opacity: fadeAnimation,
+                            child: child,
+                          );
+                        },
+                    transitionDuration: const Duration(milliseconds: 500),
+                  ),
+                  (route) => false,
+                );
+              });
+            },
+          ),
+          body: Stack(
+            children: [
+              IndexedStack(
+                index: _currentTab,
+                children: [
+                  Column(
+                    children: [
+                      FeedHeader(
+                        onMenuTap: () {
+                          _scaffoldKey.currentState?.openDrawer();
+                        },
+                        onSearchChanged: (query) {
+                          setState(() {
+                            _searchQuery = query;
+                          });
+                        },
+                        onNotificationTap: () {
+                          setState(() {
+                            _currentTab = 2;
+                          });
+                        },
+                      ),
+                      Expanded(
+                        child: _isRefreshing
+                            ? _buildShimmerGrid()
+                            : RefreshIndicator(
+                                onRefresh: () async {
+                                  _refreshFeed();
+                                  // Wait for sync to finish to dismiss indicator
+                                  await Future.delayed(
+                                    const Duration(milliseconds: 500),
+                                  );
                                 },
+                                color: const Color(0xFF7B61FF),
+                                backgroundColor: const Color(0xFF1C1C1E),
+                                child: SingleChildScrollView(
+                                  physics: const AlwaysScrollableScrollPhysics(
+                                    parent: BouncingScrollPhysics(),
+                                  ),
+                                  padding: const EdgeInsets.all(16),
+                                  child: ValueListenableBuilder<Set<String>>(
+                                    valueListenable: PostStore
+                                        .instance
+                                        .savedSocialPostIdsNotifier,
+                                    builder: (context, savedSocialIds, _) {
+                                      return filteredItems.isEmpty &&
+                                              _searchQuery.trim().isNotEmpty
+                                          ? Center(
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 80,
+                                                ),
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.search_off,
+                                                      color: Color(0xFF7C7C81),
+                                                      size: 48,
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    Text(
+                                                      'No items match your search',
+                                                      style: GoogleFonts.inter(
+                                                        color: const Color(
+                                                          0xFF7C7C81,
+                                                        ),
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                          : Center(
+                                              child: Container(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      maxWidth: 500,
+                                                    ),
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    // Left Column
+                                                    Expanded(
+                                                      child: Column(
+                                                        children:
+                                                            _buildStaggeredList(
+                                                              filteredItems,
+                                                              left: true,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 16),
+                                                    // Right Column
+                                                    Expanded(
+                                                      child: Column(
+                                                        children:
+                                                            _buildStaggeredList(
+                                                              filteredItems,
+                                                              left: false,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                    },
+                                  ),
+                                ),
                               ),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-                _buildSearchPage(),
-                NotificationScreen(
-                  showBottomNav: false,
-                  showBackButton: true,
-                  onBackTap: () {
-                    setState(() {
-                      _currentTab = 0;
-                    });
-                  },
-                ),
-                ProfileScreen(
-                  showBottomNav: false,
-                  showBackButton: true,
-                  onBackTap: () {
-                    setState(() {
-                      _currentTab = 0;
-                    });
-                  },
-                ),
-              ],
-            ),
-            // Background Dimming Scrim
-            IgnorePointer(
-              ignoring: !_isAddMenuOpen,
-              child: AnimatedOpacity(
-                opacity: _isAddMenuOpen ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 250),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isAddMenuOpen = false;
-                    });
-                  },
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.6),
+                      ),
+                    ],
                   ),
-                ),
+                  _buildSearchPage(),
+                  NotificationScreen(
+                    showBottomNav: false,
+                    showBackButton: true,
+                    onBackTap: () {
+                      setState(() {
+                        _currentTab = 0;
+                      });
+                    },
+                  ),
+                  ProfileScreen(
+                    showBottomNav: false,
+                    showBackButton: true,
+                    onBackTap: () {
+                      setState(() {
+                        _currentTab = 0;
+                      });
+                    },
+                  ),
+                ],
               ),
-            ),
-            // Premium Horizontal Fanned-Out Add Menu Popup
-            Positioned(
-              bottom: 60 + MediaQuery.of(context).padding.bottom + 16,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
+              // Background Dimming Scrim
+              IgnorePointer(
                 ignoring: !_isAddMenuOpen,
-                child: Center(
-                  child: SizedBox(
-                    width: 280,
-                    height: 110,
-                    child: Stack(
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        // Left Option: Write a Post
-                        AnimatedAlign(
-                          duration: _isAddMenuOpen ? const Duration(milliseconds: 350) : const Duration(milliseconds: 250),
-                          curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeInOutCubic,
-                          alignment: _isAddMenuOpen ? const Alignment(-0.65, -0.6) : Alignment.bottomCenter,
-                          child: AnimatedScale(
-                            scale: _isAddMenuOpen ? 1.0 : 0.0,
-                            duration: _isAddMenuOpen ? const Duration(milliseconds: 300) : const Duration(milliseconds: 200),
-                            curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeIn,
-                            child: _buildCircularAddOption(
-                              icon: Icons.edit_outlined,
-                              label: 'Write Post',
-                              onTap: () => _navigateToWritePost(isSaveItem: false),
-                              isOpen: _isAddMenuOpen,
-                              isLeft: true,
-                            ),
-                          ),
-                        ),
-                        // Right Option: Save an Item
-                        AnimatedAlign(
-                          duration: _isAddMenuOpen ? const Duration(milliseconds: 350) : const Duration(milliseconds: 250),
-                          curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeInOutCubic,
-                          alignment: _isAddMenuOpen ? const Alignment(0.65, -0.6) : Alignment.bottomCenter,
-                          child: AnimatedScale(
-                            scale: _isAddMenuOpen ? 1.0 : 0.0,
-                            duration: _isAddMenuOpen ? const Duration(milliseconds: 300) : const Duration(milliseconds: 200),
-                            curve: _isAddMenuOpen ? Curves.easeOutBack : Curves.easeIn,
-                            child: _buildCircularAddOption(
-                              icon: Icons.bookmark_border_rounded,
-                              label: 'Save Item',
-                              onTap: () => _navigateToWritePost(isSaveItem: true),
-                              isOpen: _isAddMenuOpen,
-                              isLeft: false,
-                            ),
-                          ),
-                        ),
-                      ],
+                child: AnimatedOpacity(
+                  opacity: _isAddMenuOpen ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 250),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isAddMenuOpen = false;
+                      });
+                    },
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.6),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        bottomNavigationBar: AppBottomNavigation(
-          currentIndex: _currentTab,
-          isAddMenuOpen: _isAddMenuOpen,
-          onTabChanged: (index) {
-            if (_isAddMenuOpen) {
-              setState(() => _isAddMenuOpen = false);
-            }
-            if (index == 0 && _currentTab == 0) {
-              _refreshFeed();
-            }
-            setState(() => _currentTab = index);
-          },
-          onAddTap: () {
-            setState(() {
-              _isAddMenuOpen = !_isAddMenuOpen;
-            });
-          },
+              // Premium Horizontal Fanned-Out Add Menu Popup
+              Positioned(
+                bottom: 60 + MediaQuery.of(context).padding.bottom + 16,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  ignoring: !_isAddMenuOpen,
+                  child: Center(
+                    child: SizedBox(
+                      width: 280,
+                      height: 110,
+                      child: Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          // Left Option: Write a Post
+                          AnimatedAlign(
+                            duration: _isAddMenuOpen
+                                ? const Duration(milliseconds: 350)
+                                : const Duration(milliseconds: 250),
+                            curve: _isAddMenuOpen
+                                ? Curves.easeOutBack
+                                : Curves.easeInOutCubic,
+                            alignment: _isAddMenuOpen
+                                ? const Alignment(-0.65, -0.6)
+                                : Alignment.bottomCenter,
+                            child: AnimatedScale(
+                              scale: _isAddMenuOpen ? 1.0 : 0.0,
+                              duration: _isAddMenuOpen
+                                  ? const Duration(milliseconds: 300)
+                                  : const Duration(milliseconds: 200),
+                              curve: _isAddMenuOpen
+                                  ? Curves.easeOutBack
+                                  : Curves.easeIn,
+                              child: _buildCircularAddOption(
+                                icon: Icons.edit_outlined,
+                                label: 'Write Post',
+                                onTap: () =>
+                                    _navigateToWritePost(isSaveItem: false),
+                                isOpen: _isAddMenuOpen,
+                                isLeft: true,
+                              ),
+                            ),
+                          ),
+                          // Right Option: Save an Item
+                          AnimatedAlign(
+                            duration: _isAddMenuOpen
+                                ? const Duration(milliseconds: 350)
+                                : const Duration(milliseconds: 250),
+                            curve: _isAddMenuOpen
+                                ? Curves.easeOutBack
+                                : Curves.easeInOutCubic,
+                            alignment: _isAddMenuOpen
+                                ? const Alignment(0.65, -0.6)
+                                : Alignment.bottomCenter,
+                            child: AnimatedScale(
+                              scale: _isAddMenuOpen ? 1.0 : 0.0,
+                              duration: _isAddMenuOpen
+                                  ? const Duration(milliseconds: 300)
+                                  : const Duration(milliseconds: 200),
+                              curve: _isAddMenuOpen
+                                  ? Curves.easeOutBack
+                                  : Curves.easeIn,
+                              child: _buildCircularAddOption(
+                                icon: Icons.bookmark_border_rounded,
+                                label: 'Save Item',
+                                onTap: () =>
+                                    _navigateToWritePost(isSaveItem: true),
+                                isOpen: _isAddMenuOpen,
+                                isLeft: false,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          bottomNavigationBar: AppBottomNavigation(
+            currentIndex: _currentTab,
+            isAddMenuOpen: _isAddMenuOpen,
+            onTabChanged: (index) {
+              if (_isAddMenuOpen) {
+                setState(() => _isAddMenuOpen = false);
+              }
+              if (index == 0 && _currentTab == 0) {
+                _refreshFeed();
+              }
+              setState(() => _currentTab = index);
+            },
+            onAddTap: () {
+              setState(() {
+                _isAddMenuOpen = !_isAddMenuOpen;
+              });
+            },
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildCircularAddOption({
     required IconData icon,
@@ -733,7 +825,9 @@ class _FeedScreenState extends State<FeedScreen> {
       children: [
         AnimatedRotation(
           turns: isOpen ? 0.0 : (isLeft ? -0.25 : 0.25),
-          duration: isOpen ? const Duration(milliseconds: 350) : const Duration(milliseconds: 200),
+          duration: isOpen
+              ? const Duration(milliseconds: 350)
+              : const Duration(milliseconds: 200),
           curve: isOpen ? Curves.easeOutBack : Curves.easeInOutCubic,
           child: Material(
             color: Colors.transparent,
@@ -760,11 +854,7 @@ class _FeedScreenState extends State<FeedScreen> {
                     ),
                   ],
                 ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                child: Icon(icon, color: Colors.white, size: 24),
               ),
             ),
           ),
@@ -800,30 +890,20 @@ class _FeedScreenState extends State<FeedScreen> {
         pageBuilder: (context, animation, secondaryAnimation) =>
             WritePostScreen(isSaveItem: isSaveItem),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final slideAnimation = Tween<Offset>(
-            begin: const Offset(0.0, 0.08),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            ),
-          );
+          final slideAnimation =
+              Tween<Offset>(
+                begin: const Offset(0.0, 0.08),
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              );
           final fadeAnimation = Tween<double>(
             begin: 0.0,
             end: 1.0,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeIn,
-            ),
-          );
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeIn));
           return FadeTransition(
             opacity: fadeAnimation,
-            child: SlideTransition(
-              position: slideAnimation,
-              child: child,
-            ),
+            child: SlideTransition(position: slideAnimation, child: child),
           );
         },
         transitionDuration: const Duration(milliseconds: 400),
@@ -831,9 +911,12 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  List<Widget> _buildStaggeredList(List<dynamic> allItems, {required bool left}) {
+  List<Widget> _buildStaggeredList(
+    List<dynamic> allItems, {
+    required bool left,
+  }) {
     final List<Widget> columnWidgets = [];
-    
+
     for (int i = 0; i < allItems.length; i++) {
       final item = allItems[i];
       final itemId = item is UserPost ? item.id : (item as PostModel).id;
@@ -913,9 +996,12 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   Widget _buildSearchPage() {
-    final userPosts = PostStore.instance.posts.where((p) => !p.savedInProfile).toList();
+    final userPosts = PostStore.instance.posts
+        .where((p) => !p.savedInProfile)
+        .toList();
     final List<dynamic> allItems = [...userPosts, ..._shuffledPredefinedPosts]
-        .where((item) => !PostStore.instance.hiddenPostIds.contains(item.id)).toList();
+        .where((item) => !PostStore.instance.hiddenPostIds.contains(item.id))
+        .toList();
 
     final filteredItems = allItems.where((item) {
       if (_searchQuery.trim().isEmpty) return false;
@@ -963,7 +1049,10 @@ class _FeedScreenState extends State<FeedScreen> {
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 15),
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 15,
+                      ),
                       onChanged: (val) {
                         setState(() {
                           _searchQuery = val;
@@ -987,7 +1076,11 @@ class _FeedScreenState extends State<FeedScreen> {
                           _searchQuery = "";
                         });
                       },
-                      child: const Icon(Icons.close, color: Colors.white70, size: 18),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
                     ),
                 ],
               ),
@@ -1007,34 +1100,36 @@ class _FeedScreenState extends State<FeedScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  'jacket',
-                  'panda',
-                  'chic',
-                  'street style',
-                  'professional',
-                  'meme',
-                ].map((category) {
-                  return ActionChip(
-                    label: Text(category),
-                    labelStyle: GoogleFonts.inter(color: Colors.white, fontSize: 13),
-                    backgroundColor: const Color(0xFF1C1C1E),
-                    side: BorderSide.none,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    onPressed: () {
-                      _searchController.text = category;
-                      setState(() {
-                        _searchQuery = category;
-                      });
-                    },
-                  );
-                }).toList(),
+                children:
+                    [
+                      'jacket',
+                      'panda',
+                      'chic',
+                      'street style',
+                      'professional',
+                      'meme',
+                    ].map((category) {
+                      return ActionChip(
+                        label: Text(category),
+                        labelStyle: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                        backgroundColor: const Color(0xFF1C1C1E),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        onPressed: () {
+                          _searchController.text = category;
+                          setState(() {
+                            _searchQuery = category;
+                          });
+                        },
+                      );
+                    }).toList(),
               ),
-              const Expanded(
-                child: SizedBox(),
-              ),
+              const Expanded(child: SizedBox()),
             ] else ...[
               Expanded(
                 child: filteredItems.isEmpty
@@ -1042,7 +1137,11 @@ class _FeedScreenState extends State<FeedScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.search_off, color: Color(0xFF7C7C81), size: 48),
+                            const Icon(
+                              Icons.search_off,
+                              color: Color(0xFF7C7C81),
+                              size: 48,
+                            ),
                             const SizedBox(height: 12),
                             Text(
                               'No items match your search',
@@ -1065,13 +1164,19 @@ class _FeedScreenState extends State<FeedScreen> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    children: _buildStaggeredList(filteredItems, left: true),
+                                    children: _buildStaggeredList(
+                                      filteredItems,
+                                      left: true,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    children: _buildStaggeredList(filteredItems, left: false),
+                                    children: _buildStaggeredList(
+                                      filteredItems,
+                                      left: false,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1086,8 +1191,6 @@ class _FeedScreenState extends State<FeedScreen> {
       ),
     );
   }
-
-
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1116,7 +1219,9 @@ class _FeedPostTileState extends State<_FeedPostTile> {
   @override
   void initState() {
     super.initState();
-    final itemId = widget.item is UserPost ? (widget.item as UserPost).id : (widget.item as PostModel).id;
+    final itemId = widget.item is UserPost
+        ? (widget.item as UserPost).id
+        : (widget.item as PostModel).id;
     if (_shimmeredIds.contains(itemId)) {
       _showShimmer = false;
     } else {
@@ -1141,12 +1246,17 @@ class _FeedPostTileState extends State<_FeedPostTile> {
   }
 
   Widget _buildVaultPreviewWidget(UserPost post) {
-    final String resolvedType = post.type ?? (
-      post.imagePath != null ? 'image' : (
-      post.videoPath != null ? 'video' : (
-      post.url != null ? 'link' : (
-      (post.checklistItems?.isNotEmpty ?? false) ? 'checklist' : 'text'
-    ))));
+    final String resolvedType =
+        post.type ??
+        (post.imagePath != null
+            ? 'image'
+            : (post.videoPath != null
+                  ? 'video'
+                  : (post.url != null
+                        ? 'link'
+                        : ((post.checklistItems?.isNotEmpty ?? false)
+                              ? 'checklist'
+                              : 'text'))));
 
     if (resolvedType == 'image') {
       final path = post.imagePath;
@@ -1161,7 +1271,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                   height: 120,
                   color: const Color(0xFF2A2A2E),
                   child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.white54, size: 28),
+                    child: Icon(
+                      Icons.broken_image,
+                      color: Colors.white54,
+                      size: 28,
+                    ),
                   ),
                 ),
               )
@@ -1169,7 +1283,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 height: 120,
                 color: const Color(0xFF2A2A2E),
                 child: const Center(
-                  child: Icon(Icons.image_outlined, color: Colors.white54, size: 28),
+                  child: Icon(
+                    Icons.image_outlined,
+                    color: Colors.white54,
+                    size: 28,
+                  ),
                 ),
               ),
       );
@@ -1191,7 +1309,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                         color: Colors.black.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                     ),
                   ],
                 ),
@@ -1200,13 +1322,19 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 height: 120,
                 color: const Color(0xFF2A2A2E),
                 child: const Center(
-                  child: Icon(Icons.video_file_outlined, color: Colors.white54, size: 28),
+                  child: Icon(
+                    Icons.video_file_outlined,
+                    color: Colors.white54,
+                    size: 28,
+                  ),
                 ),
               ),
       );
     } else if (resolvedType == 'document') {
       final path = post.filePath;
-      final name = path != null ? path.split('/').last.split('\\').last : 'document.pdf';
+      final name = path != null
+          ? path.split('/').last.split('\\').last
+          : 'document.pdf';
       final isPdf = name.toLowerCase().endsWith('.pdf');
       return Container(
         padding: const EdgeInsets.all(12),
@@ -1220,11 +1348,15 @@ class _FeedPostTileState extends State<_FeedPostTile> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: isPdf ? Colors.redAccent.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15),
+                color: isPdf
+                    ? Colors.redAccent.withValues(alpha: 0.15)
+                    : Colors.blue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
-                isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
+                isPdf
+                    ? Icons.picture_as_pdf_outlined
+                    : Icons.description_outlined,
                 color: isPdf ? Colors.redAccent : Colors.blue,
                 size: 18,
               ),
@@ -1325,9 +1457,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
             Expanded(
               child: SizedBox(
                 height: 14,
-                child: CustomPaint(
-                  painter: MiniWaveformPainter(),
-                ),
+                child: CustomPaint(painter: MiniWaveformPainter()),
               ),
             ),
             const SizedBox(width: 8),
@@ -1353,7 +1483,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 color: Colors.purpleAccent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Icon(Icons.link_rounded, color: Colors.purpleAccent, size: 16),
+              child: const Icon(
+                Icons.link_rounded,
+                color: Colors.purpleAccent,
+                size: 16,
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1478,7 +1612,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
   @override
   Widget build(BuildContext context) {
     final showShimmer = !widget.isOnline || _showShimmer;
-    
+
     void onTap() {
       Navigator.push(
         context,
@@ -1493,10 +1627,16 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           transitionsBuilder: (context, animation, _, child) => FadeTransition(
             opacity: animation,
             child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.05),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0, 0.05),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
               child: child,
             ),
           ),
@@ -1504,8 +1644,6 @@ class _FeedPostTileState extends State<_FeedPostTile> {
         ),
       );
     }
-
-
 
     if (showShimmer) {
       return ShimmerContainer(
@@ -1531,17 +1669,17 @@ class _FeedPostTileState extends State<_FeedPostTile> {
         final likes = isLiked ? '1' : '0';
         final bookmarks = widget.item is UserPost
             ? (isSaved ? '1' : '0')
-            : _format(isSaved
-                ? (widget.item as PostModel).savesCount + 1
-                : (widget.item as PostModel).savesCount);
+            : _format(
+                isSaved
+                    ? (widget.item as PostModel).savesCount + 1
+                    : (widget.item as PostModel).savesCount,
+              );
         Widget mediaWidget;
 
         if (widget.item is UserPost) {
           final post = widget.item as UserPost;
           if (post.videoPath != null) {
-            mediaWidget = RunningVideoPlayer(
-              file: File(post.videoPath!),
-            );
+            mediaWidget = RunningVideoPlayer(file: File(post.videoPath!));
           } else if (post.imagePath != null) {
             mediaWidget = Image.file(
               File(post.imagePath!),
@@ -1551,7 +1689,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 height: 150,
                 color: const Color(0xFF2A2A2E),
                 child: const Center(
-                  child: Icon(Icons.broken_image, color: Colors.white54, size: 32),
+                  child: Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 32,
+                  ),
                 ),
               ),
             );
@@ -1560,13 +1702,11 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           }
         } else {
           final post = widget.item as PostModel;
-          
+
           // Removed custom border padding and accentColor backgrounds to enforce uniform layout
           Widget childWidget;
           if (post.mediaType == PostMediaType.video) {
-            childWidget = RunningVideoPlayer(
-              assetPath: post.mediaAssetPath,
-            );
+            childWidget = RunningVideoPlayer(assetPath: post.mediaAssetPath);
           } else {
             childWidget = Image.asset(
               post.mediaAssetPath,
@@ -1605,31 +1745,36 @@ class _FeedPostTileState extends State<_FeedPostTile> {
             );
           } else if (post.id == 'social-4') {
             mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildPandaOverlay('peace\nBRO!!'),
-              ],
+              children: [childWidget, _buildPandaOverlay('peace\nBRO!!')],
             );
           } else if (post.id == 'social-6') {
             mediaWidget = Stack(
-              children: [
-                childWidget,
-                _buildPandaOverlay('chill\nTIME'),
-              ],
+              children: [childWidget, _buildPandaOverlay('chill\nTIME')],
             );
           } else {
             mediaWidget = childWidget;
           }
         }
 
-
         final item = widget.item;
-        final String titleText = item is UserPost ? item.title : (item as PostModel).title ?? '';
-        final String userText = item is UserPost ? (item.username ?? 'gangster_vagas') : (item as PostModel).username ?? 'Unknown';
-        final String? avatarAsset = item is UserPost ? null : (item as PostModel).avatarAssetPath;
-        final String initial = userText.isNotEmpty ? userText[0].toUpperCase() : '?';
-        final Color color = item is UserPost ? const Color(0xFF6B9BF7) : (item as PostModel).accentColor ?? const Color(0xFF7B61FF);
-        final String sharesText = item is UserPost ? '0' : _format((item as PostModel).sharesCount);
+        final String titleText = item is UserPost
+            ? item.title
+            : (item as PostModel).title ?? '';
+        final String userText = item is UserPost
+            ? (item.username ?? 'gangster_vagas')
+            : (item as PostModel).username ?? 'Unknown';
+        final String? avatarAsset = item is UserPost
+            ? null
+            : (item as PostModel).avatarAssetPath;
+        final String initial = userText.isNotEmpty
+            ? userText[0].toUpperCase()
+            : '?';
+        final Color color = item is UserPost
+            ? const Color(0xFF6B9BF7)
+            : (item as PostModel).accentColor ?? const Color(0xFF7B61FF);
+        final String sharesText = item is UserPost
+            ? '0'
+            : _format((item as PostModel).sharesCount);
 
         return FeedCard(
           imageWidget: mediaWidget,
@@ -1692,10 +1837,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
             ),
             if (arrow) ...[
               const SizedBox(height: 6),
-              CustomPaint(
-                size: const Size(60, 30),
-                painter: ArrowPainter(),
-              ),
+              CustomPaint(size: const Size(60, 30), painter: ArrowPainter()),
             ],
           ],
         ),
@@ -1818,8 +1960,6 @@ class _FeedPostTileState extends State<_FeedPostTile> {
       ),
     );
   }
-
-
 }
 
 // --- Arrow Painter for Card 1 & 8 ---

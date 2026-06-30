@@ -7,9 +7,14 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'utils/post_store.dart';
 import 'screens/post_detail/post_detail_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://xenbdmepnvaqfuiwoxix.supabase.co',
+    publishableKey: 'sb_publishable_3J0IeIYrO33KqTbzNgGvtg_NE7u7A6r',
+  );
   await NotificationManager.instance.init();
   await PostStore.instance.init();
   runApp(const MyApp());
@@ -112,9 +117,24 @@ class _MyAppState extends State<MyApp> {
     return GetMaterialApp(
       navigatorKey: MyApp.navigatorKey,
       title: 'Saverites',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6B9BF7),
+          brightness: Brightness.dark,
+        ),
+        scaffoldBackgroundColor: const Color(0xFF0D0D0D),
+        // Prevent white flash: canvasColor is what Flutter uses behind routes
+        // during transitions. Must be dark to match the app's dark theme.
+        canvasColor: const Color(0xFF0D0D0D),
         useMaterial3: true,
+      ),
+      // Wrap the entire navigator in a dark container.
+      // This ensures no white ever bleeds through between route pushes/pops,
+      // including after Google OAuth browser closes and control returns to app.
+      builder: (context, child) => Container(
+        color: const Color(0xFF0D0D0D),
+        child: child ?? const SizedBox.shrink(),
       ),
       home: const SplashScreen(),
     );

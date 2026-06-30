@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'avatar_setup_screen.dart';
 import 'screens/feed/feed_screen.dart';
 import 'utils/user_store.dart';
@@ -54,6 +56,9 @@ class _LoginScreenState extends State<LoginScreen>
   late final AnimationController _slideCtrl;
   late final Animation<Offset> _slideAnim;
 
+  // OAuth auth subscription listener
+  StreamSubscription<AuthState>? _authSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +83,51 @@ class _LoginScreenState extends State<LoginScreen>
 
     // Listen for User ID changes to debounce uniqueness check
     _regUserIdCtrl.addListener(_onUserIdChanged);
+
+    // Listen for Supabase Auth state changes (useful for OAuth redirects)
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      final Session? session = data.session;
+      final AuthChangeEvent event = data.event;
+      if (session != null && (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.tokenRefreshed)) {
+        if (mounted) {
+          setState(() {
+            _isLoading = true;
+          });
+        }
+        try {
+          // Pass the current mode so Google register on an existing account is blocked
+          final authResult = await UserStore.instance.handleOAuthSession(
+            session,
+            isRegisterMode: _isRegisterMode,
+          );
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+            });
+            if (authResult.success) {
+              _goAfterLogin();
+            } else {
+              final errorMsg = authResult.error ?? 'Google sign in failed.';
+              // If the error is because the account already exists, offer a
+              // one-tap switch to the Log In tab
+              final isAlreadyRegistered = errorMsg.contains('already exists');
+              if (isAlreadyRegistered) {
+                _showAlreadyRegisteredError();
+              } else {
+                _showError(errorMsg);
+              }
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+            });
+            _showError('Google sign in error: $e');
+          }
+        }
+      }
+    });
   }
 
   @override
@@ -94,6 +144,7 @@ class _LoginScreenState extends State<LoginScreen>
     _fadeCtrl.dispose();
     _slideCtrl.dispose();
     _userIdDebounce?.cancel();
+    _authSubscription?.cancel();
     super.dispose();
   }
 
@@ -117,12 +168,22 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     _userIdDebounce = Timer(const Duration(milliseconds: 700), () async {
-      final available = await UserStore.instance.isUserIdAvailable(text);
-      if (mounted && _regUserIdCtrl.text.trim() == text) {
-        setState(() {
-          _userIdAvailable = available;
-          _checkingUserId = false;
-        });
+      try {
+        final available = await UserStore.instance.isUserIdAvailable(text);
+        if (mounted && _regUserIdCtrl.text.trim() == text) {
+          setState(() {
+            _userIdAvailable = available;
+            _checkingUserId = false;
+          });
+        }
+      } catch (e) {
+        if (mounted && _regUserIdCtrl.text.trim() == text) {
+          setState(() {
+            _userIdAvailable = null;
+            _checkingUserId = false;
+          });
+          _showError('Error checking User ID availability: $e');
+        }
       }
     });
   }
@@ -162,17 +223,20 @@ class _LoginScreenState extends State<LoginScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, _, _) => const AvatarSetupScreen(),
-        transitionsBuilder: (_, anim, _, child) => FadeTransition(
-          opacity: anim,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.04),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-            child: child,
+        transitionsBuilder: (_, anim, _, child) => ColoredBox(
+          color: const Color(0xFF0D0D0D),
+          child: FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+              child: child,
+            ),
           ),
         ),
-        transitionDuration: const Duration(milliseconds: 500),
+        transitionDuration: const Duration(milliseconds: 350),
       ),
     );
   }
@@ -182,18 +246,21 @@ class _LoginScreenState extends State<LoginScreen>
       PageRouteBuilder(
         pageBuilder: (_, _, _) => const FeedScreen(),
         transitionsBuilder: (_, anim, _, child) {
-          return FadeTransition(
-            opacity: anim,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.04),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-              child: child,
+          return ColoredBox(
+            color: const Color(0xFF0D0D0D),
+            child: FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.04),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+                child: child,
+              ),
             ),
           );
         },
-        transitionDuration: const Duration(milliseconds: 600),
+        transitionDuration: const Duration(milliseconds: 350),
       ),
     );
   }
@@ -209,6 +276,32 @@ class _LoginScreenState extends State<LoginScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
     ));
+  }
+
+  /// Shows a special snackbar when user tries to register with an already-used
+  /// Google account. Includes a one-tap "Log In" action to switch tabs.
+  void _showAlreadyRegisteredError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'This Google account is already registered.',
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+        ),
+        action: SnackBarAction(
+          label: 'Log In',
+          textColor: const Color(0xFFFAF096),
+          onPressed: () {
+            if (mounted) _switchMode(false);
+          },
+        ),
+        backgroundColor: const Color(0xFFCF3A55),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      ),
+    );
   }
 
   void _showSuccess(String msg) {
@@ -274,14 +367,23 @@ class _LoginScreenState extends State<LoginScreen>
       setState(() {
         _checkingUserId = true;
       });
-      final available = await UserStore.instance.isUserIdAvailable(userId);
-      if (!mounted) return;
-      setState(() {
-        _userIdAvailable = available;
-        _checkingUserId = false;
-      });
-      if (!available) {
-        _showError('User ID already exists. Please choose a different one.');
+      try {
+        final available = await UserStore.instance.isUserIdAvailable(userId);
+        if (!mounted) return;
+        setState(() {
+          _userIdAvailable = available;
+          _checkingUserId = false;
+        });
+        if (!available) {
+          _showError('User ID already exists. Please choose a different one.');
+          return;
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _checkingUserId = false;
+        });
+        _showError('Error checking User ID availability: $e');
         return;
       }
     }
@@ -318,6 +420,20 @@ class _LoginScreenState extends State<LoginScreen>
     _regUserIdCtrl.selection = TextSelection.fromPosition(
       TextPosition(offset: id.length),
     );
+  }
+
+  Future<void> _doGoogleSignIn() async {
+    setState(() => _isLoading = true);
+    try {
+      await UserStore.instance.signInWithGoogleOAuth();
+      // Browser handles the authentication. App links listener in main.dart
+      // will trigger session restore when returning, or we restore session on resume.
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showError('Google sign in error: $e');
+      }
+    }
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -410,6 +526,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   onRegister: _doRegister,
                                   onSwitchToLogin: () => _switchMode(false),
                                   randomAttempts: _randomAttempts,
+                                  onGoogleSignIn: _doGoogleSignIn,
                                 )
                               : _LoginForm(
                                   key: const ValueKey('login'),
@@ -423,6 +540,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   isLoading: _isLoading,
                                   onLogin: _doLogin,
                                   onSwitchToRegister: () => _switchMode(true),
+                                  onGoogleSignIn: _doGoogleSignIn,
                                 ),
                         ),
                       ],
@@ -498,6 +616,7 @@ class _LoginForm extends StatelessWidget {
   final bool isLoading;
   final VoidCallback onLogin;
   final VoidCallback onSwitchToRegister;
+  final VoidCallback onGoogleSignIn;
 
   const _LoginForm({
     super.key,
@@ -510,6 +629,7 @@ class _LoginForm extends StatelessWidget {
     required this.isLoading,
     required this.onLogin,
     required this.onSwitchToRegister,
+    required this.onGoogleSignIn,
   });
 
   @override
@@ -545,6 +665,11 @@ class _LoginForm extends StatelessWidget {
           label: 'Log In',
           isLoading: isLoading,
           onTap: onLogin,
+        ),
+        const SizedBox(height: 16),
+        _GoogleSignInButton(
+          isLoading: isLoading,
+          onTap: onGoogleSignIn,
         ),
         const SizedBox(height: 24),
         Row(
@@ -598,6 +723,7 @@ class _RegisterForm extends StatelessWidget {
   final VoidCallback onRegister;
   final VoidCallback onSwitchToLogin;
   final int randomAttempts;
+  final VoidCallback onGoogleSignIn;
 
   const _RegisterForm({
     super.key,
@@ -617,6 +743,7 @@ class _RegisterForm extends StatelessWidget {
     required this.onRegister,
     required this.onSwitchToLogin,
     required this.randomAttempts,
+    required this.onGoogleSignIn,
   });
 
   @override
@@ -681,6 +808,11 @@ class _RegisterForm extends StatelessWidget {
           label: 'Create Account',
           isLoading: isLoading,
           onTap: onRegister,
+        ),
+        const SizedBox(height: 16),
+        _GoogleSignInButton(
+          isLoading: isLoading,
+          onTap: onGoogleSignIn,
         ),
         const SizedBox(height: 24),
         Row(
@@ -1030,6 +1162,65 @@ class _PrimaryButton extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
+              ),
+      ),
+    );
+  }
+}
+
+class _GoogleSignInButton extends StatelessWidget {
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _GoogleSignInButton({
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: OutlinedButton(
+        onPressed: isLoading ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(25),
+          ),
+          backgroundColor: const Color(0xFF141414),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: Colors.white,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SvgPicture.asset(
+                    'assets/images/google-icon-logo-svgrepo-com.svg',
+                    height: 18,
+                    width: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Continue with Google',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
       ),
     );

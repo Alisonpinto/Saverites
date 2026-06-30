@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/feed/feed_screen.dart';
 import 'widgets/dice_avatar.dart';
 
@@ -96,6 +97,15 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen>
       await prefs.setBool('avatar_setup_done', true);
       await prefs.setString('dice_bear_seed', _currentSeed);
       DiceAvatar.seedNotifier.value = _currentSeed;
+
+      // Update avatar_seed in Supabase profiles
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser != null) {
+        await Supabase.instance.client
+            .from('profiles')
+            .update({'avatar_seed': _currentSeed})
+            .eq('id', currentUser.id);
+      }
     } catch (e) {
       debugPrint('AvatarSetupScreen save error: $e');
     }

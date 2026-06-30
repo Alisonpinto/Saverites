@@ -122,12 +122,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         physics: const BouncingScrollPhysics(),
                         itemCount: notificationsList.length,
                         itemBuilder: (context, index) {
+                          final notif = notificationsList[index];
                           return NotificationTile(
-                            notification: notificationsList[index],
-                            // Even-index rows get the alternate (slightly lighter) bg.
+                            notification: notif,
                             isAlternate: index.isEven,
+                            onAccept: () {
+                              NotificationManager.instance.acceptFriendRequest(notif);
+                            },
+                            onDeny: () {
+                              NotificationManager.instance.denyFriendRequest(notif);
+                            },
                             onTap: () {
-                              final notif = notificationsList[index];
                               bool pushedPost = false;
                               if (notif.postId != null) {
                                 // Try finding UserPost

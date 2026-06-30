@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../utils/post_store.dart';
 import '../../utils/user_store.dart';
@@ -129,6 +130,7 @@ class _WritePostScreenState extends State<WritePostScreen>
   }
 
   bool _saveInProfile = false;
+  bool _isPublicPost = true; // true = public, false = private (only matters in post mode)
   String? _pickedImagePath;
   String? _pickedVideoPath;
   bool _isPosting = false;
@@ -243,6 +245,14 @@ class _WritePostScreenState extends State<WritePostScreen>
     super.initState();
     _saveInProfile = widget.isSaveItem;
     _isEditingMode = widget.editingPost == null;
+
+    // For post mode: load default visibility from settings
+    if (!widget.isSaveItem && widget.editingPost == null) {
+      SharedPreferences.getInstance().then((prefs) {
+        final defaultPublic = prefs.getBool('default_post_public') ?? true;
+        if (mounted) setState(() => _isPublicPost = defaultPublic);
+      });
+    }
 
     if (widget.editingPost != null) {
       final post = widget.editingPost!;
@@ -1241,6 +1251,7 @@ class _WritePostScreenState extends State<WritePostScreen>
     // Build body: text content only. We no longer serialize attachments into the text.
     final String body = _serializeBody();
 
+    // No content at all — reject
     if (body.isEmpty &&
         _pickedImagePath == null &&
         _pickedVideoPath == null &&
@@ -1248,15 +1259,7 @@ class _WritePostScreenState extends State<WritePostScreen>
         _sharedFilePath == null) {
       _showSnack(widget.isSaveItem
           ? 'Please add some content, attachment or media!'
-          : 'Please enter some content!');
-      return;
-    }
-
-    if (!widget.isSaveItem &&
-        _pickedImagePath == null &&
-        _pickedVideoPath == null &&
-        _attachedItems.isEmpty) {
-      _showSnack('Please upload an image, video, or attachment to post!');
+          : 'Please enter some content to post!');
       return;
     }
 
@@ -1322,7 +1325,10 @@ class _WritePostScreenState extends State<WritePostScreen>
       username: widget.editingPost?.username ?? UserStore.instance.currentUser?.userId ?? 'gangster_vagas',
       imagePath: _pickedImagePath,
       videoPath: _pickedVideoPath,
-      savedInProfile: _saveInProfile,
+      // Save mode: always saved in profile (personal vault), never private-post
+      // Post mode: savedInProfile=false always; isPrivate=true when user chose "Private"
+      savedInProfile: widget.isSaveItem ? true : false,
+      isPrivate: widget.isSaveItem ? false : !_isPublicPost,
       createdAt: widget.editingPost?.createdAt ?? DateTime.now(),
       charStyles: _serializeCharStyles(),
       type: resolvedType,
@@ -1825,7 +1831,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                       Text(
                         widget.editingPost != null
                             ? 'Edit Item'
-                            : (_saveInProfile ? 'Save anything' : 'Write a Post'),
+                            : (widget.isSaveItem ? 'Save anything' : 'Write a Post'),
                         style: GoogleFonts.inter(
                           color: Colors.white,
                           fontSize: 22,
@@ -1834,7 +1840,7 @@ class _WritePostScreenState extends State<WritePostScreen>
                         ),
                       ),
                       const Spacer(),
-                      if (!_isEditingMode && (widget.editingPost != null || _saveInProfile)) ...[
+                      if (!_isEditingMode && (widget.editingPost != null || widget.isSaveItem)) ...[
                         GestureDetector(
                           onTap: () {
                             setState(() {
@@ -1990,6 +1996,53 @@ class _WritePostScreenState extends State<WritePostScreen>
                             ),
                           ),
                         ),
+                       if (!widget.isSaveItem)
+                         // Public / Private visibility pill
+                         GestureDetector(
+                           onTap: () {
+                             setState(() => _isPublicPost = !_isPublicPost);
+                           },
+                           child: AnimatedContainer(
+                             duration: const Duration(milliseconds: 220),
+                             curve: Curves.easeOutCubic,
+                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                             decoration: BoxDecoration(
+                               color: _isPublicPost
+                                   ? const Color(0xFF7B61FF).withValues(alpha: 0.18)
+                                   : Colors.white.withValues(alpha: 0.06),
+                               borderRadius: BorderRadius.circular(20),
+                               border: Border.all(
+                                 color: _isPublicPost
+                                     ? const Color(0xFF7B61FF).withValues(alpha: 0.55)
+                                     : Colors.white.withValues(alpha: 0.18),
+                                 width: 1,
+                               ),
+                             ),
+                             child: Row(
+                               mainAxisSize: MainAxisSize.min,
+                               children: [
+                                 Icon(
+                                   _isPublicPost ? Icons.public_rounded : Icons.lock_outline_rounded,
+                                   color: _isPublicPost
+                                       ? const Color(0xFF7B61FF)
+                                       : Colors.white60,
+                                   size: 15,
+                                 ),
+                                 const SizedBox(width: 5),
+                                 Text(
+                                   _isPublicPost ? 'Public' : 'Private',
+                                   style: GoogleFonts.inter(
+                                     color: _isPublicPost
+                                         ? const Color(0xFF7B61FF)
+                                         : Colors.white60,
+                                     fontSize: 12,
+                                     fontWeight: FontWeight.w600,
+                                   ),
+                                 ),
+                               ],
+                             ),
+                           ),
+                         ),
                       const SizedBox(width: 4),
                     ],
                   ),

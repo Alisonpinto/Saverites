@@ -83,6 +83,10 @@ class TranslationManager {
       'sharedYourPost': 'shared your post',
       'commentedStunning': 'commented: "This is stunning 🔥"',
       'commentedWhere': 'commented: "Where was this taken?"',
+      'deleteAccount': 'Delete Account',
+      'deleteAccountConfirmTitle': 'Delete Account?',
+      'deleteAccountConfirmMessage': 'This will permanently delete your account, posts, interactions, and uploaded media. This action cannot be undone.',
+      'deletingAccount': 'Deleting account...',
     },
     'Spanish': {
       'title': 'Ajustes',
@@ -156,6 +160,10 @@ class TranslationManager {
       'sharedYourPost': 'compartió tu publicación',
       'commentedStunning': 'comentó: "Esto es impresionante 🔥"',
       'commentedWhere': 'comentó: "¿Dónde fue tomado esto?"',
+      'deleteAccount': 'Eliminar cuenta',
+      'deleteAccountConfirmTitle': '¿Eliminar cuenta?',
+      'deleteAccountConfirmMessage': 'Esto eliminará permanentemente tu cuenta, publicaciones, interacciones y archivos multimedia subidos. Esta acción no se puede deshacer.',
+      'deletingAccount': 'Eliminando cuenta...',
     },
     'French': {
       'title': 'Paramètres',

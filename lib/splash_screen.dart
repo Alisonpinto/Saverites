@@ -75,15 +75,24 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     if (!mounted) return;
 
+    // Helper: build a dark-background page route to prevent white flash
+    PageRouteBuilder<void> _darkRoute(Widget page) => PageRouteBuilder(
+          pageBuilder: (_, __, ___) => page,
+          // Explicit dark background prevents white from bleeding through
+          // during the transition animation on any Android device.
+          opaque: true,
+          barrierColor: const Color(0xFF0D0D0D),
+          transitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+            opacity: anim,
+            child: child,
+          ),
+        );
+
     if (sharedData != null && isLoggedIn) {
-      // Bypasses splash delay and opens WritePostScreen directly on top of FeedScreen
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const FeedScreen()),
-      );
+      Navigator.of(context).pushReplacement(_darkRoute(const FeedScreen()));
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => WritePostScreen(isSaveItem: true, sharedData: sharedData),
-        ),
+        _darkRoute(WritePostScreen(isSaveItem: true, sharedData: sharedData)),
       );
       return;
     }
@@ -93,18 +102,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     if (!mounted) return;
 
     if (!isLoggedIn) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+      Navigator.of(context).pushReplacement(_darkRoute(const LoginScreen()));
       return;
     }
 
     // Already logged in — check if avatar setup was done
     final avatarDone = prefs.getBool('avatar_setup_done') ?? false;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => avatarDone ? const FeedScreen() : const AvatarSetupScreen(),
-      ),
+      _darkRoute(avatarDone ? const FeedScreen() : const AvatarSetupScreen()),
     );
   }
 

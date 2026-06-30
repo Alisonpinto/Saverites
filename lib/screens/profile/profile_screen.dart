@@ -23,6 +23,11 @@ import '../post_detail/post_detail_screen.dart';
 import '../../utils/rich_text_controller.dart';
 import '../post/write_post_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../../models/notification_model.dart';
+import '../../utils/notification_manager.dart';
+import 'add_friends_screen.dart';
 import 'locked_folder/locked_folder_screen.dart';
 import 'locked_folder/pin_entry_screen.dart';
 import 'locked_folder/pin_setup_screen.dart';
@@ -65,6 +70,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   
   bool _isSelectionMode = false;
   final Set<String> _selectedIds = {};
+  bool _isFollowingTarget = false;
+  bool _isRequestedTarget = false;
+  int _friendsCount = 0;
+
+  bool get _isProfilePrivate => widget.username != null &&
+      const ['alison_pinto', 'pixel_perfect', 'aesthetic_vibes', 'ananya_nair', 'Ananya Nair'].contains(widget.username);
 
   void _toggleSelection(String id) {
     if (!_isSelectionMode) return;
@@ -321,11 +332,199 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildConnectButton() {
+    String label = _isFollowingTarget 
+        ? 'Connected' 
+        : (_isRequestedTarget ? 'Requested' : 'Connect');
+    Color btnColor = _isFollowingTarget 
+        ? Colors.transparent 
+        : (_isRequestedTarget ? const Color(0xFF2C2C2E) : const Color(0xFFFFF78E));
+    Color textColor = _isFollowingTarget 
+        ? const Color(0xFFFFF78E) 
+        : (_isRequestedTarget ? Colors.white70 : Colors.black);
+    Color borderColor = _isFollowingTarget 
+        ? const Color(0xFFFFF78E) 
+        : (_isRequestedTarget ? const Color(0xFF2C2C2E) : const Color(0xFFFFF78E));
+
+    return GestureDetector(
+      onTap: () async {
+        final currentUuid = Supabase.instance.client.auth.currentUser?.id;
+        if (currentUuid == null) return;
+        final currentUserId = UserStore.instance.currentUser?.userId ?? 'Someone';
+
+        // Resolve target uuid
+        final targetUserId = widget.username;
+        final pResponse = await Supabase.instance.client
+            .from('profiles')
+            .select('id')
+            .eq('user_id', targetUserId ?? '')
+            .maybeSingle();
+
+        if (pResponse != null) {
+          final targetUuid = pResponse['id'] as String?;
+          if (targetUuid != null) {
+            try {
+              if (_isFollowingTarget) {
+                // Disconnect (Unfollow)
+                await Supabase.instance.client
+                    .from('user_follows')
+                    .delete()
+                    .eq('follower_id', currentUuid)
+                    .eq('followed_id', targetUuid);
+              } else if (_isRequestedTarget) {
+                // Cancel friend request
+                await Supabase.instance.client
+                    .from('notifications')
+                    .delete()
+                    .eq('from_user_id', currentUuid)
+                    .eq('to_user_id', targetUuid)
+                    .eq('action_type', 'friend_request');
+              } else {
+                if (_isProfilePrivate) {
+                  // Connect (Private: send request)
+                  final String notifId = 'freq-${DateTime.now().millisecondsSinceEpoch}';
+                  await Supabase.instance.client.from('notifications').insert({
+                    'id': notifId,
+                    'to_user_id': targetUserId,
+                    'from_user_id': currentUserId,
+                    'avatar_seed': currentUserId,
+                    'avatar_initial': currentUserId.isNotEmpty ? currentUserId[0].toUpperCase() : 'U',
+                    'avatar_color': const Color(0xFF6B9BF7).toARGB32(),
+                    'username': currentUserId,
+                    'preview_text': 'sent you a friend request',
+                    'action_type': 'friend_request',
+                    'is_read': false,
+                  });
+                } else {
+                  // Connect (Public: Follow directly)
+                  await Supabase.instance.client
+                      .from('user_follows')
+                      .insert({
+                        'follower_id': currentUuid,
+                        'followed_id': targetUuid,
+                      });
+                }
+              }
+              _checkFollowStatus();
+              _loadFriendsCount();
+            } catch (e) {
+              debugPrint("Error toggling connect status: $e");
+            }
+          }
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: btnColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            color: textColor,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openAddFriendsScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddFriendsScreen()),
+    );
+    _checkFollowStatus(); // refresh follow status when back
+    _loadFriendsCount(); // refresh friends count when back
+  }
+
+  Future<void> _checkFollowStatus() async {
+    if (_isMyProfile) return;
+    try {
+      final currentUuid = Supabase.instance.client.auth.currentUser?.id;
+      if (currentUuid == null) return;
+
+      final targetUserId = widget.username;
+      final pResponse = await Supabase.instance.client
+          .from('profiles')
+          .select('id')
+          .eq('user_id', targetUserId ?? '')
+          .maybeSingle();
+
+      if (pResponse != null) {
+        final targetUuid = pResponse['id'] as String?;
+        if (targetUuid != null) {
+          final followCheck = await Supabase.instance.client
+              .from('user_follows')
+              .select('followed_id')
+              .eq('follower_id', currentUuid)
+              .eq('followed_id', targetUuid)
+              .maybeSingle();
+
+          final requestCheck = await Supabase.instance.client
+              .from('notifications')
+              .select('id')
+              .eq('from_user_id', currentUuid)
+              .eq('to_user_id', targetUuid)
+              .eq('action_type', 'friend_request')
+              .maybeSingle();
+
+          if (mounted) {
+            setState(() {
+              _isFollowingTarget = followCheck != null;
+              _isRequestedTarget = requestCheck != null;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking follow status: $e");
+    }
+  }
+
+  Future<void> _loadFriendsCount() async {
+    try {
+      final targetUserId = widget.username;
+      final String? userId = targetUserId ?? UserStore.instance.currentUser?.userId;
+      if (userId == null) return;
+
+      final pResponse = await Supabase.instance.client
+          .from('profiles')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (pResponse != null) {
+        final targetUuid = pResponse['id'] as String?;
+        if (targetUuid != null) {
+          final response = await Supabase.instance.client
+              .from('user_follows')
+              .select('followed_id')
+              .eq('follower_id', targetUuid);
+
+          if (mounted) {
+            setState(() {
+              _friendsCount = response.length;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading friends count: $e");
+    }
+  }
+
   // Mock saves are now reactively queried from the central PostStore.instance
 
   @override
   void initState() {
     super.initState();
+    _checkFollowStatus();
+    _loadFriendsCount();
 
     _scrollController.addListener(() {
       if (mounted) setState(() => _scrollOffset = _scrollController.offset);
@@ -468,331 +667,406 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
                 ),
+                   ValueListenableBuilder<List<NotificationModel>>(
+                  valueListenable: NotificationManager.instance.notificationsNotifier,
+                  builder: (context, notificationsList, _) {
+                    final pendingRequests = notificationsList
+                        .where((n) => n.actionType == 'friend_request')
+                        .toList();
+                    final hasPendingRequest = widget.username != null &&
+                        pendingRequests.any((n) => n.username == widget.username);
 
-                SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      // Sticky Header Row (placed directly on gradient background)
-                      Container(
-                        padding: EdgeInsets.only(
-                          top: MediaQuery.of(context).padding.top > 0
-                              ? MediaQuery.of(context).padding.top
-                              : 10,
-                          bottom: 12,
-                          left: 8,
-                          right: 16,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (_isSelectionMode)
-                              IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isSelectionMode = false;
-                                    _selectedIds.clear();
-                                  });
-                                },
-                                icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                                splashRadius: 20,
-                              )
-                            else
-                              IconButton(
-                                onPressed: () {
-                                  if (widget.onBackTap != null) {
-                                    widget.onBackTap!();
-                                  } else if (Navigator.of(context).canPop()) {
-                                    Navigator.of(context).pop();
-                                  }
-                                },
-                                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                                splashRadius: 20,
-                              ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _isSelectionMode ? '${_selectedIds.length} Selected' : 'Profile',
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w600,
-                              ),
+                    final bool isLockedPrivate = !_isMyProfile && _isProfilePrivate && !_isFollowingTarget;
+
+                    // Sort so the request matching widget.username is at the top
+                    if (widget.username != null) {
+                      pendingRequests.sort((a, b) {
+                        if (a.username == widget.username) return -1;
+                        if (b.username == widget.username) return 1;
+                        return 0;
+                      });
+                    }
+
+                    return SafeArea(
+                      top: false,
+                      child: Column(
+                        children: [
+                          // Sticky Header Row (placed directly on gradient background)
+                          Container(
+                            padding: EdgeInsets.only(
+                              top: MediaQuery.of(context).padding.top > 0
+                                  ? MediaQuery.of(context).padding.top
+                                  : 10,
+                              bottom: 12,
+                              left: 8,
+                              right: 16,
                             ),
-                            const Spacer(),
-                            if (_isSelectionMode) ...[
-                              IconButton(
-                                onPressed: _selectedIds.isEmpty ? null : () {
-                                  PostStore.instance.lockUserPosts(_selectedIds);
-                                  setState(() {
-                                    _isSelectionMode = false;
-                                    _selectedIds.clear();
-                                  });
-                                },
-                                icon: Icon(Icons.lock, color: _selectedIds.isEmpty ? Colors.grey : Colors.white, size: 24),
-                                tooltip: 'Move to Locked Folder',
-                              ),
-                              IconButton(
-                                onPressed: _selectedIds.isEmpty ? null : () async {
-                                  final confirmed = await _showDeleteConfirmation(context, _selectedIds.length);
-                                  if (confirmed == true) {
-                                    PostStore.instance.removeUserPosts(_selectedIds);
-                                    setState(() {
-                                      _isSelectionMode = false;
-                                      _selectedIds.clear();
-                                    });
-                                  }
-                                },
-                                icon: Icon(Icons.delete, color: _selectedIds.isEmpty ? Colors.grey : Colors.redAccent, size: 24),
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                                splashRadius: 20,
-                              ),
-                            ] else ...[
-                              IconButton(
-                                onPressed: _openLockedFolder,
-                                icon: const Icon(Icons.lock_outline, color: Colors.white, size: 24),
-                                tooltip: 'Locked Folder',
-                              ),
-                              IconButton(
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  PageRouteBuilder(
-                                    pageBuilder: (ctx, anim, x) => const SettingsScreen(),
-                                    transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(
-                                      opacity: animation,
-                                      child: SlideTransition(
-                                        position: Tween<Offset>(
-                                          begin: const Offset(0, 0.04),
-                                          end: Offset.zero,
-                                        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                                        child: child,
-                                      ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                if (_isSelectionMode)
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isSelectionMode = false;
+                                        _selectedIds.clear();
+                                      });
+                                    },
+                                    icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                    splashRadius: 20,
+                                  )
+                                else
+                                  IconButton(
+                                    onPressed: () {
+                                      if (widget.onBackTap != null) {
+                                        widget.onBackTap!();
+                                      } else if (Navigator.of(context).canPop()) {
+                                        Navigator.of(context).pop();
+                                      }
+                                    },
+                                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                    splashRadius: 20,
+                                  ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    _isSelectionMode 
+                                        ? '${_selectedIds.length} Selected' 
+                                        : (hasPendingRequest 
+                                            ? 'Friend Requests (${pendingRequests.length})' 
+                                            : 'Profile'),
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                    transitionDuration: const Duration(milliseconds: 450),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 24),
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                                splashRadius: 20,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-
-                      Expanded(
-                        child: SingleChildScrollView(
-                          controller: _scrollController,
-                          physics: const BouncingScrollPhysics(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 8),
-
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Transform.translate(
-                                      offset: Offset(0, -(_scrollOffset * 0.04).clamp(-8.0, 8.0)),
-                                      child: SizedBox(
-                                        width: 130,
-                                        height: 130,
-                                        child: _isMyProfile
-                                            ? GestureDetector(
-                                                onTap: () async {
-                                                  await Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (_) => const AvatarSetupScreen(isFromProfile: true),
-                                                    ),
-                                                  );
-                                                  if (mounted) setState(() {});
-                                                },
-                                                child: MouseRegion(
-                                                  cursor: SystemMouseCursors.click,
-                                                  child: Tooltip(
-                                                    message: 'Customize Avatar',
-                                                    child: const DiceAvatar(
-                                                      radius: 65,
-                                                      backgroundColor: Colors.transparent,
-                                                    ),
-                                                  ),
-                                                ),
-                                              )
-                                            : (widget.avatarAssetPath != null || widget.avatarInitial != null)
-                                                ? Container(
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: widget.avatarColor ?? const Color(0xFF7B61FF),
-                                                      image: widget.avatarAssetPath != null
-                                                          ? DecorationImage(
-                                                              image: AssetImage(widget.avatarAssetPath!),
-                                                              fit: BoxFit.cover,
-                                                            )
-                                                          : null,
-                                                    ),
-                                                    alignment: Alignment.center,
-                                                    child: widget.avatarAssetPath == null && widget.avatarInitial != null
-                                                        ? Text(
-                                                            widget.avatarInitial!.toUpperCase(),
-                                                            style: GoogleFonts.inter(
-                                                              color: Colors.white,
-                                                              fontSize: 48,
-                                                              fontWeight: FontWeight.bold,
-                                                            ),
-                                                          )
-                                                        : null,
-                                                  )
-                                                : const AnimatedAvatar(size: 130),
+                                if (_isSelectionMode) ...[
+                                  IconButton(
+                                    onPressed: _selectedIds.isEmpty ? null : () {
+                                      PostStore.instance.lockUserPosts(_selectedIds);
+                                      setState(() {
+                                        _isSelectionMode = false;
+                                        _selectedIds.clear();
+                                      });
+                                    },
+                                    icon: Icon(Icons.lock, color: _selectedIds.isEmpty ? Colors.grey : Colors.white, size: 24),
+                                    tooltip: 'Move to Locked Folder',
+                                  ),
+                                  IconButton(
+                                    onPressed: _selectedIds.isEmpty ? null : () async {
+                                      final confirmed = await _showDeleteConfirmation(context, _selectedIds.length);
+                                      if (confirmed == true) {
+                                        PostStore.instance.removeUserPosts(_selectedIds);
+                                        setState(() {
+                                          _isSelectionMode = false;
+                                          _selectedIds.clear();
+                                        });
+                                      }
+                                    },
+                                    icon: Icon(Icons.delete, color: _selectedIds.isEmpty ? Colors.grey : Colors.redAccent, size: 24),
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                    splashRadius: 20,
+                                  ),
+                                ] else if (_isMyProfile) ...[
+                                  if (!hasPendingRequest) ...[
+                                    IconButton(
+                                      onPressed: _openAddFriendsScreen,
+                                      icon: Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFFFF78E),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: const Icon(Icons.person_add_outlined, color: Colors.black, size: 16),
                                       ),
+                                      padding: const EdgeInsets.all(8),
+                                      constraints: const BoxConstraints(),
+                                      splashRadius: 20,
+                                      tooltip: 'Add Friends',
                                     ),
-                                    const SizedBox(width: 20),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _isMyProfile
-                                                ? (UserStore.instance.currentUser?.name ?? 'Gangster Vagas')
-                                                : (widget.username ?? 'gangster_vagas'),
-                                            style: GoogleFonts.inter(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w700,
-                                              letterSpacing: -0.4,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '@${_isMyProfile ? (UserStore.instance.currentUser?.userId ?? 'gangster_vagas') : (widget.username ?? 'gangster_vagas')}',
-                                            style: GoogleFonts.inter(
-                                              color: const Color(0xFF7C7C81),
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _getJoinedDate(),
-                                            style: GoogleFonts.inter(
-                                              color: const Color(0xFF7C7C81),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Row(
-                                            children: [
-                                              Row(
-                                                crossAxisAlignment: CrossAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    '$likesCount',
-                                                    style: GoogleFonts.inter(
-                                                      color: Colors.white,
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    'likes',
-                                                    style: GoogleFonts.inter(
-                                                      color: const Color(0xFF7C7C81),
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(width: 24),
-                                              Row(
-                                                crossAxisAlignment: CrossAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    '$postsCount',
-                                                    style: GoogleFonts.inter(
-                                                      color: Colors.white,
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    'post',
-                                                    style: GoogleFonts.inter(
-                                                      color: const Color(0xFF7C7C81),
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                    const SizedBox(width: 4),
                                   ],
-                                ),
-                              ),
-
-                              const SizedBox(height: 24),
-
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: _PremiumSearchBar(
-                                  controller: _searchController,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _profileSearchQuery = val;
-                                    });
-                                  },
-                                  onClear: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      _profileSearchQuery = "";
-                                    });
-                                  },
-                                ),
-                              ),
-
-                              const SizedBox(height: 24),
-
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: _PremiumTabBar(
-                                  activeTab: _activeTab,
-                                  onTabChanged: (i) => setState(() => _activeTab = i),
-                                ),
-                              ),
-
-                              if (_activeTab == 0) ...[
-                                const SizedBox(height: 16),
-                                _buildCategoryChips(),
-                              ] else if (_activeTab == 1 && _isMyProfile) ...[
-                                const SizedBox(height: 16),
-                                _buildSocialCategoryChips(),
+                                  IconButton(
+                                    onPressed: _openLockedFolder,
+                                    icon: const Icon(Icons.lock_outline, color: Colors.white, size: 24),
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                    splashRadius: 20,
+                                    tooltip: 'Locked Folder',
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder: (ctx, anim, x) => const SettingsScreen(),
+                                        transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(
+                                          opacity: animation,
+                                          child: SlideTransition(
+                                            position: Tween<Offset>(
+                                              begin: const Offset(0, 0.04),
+                                              end: Offset.zero,
+                                            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                                            child: child,
+                                          ),
+                                        ),
+                                        transitionDuration: const Duration(milliseconds: 450),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 24),
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                    splashRadius: 20,
+                                  ),
+                                ],
                               ],
-
-                              const SizedBox(height: 18),
-
-                              _buildProfileGrid(),
-
-                              const SizedBox(height: 100),
-                            ],
+                            ),
                           ),
-                        ),
+
+                          Expanded(
+                            child: hasPendingRequest
+                                ? _buildFriendRequestStack(pendingRequests)
+                                : isLockedPrivate
+                                    ? _buildPrivateProfileCard(postsCount, likesCount)
+                                    : SingleChildScrollView(
+                                        controller: _scrollController,
+                                        physics: const BouncingScrollPhysics(),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 8),
+
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                                              child: Row(
+                                                crossAxisAlignment: CrossAxisAlignment.center,
+                                                children: [
+                                                  Transform.translate(
+                                                    offset: Offset(0, -(_scrollOffset * 0.04).clamp(-8.0, 8.0)),
+                                                    child: SizedBox(
+                                                      width: 130,
+                                                      height: 130,
+                                                      child: _isMyProfile
+                                                          ? GestureDetector(
+                                                              onTap: () async {
+                                                                await Navigator.push(
+                                                                  context,
+                                                                  MaterialPageRoute(
+                                                                    builder: (_) => const AvatarSetupScreen(isFromProfile: true),
+                                                                  ),
+                                                                );
+                                                                if (mounted) setState(() {});
+                                                              },
+                                                              child: MouseRegion(
+                                                                cursor: SystemMouseCursors.click,
+                                                                child: Tooltip(
+                                                                  message: 'Customize Avatar',
+                                                                  child: const DiceAvatar(
+                                                                    radius: 65,
+                                                                    backgroundColor: Colors.transparent,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            )
+                                                          : widget.avatarAssetPath != null
+                                                              ? Container(
+                                                                  decoration: BoxDecoration(
+                                                                    shape: BoxShape.circle,
+                                                                    image: DecorationImage(
+                                                                      image: AssetImage(widget.avatarAssetPath!),
+                                                                      fit: BoxFit.cover,
+                                                                    ),
+                                                                  ),
+                                                                )
+                                                              : DiceAvatar(
+                                                                  radius: 65,
+                                                                  seed: widget.username ?? '?',
+                                                                  backgroundColor: Colors.transparent,
+                                                                ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 20),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          _isMyProfile
+                                                              ? (UserStore.instance.currentUser?.name ?? 'Gangster Vagas')
+                                                              : (widget.username ?? 'gangster_vagas'),
+                                                          style: GoogleFonts.inter(
+                                                            color: Colors.white,
+                                                            fontSize: 20,
+                                                            fontWeight: FontWeight.w700,
+                                                            letterSpacing: -0.4,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 2),
+                                                        Text(
+                                                          '@${_isMyProfile ? (UserStore.instance.currentUser?.userId ?? 'gangster_vagas') : (widget.username ?? 'gangster_vagas')}',
+                                                          style: GoogleFonts.inter(
+                                                            color: const Color(0xFF7C7C81),
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 4),
+                                                        Text(
+                                                          _getJoinedDate(),
+                                                          style: GoogleFonts.inter(
+                                                            color: const Color(0xFF7C7C81),
+                                                            fontSize: 14,
+                                                            fontWeight: FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                        if (!_isMyProfile) ...[
+                                                          const SizedBox(height: 12),
+                                                          _buildConnectButton(),
+                                                        ],
+                                                        const SizedBox(height: 16),
+                                                        Wrap(
+                                                          spacing: 16,
+                                                          runSpacing: 8,
+                                                          children: [
+                                                            Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                                              children: [
+                                                                Text(
+                                                                  '$likesCount',
+                                                                  style: GoogleFonts.inter(
+                                                                    color: Colors.white,
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w600,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(width: 6),
+                                                                Text(
+                                                                  'likes',
+                                                                  style: GoogleFonts.inter(
+                                                                    color: const Color(0xFF7C7C81),
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w500,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                                              children: [
+                                                                Text(
+                                                                  '$postsCount',
+                                                                  style: GoogleFonts.inter(
+                                                                    color: Colors.white,
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w600,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(width: 6),
+                                                                Text(
+                                                                  'posts',
+                                                                  style: GoogleFonts.inter(
+                                                                    color: const Color(0xFF7C7C81),
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w500,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                                              children: [
+                                                                Text(
+                                                                  '$_friendsCount',
+                                                                  style: GoogleFonts.inter(
+                                                                    color: Colors.white,
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w600,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(width: 6),
+                                                                Text(
+                                                                  'friends',
+                                                                  style: GoogleFonts.inter(
+                                                                    color: const Color(0xFF7C7C81),
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w500,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 24),
+
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                                              child: _PremiumSearchBar(
+                                                controller: _searchController,
+                                                onChanged: (val) {
+                                                  setState(() {
+                                                    _profileSearchQuery = val;
+                                                  });
+                                                },
+                                                onClear: () {
+                                                  _searchController.clear();
+                                                  setState(() {
+                                                    _profileSearchQuery = "";
+                                                  });
+                                                },
+                                              ),
+                                            ),
+
+                                            const SizedBox(height: 24),
+
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                                              child: _PremiumTabBar(
+                                                activeTab: _activeTab,
+                                                onTabChanged: (i) => setState(() => _activeTab = i),
+                                              ),
+                                            ),
+
+                                            if (_activeTab == 0) ...[
+                                              const SizedBox(height: 16),
+                                              _buildCategoryChips(),
+                                            ] else if (_activeTab == 1 && _isMyProfile) ...[
+                                              const SizedBox(height: 16),
+                                              _buildSocialCategoryChips(),
+                                            ],
+
+                                            const SizedBox(height: 18),
+
+                                            _buildProfileGrid(),
+
+                                            const SizedBox(height: 100),
+                                          ],
+                                        ),
+                                      ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -819,6 +1093,463 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildFriendRequestStack(List<NotificationModel> requests) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double availableH = constraints.maxHeight;
+        // Use a dynamic height that never exceeds available space
+        final double cardH = (availableH * 0.85).clamp(0.0, 480.0);
+        return Center(
+          child: SizedBox(
+            height: cardH,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Stack(
+                alignment: Alignment.topCenter,
+                clipBehavior: Clip.none,
+                children: [
+                  for (int i = math.min(requests.length - 1, 2); i >= 0; i--)
+                    _buildStackedCard(requests[i], i, requests.length, cardH),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStackedCard(NotificationModel request, int index, int total, double maxH) {
+    final double scale = 1.0 - (index * 0.04);
+    final double offsetY = index * 10.0;
+    final double rotation = index == 0 ? 0.0 : (index == 1 ? 0.025 : -0.025);
+    final bool isTop = index == 0;
+
+    Widget avatarWidget;
+    if (request.avatarSeed != null && request.avatarSeed!.isNotEmpty) {
+      avatarWidget = SvgPicture.network(
+        'https://api.dicebear.com/9.x/notionists/svg?seed=${request.avatarSeed}&backgroundColor=transparent',
+        fit: BoxFit.cover,
+      );
+    } else {
+      avatarWidget = request.avatarAssetPath != null
+          ? Image.asset(request.avatarAssetPath!, fit: BoxFit.cover)
+          : DiceAvatar(
+              radius: 65, 
+              seed: request.username,
+              backgroundColor: Colors.transparent,
+            );
+    }
+
+    final String displayName = _capitalize(widget.username ?? request.username);
+    final String handle = widget.username ?? request.username;
+
+    final Widget cardContent = Transform.translate(
+      offset: Offset(0, offsetY),
+      child: Transform.scale(
+        scale: scale,
+        alignment: Alignment.topCenter,
+        child: Transform.rotate(
+          angle: rotation,
+          child: Container(
+            width: double.infinity,
+            clipBehavior: Clip.hardEdge,
+            constraints: BoxConstraints(maxWidth: 400, maxHeight: maxH - offsetY),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            decoration: BoxDecoration(
+              color: isTop ? const Color(0xFF1C1C1E) : const Color(0xFF161617),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: isTop ? 0.08 : 0.03),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isTop ? 0.4 : 0.2),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // ── Avatar (no background ring) ──────────────────────
+                  Container(
+                    width: 90,
+                    height: 90,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: const BoxDecoration(shape: BoxShape.circle),
+                    child: avatarWidget,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Name ────────────────────────────────────────────
+                  Text(
+                    displayName,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.4,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+
+                  // ── Handle ──────────────────────────────────────────
+                  Text(
+                    '@$handle',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF7C7C81),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 10),
+
+                  // ── Mutual follow subtitle ───────────────────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.people_outline_rounded,
+                          color: Color(0xFF636366), size: 14),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Followed by unknown and more',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF636366),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (isTop) ...[
+                    const SizedBox(height: 24),
+
+                    // ── Divider ─────────────────────────────────────────
+                    Container(
+                      height: 1,
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Section label ────────────────────────────────────
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'RESPOND TO REQUEST',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF636366),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Action buttons ───────────────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildRequestButton(
+                            label: 'Accept',
+                            icon: Icons.person_add_rounded,
+                            themeColor: const Color(0xFF22C55E),
+                            onTap: () => NotificationManager.instance.acceptFriendRequest(request),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildRequestButton(
+                            label: 'Decline',
+                            icon: Icons.person_remove_rounded,
+                            themeColor: const Color(0xFFEF4444),
+                            onTap: () => NotificationManager.instance.denyFriendRequest(request),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 20),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return cardContent;
+  }
+
+  Widget _buildPrivateProfileCard(int postsCount, int likesCount) {
+    Widget avatarWidget;
+    if (widget.avatarAssetPath != null) {
+      avatarWidget = Image.asset(widget.avatarAssetPath!, fit: BoxFit.cover);
+    } else {
+      avatarWidget = DiceAvatar(
+        radius: 75, 
+        seed: widget.username ?? '?',
+        backgroundColor: Colors.transparent,
+      );
+    }
+
+    final String displayName = _capitalize(widget.username ?? 'Private Profile');
+    final String handle = widget.username ?? 'private_user';
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: const EdgeInsets.all(28),
+        constraints: const BoxConstraints(maxWidth: 400),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.08),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 150,
+              height: 150,
+              clipBehavior: Clip.antiAlias,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+              ),
+              child: avatarWidget,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              displayName,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '@$handle',
+              style: GoogleFonts.inter(
+                color: const Color(0xFF7C7C81),
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "This account is private. Follow to see their photos and videos.",
+              style: GoogleFonts.inter(
+                color: const Color(0xFFAEAEB2),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Divider(color: Colors.white.withOpacity(0.08)),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildCardStat('posts', postsCount),
+                _buildCardStat('likes', likesCount),
+                _buildCardStat('friends', _friendsCount),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Divider(color: Colors.white.withOpacity(0.08)),
+            const SizedBox(height: 24),
+            _buildRequestButton(
+              label: _isFollowingTarget 
+                  ? 'Connected' 
+                  : (_isRequestedTarget ? 'Requested' : 'Connect'),
+              icon: _isFollowingTarget 
+                  ? Icons.person_outline_rounded 
+                  : (_isRequestedTarget ? Icons.hourglass_empty_rounded : Icons.person_add_rounded),
+              themeColor: _isFollowingTarget 
+                  ? const Color(0xFFFFF78E) 
+                  : (_isRequestedTarget ? const Color(0xFF2C2C2E) : const Color(0xFFFFF78E)),
+              onTap: () async {
+                final currentUuid = Supabase.instance.client.auth.currentUser?.id;
+                if (currentUuid == null) return;
+                final currentUserId = UserStore.instance.currentUser?.userId ?? 'Someone';
+
+                final targetUserId = widget.username;
+                final pResponse = await Supabase.instance.client
+                    .from('profiles')
+                    .select('id')
+                    .eq('user_id', targetUserId ?? '')
+                    .maybeSingle();
+
+                if (pResponse != null) {
+                  final targetUuid = pResponse['id'] as String?;
+                  if (targetUuid != null) {
+                    try {
+                      if (_isFollowingTarget) {
+                        // Disconnect (Unfollow)
+                        await Supabase.instance.client
+                            .from('user_follows')
+                            .delete()
+                            .eq('follower_id', currentUuid)
+                            .eq('followed_id', targetUuid);
+                      } else if (_isRequestedTarget) {
+                        // Cancel friend request
+                        await Supabase.instance.client
+                            .from('notifications')
+                            .delete()
+                            .eq('from_user_id', currentUuid)
+                            .eq('to_user_id', targetUuid)
+                            .eq('action_type', 'friend_request');
+                      } else {
+                        // Connect (Follow)
+                        if (_isProfilePrivate) {
+                          // Private: send request
+                          final String notifId = 'freq-${DateTime.now().millisecondsSinceEpoch}';
+                          await Supabase.instance.client.from('notifications').insert({
+                            'id': notifId,
+                            'to_user_id': targetUuid,
+                            'from_user_id': currentUuid,
+                            'avatar_seed': currentUserId,
+                            'avatar_initial': currentUserId.isNotEmpty ? currentUserId[0].toUpperCase() : 'U',
+                            'avatar_color': const Color(0xFF6B9BF7).toARGB32(),
+                            'username': currentUserId,
+                            'preview_text': 'sent you a friend request',
+                            'action_type': 'friend_request',
+                            'is_read': false,
+                          });
+                        } else {
+                          // Public: follow directly
+                          await Supabase.instance.client
+                              .from('user_follows')
+                              .insert({
+                                'follower_id': currentUuid,
+                                'followed_id': targetUuid,
+                              });
+                        }
+                      }
+                      _checkFollowStatus();
+                      _loadFriendsCount();
+                    } catch (e) {
+                      debugPrint("Error toggling connect status: $e");
+                    }
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardStat(String label, int value) {
+    return Column(
+      children: [
+        Text(
+          '$value',
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            color: const Color(0xFF7C7C81),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRequestButton({
+    required String label,
+    required IconData icon,
+    required Color themeColor,
+    required VoidCallback onTap,
+  }) {
+    final bool isAccept = label == 'Accept' || label == 'Connected' || label == 'Connect';
+    final Color contentColor = themeColor == const Color(0xFFFFF78E) ? Colors.black : Colors.white;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isAccept
+                ? [themeColor, themeColor.withValues(alpha: 0.75)]
+                : [const Color(0xFF2C2C2E), const Color(0xFF1C1C1E)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isAccept ? Colors.transparent : Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+          boxShadow: isAccept
+              ? [
+                  BoxShadow(
+                    color: themeColor.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: contentColor, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                color: contentColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProfileGrid() {
     final bool isMyProfile = _isMyProfile;
     final query = _profileSearchQuery.toLowerCase().trim();
@@ -829,7 +1560,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           return ValueListenableBuilder<List<UserPost>>(
             valueListenable: PostStore.instance.postsNotifier,
             builder: (context, postsList, _) {
-              var userPublicPosts = postsList.where((p) => !p.savedInProfile).toList();
+              final currentUserId = UserStore.instance.currentUser?.userId ?? 'gangster_vagas';
+              var userPublicPosts = postsList.where((p) => !p.savedInProfile && p.username == currentUserId).toList();
               
               if (query.isNotEmpty) {
                 userPublicPosts = userPublicPosts.where((item) {
@@ -869,16 +1601,24 @@ class _ProfileScreenState extends State<ProfileScreen>
               final savedPredefined = PostStore.predefinedPosts
                   .where((p) => savedSocialIds.contains(p.id))
                   .toList();
-              var savedSocial = [...savedPredefined];
+              final savedUserDynamic = PostStore.instance.posts
+                  .where((p) => savedSocialIds.contains(p.id))
+                  .toList();
+              var savedSocial = <dynamic>[...savedPredefined, ...savedUserDynamic];
 
               if (query.isNotEmpty) {
                 savedSocial = savedSocial.where((item) {
-                  return (item.title?.toLowerCase().contains(query) ?? false) ||
-                         (item.description?.toLowerCase().contains(query) ?? false) ||
-                         (item.username?.toLowerCase().contains(query) ?? false) ||
-                         (item.url?.toLowerCase().contains(query) ?? false);
+                  final title = (item.title ?? '').toLowerCase();
+                  final body = (item.runtimeType.toString() == 'UserPost' ? item.body : (item.description ?? '')).toLowerCase();
+                  final username = (item.username ?? '').toLowerCase();
+                  final url = (item.url ?? '').toLowerCase();
+                  return title.contains(query) ||
+                         body.contains(query) ||
+                         username.contains(query) ||
+                         url.contains(query);
                 }).toList();
               }
+
 
               if (savedSocial.isEmpty) {
                 return Padding(
@@ -926,7 +1666,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         return ValueListenableBuilder<List<UserPost>>(
           valueListenable: PostStore.instance.postsNotifier,
           builder: (context, postsList, _) {
-            var savedUserPosts = postsList.where((p) => !p.isLocked && p.savedInProfile).toList();
+            final currentUserId = UserStore.instance.currentUser?.userId ?? 'gangster_vagas';
+            var savedUserPosts = postsList.where((p) => !p.isLocked && p.savedInProfile && p.username == currentUserId).toList();
 
             if (_activeCategoryChip == 'Documents') {
               savedUserPosts = savedUserPosts.where((p) => p.type == 'document').toList();
@@ -1015,6 +1756,15 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       }
     }
+  }
+
+  String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    final parts = text.replaceAll(RegExp(r'[_.]'), ' ').split(' ');
+    return parts.map((word) {
+      if (word.isEmpty) return '';
+      return '${word[0].toUpperCase()}${word.substring(1)}';
+    }).join(' ');
   }
 }
 
@@ -2248,7 +2998,8 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
       ),
     );
   }
-}
+
+  }
 
 class ArrowPainter2 extends CustomPainter {
   @override

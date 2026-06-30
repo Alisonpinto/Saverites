@@ -24,7 +24,9 @@ import '../../widgets/shimmer_container.dart';
 import '../../widgets/feed_card.dart';
 import '../../widgets/running_video_player.dart';
 import '../../widgets/premium_drawer.dart';
-import '../../utils/rich_text_controller.dart';
+import '../../utils/user_store.dart';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -45,6 +47,49 @@ class _FeedScreenState extends State<FeedScreen> {
   String _searchQuery = "";
   bool _isAddMenuOpen = false;
 
+  final Set<String> _feedFollowedUserIds = {};
+  final Set<String> _feedFollowedUserHandles = {};
+
+
+  Future<void> _loadFeedFollows() async {
+    try {
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      if (currentUserId != null) {
+        final response = await Supabase.instance.client
+            .from('user_follows')
+            .select('followed_id')
+            .eq('follower_id', currentUserId);
+        
+        final followedUuids = List<String>.from(response.map((r) => r['followed_id'].toString()));
+        
+        if (followedUuids.isNotEmpty) {
+          final profilesRes = await Supabase.instance.client
+              .from('profiles')
+              .select('user_id')
+              .inFilter('id', followedUuids);
+          final handles = List<String>.from(profilesRes.map((p) => p['user_id'].toString()));
+          if (mounted) {
+            setState(() {
+              _feedFollowedUserIds.clear();
+              _feedFollowedUserIds.addAll(followedUuids);
+              _feedFollowedUserHandles.clear();
+              _feedFollowedUserHandles.addAll(handles);
+            });
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _feedFollowedUserIds.clear();
+              _feedFollowedUserHandles.clear();
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading feed follows: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -53,12 +98,15 @@ class _FeedScreenState extends State<FeedScreen> {
     _connectivityTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _checkConnectivity();
     });
+    _loadFeedFollows();
     // Listen for new posts and hidden posts to rebuild
     PostStore.instance.postsNotifier.addListener(_onPostsChanged);
     PostStore.instance.hiddenPostIdsNotifier.addListener(_onPostsChanged);
 
     // Initialize share intent listener
     _initShareIntentListener();
+
+
   }
 
   @override
@@ -387,30 +435,6 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userPublicPosts = PostStore.instance.posts
-        .where((p) => !p.savedInProfile)
-        .toList();
-    final List<dynamic> allItems =
-        [...userPublicPosts, ..._shuffledPredefinedPosts]
-            .where(
-              (item) => !PostStore.instance.hiddenPostIds.contains(item.id),
-            )
-            .toList();
-
-    final filteredItems = allItems.where((item) {
-      if (_searchQuery.trim().isEmpty) return true;
-      final q = _searchQuery.toLowerCase();
-      if (item is UserPost) {
-        return item.title.toLowerCase().contains(q) ||
-            item.body.toLowerCase().contains(q) ||
-            (item.url?.toLowerCase().contains(q) ?? false);
-      } else if (item is PostModel) {
-        return (item.title?.toLowerCase().contains(q) ?? false) ||
-            (item.description?.toLowerCase().contains(q) ?? false) ||
-            (item.url?.toLowerCase().contains(q) ?? false);
-      }
-      return false;
-    }).toList();
 
     return PopScope(
       canPop: false,
@@ -512,8 +536,6 @@ class _FeedScreenState extends State<FeedScreen> {
             onLogoutTap: () async {
               final navigator = Navigator.of(context);
               final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('isLoggedIn', false);
               scaffoldMessenger.showSnackBar(
                 SnackBar(
                   content: Text(
@@ -528,6 +550,7 @@ class _FeedScreenState extends State<FeedScreen> {
                   ),
                 ),
               );
+              await UserStore.instance.logout();
               Future.delayed(const Duration(milliseconds: 800), () {
                 navigator.pushAndRemoveUntil(
                   PageRouteBuilder(
@@ -594,76 +617,107 @@ class _FeedScreenState extends State<FeedScreen> {
                                     parent: BouncingScrollPhysics(),
                                   ),
                                   padding: const EdgeInsets.all(16),
-                                  child: ValueListenableBuilder<Set<String>>(
-                                    valueListenable: PostStore
-                                        .instance
-                                        .savedSocialPostIdsNotifier,
-                                    builder: (context, savedSocialIds, _) {
-                                      return filteredItems.isEmpty &&
-                                              _searchQuery.trim().isNotEmpty
-                                          ? Center(
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 80,
-                                                ),
-                                                child: Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.search_off,
-                                                      color: Color(0xFF7C7C81),
-                                                      size: 48,
+                                  child: ValueListenableBuilder<List<UserPost>>(
+                                    valueListenable: PostStore.instance.postsNotifier,
+                                    builder: (context, posts, _) {
+                                      // Show ALL public posts (not saved in profile) to everyone
+                                      final userPublicPosts = posts
+                                          .where((p) => !p.savedInProfile)
+                                          .toList();
+                                      final List<dynamic> allItems =
+                                          [...userPublicPosts, ..._shuffledPredefinedPosts]
+                                              .where(
+                                                (item) => !PostStore.instance.hiddenPostIds.contains(item.id),
+                                              )
+                                              .toList();
+
+                                      final dynamicFilteredItems = allItems.where((item) {
+                                        if (_searchQuery.trim().isEmpty) return true;
+                                        final q = _searchQuery.toLowerCase();
+                                        if (item is UserPost) {
+                                          return item.title.toLowerCase().contains(q) ||
+                                              item.body.toLowerCase().contains(q) ||
+                                              (item.url?.toLowerCase().contains(q) ?? false);
+                                        } else if (item is PostModel) {
+                                          return (item.title?.toLowerCase().contains(q) ?? false) ||
+                                              (item.description?.toLowerCase().contains(q) ?? false) ||
+                                              (item.url?.toLowerCase().contains(q) ?? false);
+                                        }
+                                        return false;
+                                      }).toList();
+
+                                      return ValueListenableBuilder<Set<String>>(
+                                        valueListenable: PostStore
+                                            .instance
+                                            .savedSocialPostIdsNotifier,
+                                        builder: (context, savedSocialIds, _) {
+                                          return dynamicFilteredItems.isEmpty &&
+                                                  _searchQuery.trim().isNotEmpty
+                                              ? Center(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.only(
+                                                      top: 80,
                                                     ),
-                                                    const SizedBox(height: 12),
-                                                    Text(
-                                                      'No items match your search',
-                                                      style: GoogleFonts.inter(
-                                                        color: const Color(
-                                                          0xFF7C7C81,
+                                                    child: Column(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment.center,
+                                                      children: [
+                                                        const Icon(
+                                                          Icons.search_off,
+                                                          color: Color(0xFF7C7C81),
+                                                          size: 48,
                                                         ),
-                                                        fontSize: 14,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            )
-                                          : Center(
-                                              child: Container(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                      maxWidth: 500,
-                                                    ),
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    // Left Column
-                                                    Expanded(
-                                                      child: Column(
-                                                        children:
-                                                            _buildStaggeredList(
-                                                              filteredItems,
-                                                              left: true,
+                                                        const SizedBox(height: 12),
+                                                        Text(
+                                                          'No items match your search',
+                                                          style: GoogleFonts.inter(
+                                                            color: const Color(
+                                                              0xFF7C7C81,
                                                             ),
-                                                      ),
+                                                            fontSize: 14,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                    const SizedBox(width: 16),
-                                                    // Right Column
-                                                    Expanded(
-                                                      child: Column(
-                                                        children:
-                                                            _buildStaggeredList(
-                                                              filteredItems,
-                                                              left: false,
-                                                            ),
-                                                      ),
+                                                  ),
+                                                )
+                                              : Center(
+                                                  child: Container(
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          maxWidth: 500,
+                                                        ),
+                                                    child: Row(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment.start,
+                                                      children: [
+                                                        // Left Column
+                                                        Expanded(
+                                                          child: Column(
+                                                            children:
+                                                                _buildStaggeredList(
+                                                                  dynamicFilteredItems,
+                                                                  left: true,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 16),
+                                                        // Right Column
+                                                        Expanded(
+                                                          child: Column(
+                                                            children:
+                                                                _buildStaggeredList(
+                                                                  dynamicFilteredItems,
+                                                                  left: false,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
+                                                  ),
+                                                );
+                                        },
+                                      );
                                     },
                                   ),
                                 ),
@@ -788,6 +842,8 @@ class _FeedScreenState extends State<FeedScreen> {
                   ),
                 ),
               ),
+
+
             ],
           ),
           bottomNavigationBar: AppBottomNavigation(
@@ -949,6 +1005,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _refreshFeed() {
     setState(() => _isRefreshing = true);
+    _loadFeedFollows();
     PostStore.instance.syncOnlinePosts().then((_) {
       if (mounted) {
         setState(() {
@@ -1226,7 +1283,8 @@ class _FeedPostTileState extends State<_FeedPostTile> {
       _showShimmer = false;
     } else {
       _showShimmer = true;
-      Future.delayed(const Duration(milliseconds: 900), () {
+      // Reduced from 900ms to 400ms so the feed feels snappier
+      Future.delayed(const Duration(milliseconds: 400), () {
         if (mounted) {
           setState(() {
             _showShimmer = false;
@@ -1236,6 +1294,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
       });
     }
   }
+
 
   String _format(int count) {
     if (count >= 1000) {
@@ -1611,7 +1670,9 @@ class _FeedPostTileState extends State<_FeedPostTile> {
 
   @override
   Widget build(BuildContext context) {
-    final showShimmer = !widget.isOnline || _showShimmer;
+    // Only show shimmer on first load — do NOT block on isOnline
+    // (offline devices should still see the cached/pre-defined feed cards)
+    final showShimmer = _showShimmer;
 
     void onTap() {
       Navigator.push(
@@ -1661,12 +1722,17 @@ class _FeedPostTileState extends State<_FeedPostTile> {
       animation: Listenable.merge([
         PostStore.instance.likedPostIdsNotifier,
         PostStore.instance.savedSocialPostIdsNotifier,
+        PostStore.instance.postLikesCountNotifier,
       ]),
       builder: (context, _) {
         final isLiked = PostStore.instance.likedPostIds.contains(itemId);
         final isSaved = PostStore.instance.savedSocialPostIds.contains(itemId);
 
-        final likes = isLiked ? '1' : '0';
+        final totalDbLikes = PostStore.instance.postLikesCount[itemId] ?? 0;
+        final likesCountVal = widget.item is UserPost
+            ? totalDbLikes
+            : ((widget.item as PostModel).likesCount + totalDbLikes);
+        final likes = _format(likesCountVal);
         final bookmarks = widget.item is UserPost
             ? (isSaved ? '1' : '0')
             : _format(
@@ -1680,11 +1746,84 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           final post = widget.item as UserPost;
           if (post.videoPath != null) {
             mediaWidget = RunningVideoPlayer(file: File(post.videoPath!));
+          } else if (post.videoUrl != null && post.videoUrl!.isNotEmpty) {
+            mediaWidget = RunningVideoPlayer(videoUrl: post.videoUrl!);
           } else if (post.imagePath != null) {
             mediaWidget = Image.file(
               File(post.imagePath!),
               fit: BoxFit.fitWidth,
               width: double.infinity,
+              errorBuilder: (context, error, stackTrace) {
+                if (post.imageUrl != null && post.imageUrl!.isNotEmpty) {
+                  return Image.network(
+                    post.imageUrl!,
+                    fit: BoxFit.fitWidth,
+                    width: double.infinity,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        height: 150,
+                        color: const Color(0xFF2A2A2E),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF7B61FF),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 150,
+                      color: const Color(0xFF2A2A2E),
+                      child: const Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          color: Colors.white54,
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return Container(
+                  height: 150,
+                  color: const Color(0xFF2A2A2E),
+                  child: const Center(
+                    child: Icon(
+                      Icons.broken_image,
+                      color: Colors.white54,
+                      size: 32,
+                    ),
+                  ),
+                );
+              },
+            );
+          } else if (post.imageUrl != null && post.imageUrl!.isNotEmpty) {
+            mediaWidget = Image.network(
+              post.imageUrl!,
+              fit: BoxFit.fitWidth,
+              width: double.infinity,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  height: 150,
+                  color: const Color(0xFF2A2A2E),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF7B61FF),
+                      ),
+                    ),
+                  ),
+                );
+              },
               errorBuilder: (context, error, stackTrace) => Container(
                 height: 150,
                 color: const Color(0xFF2A2A2E),
@@ -1788,6 +1927,7 @@ class _FeedPostTileState extends State<_FeedPostTile> {
           shares: sharesText,
           isLiked: isLiked,
           isSaved: isSaved,
+          isPrivate: false,
           onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
           onSaveTap: () {
             PostStore.instance.toggleSavedSocialPost(itemId);
@@ -1804,17 +1944,19 @@ class _FeedPostTileState extends State<_FeedPostTile> {
                 postId: item.id,
               );
             } else {
+              final post = item as PostModel;
               await ShareHelper.sharePost(
-                title: (item as PostModel).title ?? '',
-                description: item.description,
-                url: item.url,
-                assetPath: item.mediaAssetPath,
-                author: item.username ?? 'Unknown',
-                postId: (item as PostModel).id,
+                title: post.title ?? '',
+                description: post.description,
+                url: post.url,
+                assetPath: post.mediaAssetPath,
+                author: post.username ?? 'Unknown',
+                postId: post.id,
               );
             }
           },
           onCardTap: onTap,
+          onDeleteTap: null,
         );
       },
     );

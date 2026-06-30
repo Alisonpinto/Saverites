@@ -8,15 +8,19 @@ import 'package:audioplayers/audioplayers.dart';
 
 import '../../models/post_model.dart';
 import '../../utils/post_store.dart';
+import '../../utils/user_store.dart';
 import '../../utils/share_helper.dart';
 import '../../widgets/running_video_player.dart';
 import '../../widgets/feed_card.dart';
+import '../../widgets/dice_avatar.dart';
+import '../../models/comment_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/rich_text_controller.dart';
 import '../post/write_post_screen.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import '../profile/profile_screen.dart';
 
 /// Unified full-screen detail view for any post (user-created or predefined social post).
 ///
@@ -32,30 +36,37 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  late int _likes;
   late int _saves;
-  late int _shares;
+  late final TextEditingController _commentController;
+  late final FocusNode _commentFocusNode;
 
   @override
   void initState() {
     super.initState();
-    _likes = 0;
     _saves = widget.postModel?.savesCount ?? 0;
-    _shares = widget.postModel?.sharesCount ?? 0;
+    _commentController = TextEditingController();
+    _commentFocusNode = FocusNode();
 
     // Listen to changes in the global stores to update reactive status
     PostStore.instance.postsNotifier.addListener(_onStoreChanged);
     PostStore.instance.savedSocialPostIdsNotifier.addListener(_onStoreChanged);
     PostStore.instance.likedPostIdsNotifier.addListener(_onStoreChanged);
+    PostStore.instance.postLikesCountNotifier.addListener(_onStoreChanged);
+    
+    // Fetch comments for current post
+    PostStore.instance.fetchCommentsForPost(id);
   }
 
   @override
   void dispose() {
+    _commentController.dispose();
+    _commentFocusNode.dispose();
     PostStore.instance.postsNotifier.removeListener(_onStoreChanged);
     PostStore.instance.savedSocialPostIdsNotifier.removeListener(
       _onStoreChanged,
     );
     PostStore.instance.likedPostIdsNotifier.removeListener(_onStoreChanged);
+    PostStore.instance.postLikesCountNotifier.removeListener(_onStoreChanged);
     super.dispose();
   }
 
@@ -86,6 +97,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       widget.userPost != null ? null : widget.postModel?.avatarAssetPath;
   String? get url => widget.userPost?.url ?? widget.postModel?.url;
   bool get _liked => PostStore.instance.likedPostIds.contains(id);
+
+  int get likesCount {
+    final totalDbLikes = PostStore.instance.postLikesCount[id] ?? 0;
+    if (widget.userPost != null) {
+      return totalDbLikes;
+    } else {
+      return (widget.postModel?.likesCount ?? 0) + totalDbLikes;
+    }
+  }
 
   bool get isSaved {
     if (widget.userPost != null) {
@@ -119,6 +139,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       return '${v % 1 == 0 ? v.toInt() : v.toStringAsFixed(1)}k';
     }
     return count.toString();
+  }
+
+  String _formatTime(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   void _toggleSave() {
@@ -644,6 +672,11 @@ Thank you for helping keep Memoria safe.
   @override
   Widget build(BuildContext context) {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
+    final currentUser = UserStore.instance.currentUser;
+    final bool isMyPost = widget.userPost != null &&
+        currentUser != null &&
+        (widget.userPost!.username == currentUser.userId ||
+            widget.userPost!.username == currentUser.name);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -655,51 +688,331 @@ Thank you for helping keep Memoria safe.
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            // ── Background Media (InteractiveViewer) ────────────────────────
+            // ── Main Scrollable Content (Media + Info) ───────────────────────
             Positioned.fill(
-              child: InteractiveViewer(
-                minScale: 1.0,
-                maxScale: 4.0,
-                child: isVideo
-                    ? RunningVideoPlayer(
-                        file: widget.userPost?.videoPath != null
-                            ? File(widget.userPost!.videoPath!)
-                            : null,
-                        assetPath: widget.postModel?.mediaAssetPath,
-                      )
-                    : (widget.userPost?.imagePath != null
-                          ? Image.file(
-                              File(widget.userPost!.imagePath!),
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: const Color(0xFF2A2A2E),
-                                  child: const Center(
-                                    child: Icon(
-                                      Icons.broken_image,
-                                      color: Colors.white54,
-                                      size: 48,
-                                    ),
-                                  ),
-                                );
-                              },
-                            )
-                          : (widget.postModel?.mediaAssetPath != null &&
-                                    widget.postModel!.mediaAssetPath.isNotEmpty
-                                ? Image.asset(
-                                    widget.postModel!.mediaAssetPath,
-                                    fit: BoxFit.contain,
-                                  )
-                                : Container(
-                                    color: const Color(0xFF2A2A2E),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.broken_image,
-                                        color: Colors.white54,
-                                        size: 48,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Media Widget (Preserves Aspect Ratio, BoxFit.contain)
+                    isVideo
+                        ? RunningVideoPlayer(
+                            file: widget.userPost?.videoPath != null
+                                ? File(widget.userPost!.videoPath!)
+                                : null,
+                            assetPath: widget.postModel?.mediaAssetPath,
+                          )
+                        : (widget.userPost?.imagePath != null
+                            ? Image.file(
+                                File(widget.userPost!.imagePath!),
+                                fit: BoxFit.contain,
+                                width: double.infinity,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return AspectRatio(
+                                    aspectRatio: 16 / 9,
+                                    child: Container(
+                                      color: const Color(0xFF2A2A2E),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          color: Colors.white54,
+                                          size: 48,
+                                        ),
                                       ),
                                     ),
-                                  ))),
+                                  );
+                                },
+                              )
+                            : (widget.postModel?.mediaAssetPath != null &&
+                                      widget.postModel!.mediaAssetPath.isNotEmpty
+                                  ? Image.asset(
+                                      widget.postModel!.mediaAssetPath,
+                                      fit: BoxFit.contain,
+                                      width: double.infinity,
+                                    )
+                                  : AspectRatio(
+                                      aspectRatio: 16 / 9,
+                                      child: Container(
+                                        color: const Color(0xFF2A2A2E),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.broken_image,
+                                            color: Colors.white54,
+                                            size: 48,
+                                          ),
+                                        ),
+                                      ),
+                                    ))),
+                    
+                    // Info Panel styled like a bottom sheet
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(28),
+                          topRight: Radius.circular(28),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black54,
+                            blurRadius: 20,
+                            offset: Offset(0, -5),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Handle bar
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF48484A),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // ── Author row ──────────────────────────────────────
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProfileScreen(
+                                    username: username,
+                                    avatarAssetPath: avatarAssetPath,
+                                    avatarInitial: username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                    showBottomNav: false,
+                                    showBackButton: true,
+                                  ),
+                                ),
+                              );
+                            },
+                            behavior: HitTestBehavior.opaque,
+                            child: Row(
+                              children: [
+                                avatarAssetPath != null
+                                    ? Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          image: DecorationImage(
+                                            image: AssetImage(avatarAssetPath!),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      )
+                                    : DiceAvatar(
+                                        radius: 18,
+                                        seed: username.isNotEmpty ? username : '?',
+                                        backgroundColor: Colors.transparent,
+                                      ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  username,
+                                  style: GoogleFonts.inter(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ── Title (Outfit, bold, white, huge) ───────────────
+                          if (title.isNotEmpty) ...[
+                            Text(
+                              title,
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                height: 1.15,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // ── Description (Inter Light w300, Silver) ────────────
+                          if (description.isNotEmpty) ...[
+                            _buildDescriptionBlocks(description, charStyles),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // ── URL Chip (Grey, rounded box) ─────────────────────
+                          if (url != null && url!.isNotEmpty) ...[
+                            GestureDetector(
+                              onTap: () => _launchUrl(url!),
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C2C2E),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  url!,
+                                  style: GoogleFonts.inter(
+                                    color: const Color(0xFF8E8E93),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          const Divider(
+                            color: Color(0xFF2C2C2E),
+                            height: 32,
+                            thickness: 1,
+                          ),
+
+                          // ── Action Row (Footer with reaction counts) ──────────
+                          Row(
+                            children: [
+                              // Likes
+                              GestureDetector(
+                                onTap: () =>
+                                    PostStore.instance.toggleLikedPost(id),
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    BouncingIcon(
+                                      trigger: _liked,
+                                      child: Icon(
+                                        _liked
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                        color: _liked
+                                            ? const Color(0xFFE52E5E)
+                                            : const Color(0xFFAEAEB2),
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _format(likesCount),
+                                      style: GoogleFonts.inter(
+                                        color: _liked
+                                            ? const Color(0xFFE52E5E)
+                                            : const Color(0xFFAEAEB2),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+
+                              // Comments (between Likes and Shares)
+                              GestureDetector(
+                                onTap: () => _showCommentsSheet(context),
+                                behavior: HitTestBehavior.opaque,
+                                child: ValueListenableBuilder<Map<String, List<CommentModel>>>(
+                                  valueListenable: PostStore.instance.commentsNotifier,
+                                  builder: (context, commentsMap, _) {
+                                    final list = commentsMap[id] ?? [];
+                                    final seen = <String>{};
+                                    final count = list.where((c) => seen.add(c.id)).length;
+                                    return Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.mode_comment_outlined,
+                                          color: Color(0xFFAEAEB2),
+                                          size: 22,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          _format(count),
+                                          style: GoogleFonts.inter(
+                                            color: const Color(0xFFAEAEB2),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+
+                              // Shares (no count displayed)
+                              GestureDetector(
+                                onTap: _sharePost,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    Transform(
+                                      alignment: Alignment.center,
+                                      transform: Matrix4.rotationY(math.pi),
+                                      child: const Icon(
+                                        Icons.reply,
+                                        color: Color(0xFFAEAEB2),
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+
+                              // Bookmarks / Saves
+                              GestureDetector(
+                                onTap: _toggleSave,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  children: [
+                                    BouncingIcon(
+                                      trigger: isSaved,
+                                      child: Icon(
+                                        isSaved
+                                            ? Icons.bookmark
+                                            : Icons.bookmark_border,
+                                        color: isSaved
+                                            ? const Color(0xFFFFEE00)
+                                            : const Color(0xFFAEAEB2),
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _format(isSaved ? _saves + 1 : _saves),
+                                      style: GoogleFonts.inter(
+                                        color: isSaved
+                                            ? const Color(0xFFFFEE00)
+                                            : const Color(0xFFAEAEB2),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -730,7 +1043,7 @@ Thank you for helping keep Memoria safe.
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (widget.userPost != null) ...[
+                  if (isMyPost) ...[
                     GestureDetector(
                       onTap: () {
                         Navigator.push(
@@ -778,256 +1091,215 @@ Thank you for helping keep Memoria safe.
                 ],
               ),
             ),
-
-            // ── Bottom Info Panel (DraggableScrollableSheet) ────────────────
-            DraggableScrollableSheet(
-              initialChildSize: 0.40,
-              minChildSize: 0.15,
-              maxChildSize: 0.85,
-              builder: (BuildContext context, ScrollController scrollController) {
-                return Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(28),
-                      topRight: Radius.circular(28),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black54,
-                        blurRadius: 20,
-                        offset: Offset(0, -5),
-                      ),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    controller: scrollController,
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Handle bar
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF48484A),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // ── Author row ──────────────────────────────────────
-                        Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF3A3A3C),
-                                image: avatarAssetPath != null
-                                    ? DecorationImage(
-                                        image: AssetImage(avatarAssetPath!),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: avatarAssetPath == null
-                                  ? Center(
-                                      child: Text(
-                                        username.isNotEmpty
-                                            ? username[0].toUpperCase()
-                                            : 'U',
-                                        style: GoogleFonts.inter(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              username,
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // ── Title (All Caps, Bold, White) ────────────────────
-                        if (title.isNotEmpty) ...[
-                          Text(
-                            title.toUpperCase(),
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              height: 1.3,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-
-                        // ── Description (Inter Light w300, Silver) ────────────
-                        if (description.isNotEmpty) ...[
-                          _buildDescriptionBlocks(description, charStyles),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // ── URL Chip (Grey, rounded box) ─────────────────────
-                        if (url != null && url!.isNotEmpty) ...[
-                          GestureDetector(
-                            onTap: () => _launchUrl(url!),
-                            behavior: HitTestBehavior.opaque,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2C2C2E),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                url!,
-                                style: GoogleFonts.inter(
-                                  color: const Color(0xFF8E8E93),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        const Divider(
-                          color: Color(0xFF2C2C2E),
-                          height: 32,
-                          thickness: 1,
-                        ),
-
-                        // ── Action Row (Footer with reaction counts) ──────────
-                        Row(
-                          children: [
-                            // Likes
-                            GestureDetector(
-                              onTap: () =>
-                                  PostStore.instance.toggleLikedPost(id),
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                children: [
-                                  BouncingIcon(
-                                    trigger: _liked,
-                                    child: Icon(
-                                      _liked
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
-                                      color: _liked
-                                          ? const Color(0xFFE52E5E)
-                                          : const Color(0xFFAEAEB2),
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _format(_liked ? _likes + 1 : _likes),
-                                    style: GoogleFonts.inter(
-                                      color: _liked
-                                          ? const Color(0xFFE52E5E)
-                                          : const Color(0xFFAEAEB2),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 24),
-
-                            // Shares
-                            GestureDetector(
-                              onTap: _sharePost,
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                children: [
-                                  Transform(
-                                    alignment: Alignment.center,
-                                    transform: Matrix4.rotationY(math.pi),
-                                    child: const Icon(
-                                      Icons.reply,
-                                      color: Color(0xFFAEAEB2),
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _format(_shares),
-                                    style: GoogleFonts.inter(
-                                      color: const Color(0xFFAEAEB2),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 24),
-
-                            // Bookmarks / Saves
-                            GestureDetector(
-                              onTap: _toggleSave,
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                children: [
-                                  BouncingIcon(
-                                    trigger: isSaved,
-                                    child: Icon(
-                                      isSaved
-                                          ? Icons.bookmark
-                                          : Icons.bookmark_border,
-                                      color: isSaved
-                                          ? const Color(0xFFFFEE00)
-                                          : const Color(0xFFAEAEB2),
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _format(isSaved ? _saves + 1 : _saves),
-                                    style: GoogleFonts.inter(
-                                      color: isSaved
-                                          ? const Color(0xFFFFEE00)
-                                          : const Color(0xFFAEAEB2),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showCommentsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF111216),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.50,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                const SizedBox(height: 12),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF48484A),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Comments Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.mode_comment_outlined, color: Colors.white70, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Comments',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white10),
+                
+                // Comments List
+                Expanded(
+                  child: ValueListenableBuilder<Map<String, List<CommentModel>>>(
+                    valueListenable: PostStore.instance.commentsNotifier,
+                    builder: (context, commentsMap, _) {
+                      final rawList = commentsMap[id] ?? [];
+                      
+                      // Prevent duplicate comments (filter by ID)
+                      final seen = <String>{};
+                      final uniqueList = rawList.where((c) => seen.add(c.id)).toList();
+
+                      if (uniqueList.isEmpty) {
+                        return Center(
+                          child: Text(
+                            'No comments yet. Share your thoughts!',
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFF636366),
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        itemCount: uniqueList.length,
+                        itemBuilder: (context, index) {
+                          final comment = uniqueList[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                DiceAvatar(radius: 16, seed: comment.avatarSeed),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            comment.username,
+                                            style: GoogleFonts.inter(
+                                              color: Colors.white70,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _formatTime(comment.createdAt),
+                                            style: GoogleFonts.inter(
+                                              color: const Color(0xFF636366),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w400,
+                                              letterSpacing: 0,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        comment.text,
+                                        style: GoogleFonts.inter(
+                                          color: const Color(0xFFAEAEB2),
+                                          fontSize: 13,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    comment.isLikedByMe ? Icons.favorite : Icons.favorite_border,
+                                    color: comment.isLikedByMe ? const Color(0xFFE52E5E) : const Color(0xFF636366),
+                                    size: 14,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    PostStore.instance.toggleLikeComment(id, comment.id);
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const Divider(color: Colors.white10),
+                
+                // Comment Input Box
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1C1C1E),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: TextField(
+                            controller: _commentController,
+                            autofocus: true,
+                            style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Add a comment...',
+                              hintStyle: GoogleFonts.inter(color: const Color(0xFF636366), fontSize: 14),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.send_rounded, color: Color(0xFF6B9BF7)),
+                        onPressed: () {
+                          final txt = _commentController.text.trim();
+                          if (txt.isNotEmpty) {
+                            PostStore.instance.addComment(id, txt);
+                            _commentController.clear();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

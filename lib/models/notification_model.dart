@@ -46,6 +46,9 @@ class NotificationModel {
   /// The type of action (e.g. 'liked', 'shared', 'saved')
   final String? actionType;
 
+  /// The user ID of who sent this notification (auth UUID)
+  final String? fromUserId;
+
   const NotificationModel({
     required this.id,
     this.avatarAssetPath,
@@ -59,6 +62,7 @@ class NotificationModel {
     this.toUserId,
     this.postId,
     this.actionType,
+    this.fromUserId,
   });
 
   Map<String, dynamic> toJson() {
@@ -67,7 +71,7 @@ class NotificationModel {
       'avatarAssetPath': avatarAssetPath,
       'avatarSeed': avatarSeed,
       'avatarInitial': avatarInitial,
-      'avatarColor': avatarColor.value,
+      'avatarColor': avatarColor.toARGB32(),
       'username': username,
       'previewText': previewText,
       'timestamp': timestamp,
@@ -75,25 +79,29 @@ class NotificationModel {
       'toUserId': toUserId,
       'postId': postId,
       'actionType': actionType,
+      'fromUserId': fromUserId,
     };
   }
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
     return NotificationModel(
       id: json['id'] as String,
-      avatarAssetPath: json['avatarAssetPath'] as String?,
-      avatarSeed: json['avatarSeed'] as String?,
-      avatarInitial: json['avatarInitial'] as String? ?? '?',
+      avatarAssetPath: (json['avatarAssetPath'] ?? json['avatar_asset_path']) as String?,
+      avatarSeed: (json['avatarSeed'] ?? json['avatar_seed']) as String?,
+      avatarInitial: (json['avatarInitial'] ?? json['avatar_initial']) as String? ?? '?',
       avatarColor: json['avatarColor'] != null
           ? Color(json['avatarColor'] as int)
-          : const Color(0xFF7B61FF),
+          : json['avatar_color'] != null
+              ? Color(json['avatar_color'] as int)
+              : const Color(0xFF7B61FF),
       username: json['username'] as String? ?? 'Unknown',
-      previewText: json['previewText'] as String? ?? '',
-      timestamp: json['timestamp'] as String? ?? 'now',
-      isRead: json['isRead'] as bool? ?? false,
-      toUserId: json['toUserId'] as String?,
-      postId: json['postId'] as String?,
-      actionType: json['actionType'] as String?,
+      previewText: (json['previewText'] ?? json['preview_text']) as String? ?? '',
+      timestamp: (json['timestamp'] ?? json['created_at']) as String? ?? 'now',
+      isRead: (json['isRead'] ?? json['is_read']) as bool? ?? false,
+      toUserId: (json['toUserId'] ?? json['to_user_id']) as String?,
+      postId: (json['postId'] ?? json['post_id']) as String?,
+      actionType: (json['actionType'] ?? json['action_type']) as String?,
+      fromUserId: (json['fromUserId'] ?? json['from_user_id']) as String?,
     );
   }
 }

@@ -1,12 +1,12 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../login_screen.dart';
 import '../../utils/translation_manager.dart';
 import '../../utils/notification_manager.dart';
+import '../../utils/user_store.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -17,6 +17,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
+  bool _defaultPostPublic = true;
   String _currentLanguage = 'English';
   String _reminderInterval = 'Always';
   final TextEditingController _nameController = TextEditingController();
@@ -46,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
       _reminderInterval = prefs.getString('savedItemsReminderInterval') ?? 'Always';
+      _defaultPostPublic = prefs.getBool('default_post_public') ?? true;
     });
   }
 
@@ -175,6 +177,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.black, // Black thumb
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Toggle for default post visibility (public/private)
+  Widget _buildPostVisibilityToggle() {
+    return GestureDetector(
+      onTap: () async {
+        final newValue = !_defaultPostPublic;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('default_post_public', newValue);
+        setState(() {
+          _defaultPostPublic = newValue;
+        });
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 46,
+        height: 26,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          color: _defaultPostPublic ? Colors.white : Colors.white.withValues(alpha: 0.3),
+        ),
+        padding: const EdgeInsets.all(3),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 200),
+          alignment: _defaultPostPublic ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black,
             ),
           ),
         ),
@@ -429,6 +468,164 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _showDeleteAccountDialog() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _t('deleteAccountConfirmTitle'),
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _t('deleteAccountConfirmMessage'),
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFB3B3B3),
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF7C7C81),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEB4335),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      ),
+                      child: Text(
+                        'Delete',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirm == true) {
+      if (!mounted) return;
+
+      // Show loader
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEB4335)),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _t('deletingAccount'),
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      final result = await UserStore.instance.deleteAccount();
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // pop loader
+
+      if (result.success) {
+        // Clear all snack bars / navigation stack and go to Login
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Account successfully deleted.',
+              style: GoogleFonts.inter(color: Colors.white),
+            ),
+            backgroundColor: const Color(0xFFEB4335),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+
+        Navigator.of(context).pushAndRemoveUntil(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+          (route) => false,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.error ?? 'Failed to delete account.',
+              style: GoogleFonts.inter(color: Colors.white),
+            ),
+            backgroundColor: const Color(0xFFEB4335),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -522,6 +719,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   value: _reminderInterval,
                                   onTap: () => _showReminderIntervalSelector(context),
                                 ),
+                                _buildDivider(),
+                                _buildRow(
+                                  icon: Icons.public_rounded,
+                                  label: 'Default Post Visibility',
+                                  value: _defaultPostPublic ? 'Public' : 'Private',
+                                  trailing: _buildPostVisibilityToggle(),
+                                ),
                               ],
                             ),
                           ),
@@ -599,55 +803,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: _buildRow(
-                              icon: Icons.logout_outlined,
-                              label: _t('logout'),
-                              isDestructive: true,
-                              onTap: () async {
-                                final navigator = Navigator.of(context);
-                                final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                final prefs = await SharedPreferences.getInstance();
-                                await prefs.setBool('isLoggedIn', false);
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      _t('loggingOut'),
-                                      style: GoogleFonts.inter(color: Colors.white),
-                                    ),
-                                    backgroundColor: const Color(0xFFEB4335),
-                                    duration: const Duration(milliseconds: 800),
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                );
-                                Future.delayed(const Duration(milliseconds: 800), () {
-                                  navigator.pushAndRemoveUntil(
-                                    PageRouteBuilder(
-                                      pageBuilder: (context, animation, secondaryAnimation) =>
-                                          const LoginScreen(),
-                                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                        final fadeAnimation = Tween<double>(
-                                          begin: 0.0,
-                                          end: 1.0,
-                                        ).animate(
-                                          CurvedAnimation(
-                                            parent: animation,
-                                            curve: Curves.easeIn,
-                                          ),
-                                        );
-                                        return FadeTransition(
-                                          opacity: fadeAnimation,
-                                          child: child,
-                                        );
-                                      },
-                                      transitionDuration: const Duration(milliseconds: 500),
-                                    ),
-                                    (route) => false,
-                                  );
-                                });
-                              },
+                            child: Column(
+                              children: [
+                                _buildRow(
+                                  icon: Icons.logout_outlined,
+                                  label: _t('logout'),
+                                  isDestructive: true,
+                                  onTap: () async {
+                                    final navigator = Navigator.of(context);
+                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                    scaffoldMessenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          _t('loggingOut'),
+                                          style: GoogleFonts.inter(color: Colors.white),
+                                        ),
+                                        backgroundColor: const Color(0xFFEB4335),
+                                        duration: const Duration(milliseconds: 800),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    );
+                                    await UserStore.instance.logout();
+                                    Future.delayed(const Duration(milliseconds: 800), () {
+                                      navigator.pushAndRemoveUntil(
+                                        PageRouteBuilder(
+                                          pageBuilder: (context, animation, secondaryAnimation) =>
+                                              const LoginScreen(),
+                                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                            final fadeAnimation = Tween<double>(
+                                              begin: 0.0,
+                                              end: 1.0,
+                                            ).animate(
+                                              CurvedAnimation(
+                                                parent: animation,
+                                                curve: Curves.easeIn,
+                                              ),
+                                            );
+                                            return FadeTransition(
+                                              opacity: fadeAnimation,
+                                              child: child,
+                                            );
+                                          },
+                                          transitionDuration: const Duration(milliseconds: 500),
+                                        ),
+                                        (route) => false,
+                                      );
+                                    });
+                                  },
+                                ),
+                                _buildDivider(),
+                                _buildRow(
+                                  icon: Icons.delete_forever_outlined,
+                                  label: _t('deleteAccount'),
+                                  isDestructive: true,
+                                  onTap: _showDeleteAccountDialog,
+                                ),
+                              ],
                             ),
                           ),
 
@@ -784,37 +998,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     FocusScope.of(context).unfocus();
 
     try {
-      final response = await http.post(
-        Uri.parse('https://script.google.com/macros/s/AKfycbwPRemvI9shGcvMF29eIcAOlFsFxZADs73rSLKmKQtxRnosG9zHUxKJHxTPXTl8rJZj0w/exec'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-          'feedback': feedback,
-        }),
-      );
+      final currentUser = UserStore.instance.currentUser;
+      await Supabase.instance.client.from('feedback').insert({
+        'user_id': currentUser?.userId,
+        'name': name,
+        'email': email,
+        'message': feedback,
+      });
 
-      if (response.statusCode == 200 || response.statusCode == 302) {
-        // Sometimes Google Apps Script returns an HTML page (like a login page) if permissions are wrong.
-        // We can check if it's an error page or not, but usually 200 is success if deployed as Anyone.
-        _nameController.clear();
-        _emailController.clear();
-        _feedbackController.clear();
-        setState(() {
-          _charCount = 0;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Thank you for your feedback.', style: GoogleFonts.inter(color: Colors.white)),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
-        }
-      } else {
-        _showErrorSnackBar('Error ${response.statusCode}: ${response.body.length > 50 ? response.body.substring(0, 50) : response.body}');
+      _nameController.clear();
+      _emailController.clear();
+      _feedbackController.clear();
+      setState(() {
+        _charCount = 0;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Thank you for your feedback.', style: GoogleFonts.inter(color: Colors.white)),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
       }
     } catch (e) {
       _showErrorSnackBar('Exception: $e');

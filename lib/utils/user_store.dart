@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../widgets/dice_avatar.dart';
 
 /// Represents a registered Memoria user.
 class MemoriaUser {
@@ -46,17 +46,10 @@ class AuthResult {
   const AuthResult({required this.success, this.error, this.user});
 }
 
-/// Manages user authentication backed by kvdb.io.
-///
-/// Users list is stored as a JSON array at [_usersUrl].
-/// On registration the new user is appended and written back.
-/// On login the list is fetched and matched locally.
+/// Manages user authentication backed by Supabase.
 class UserStore {
   UserStore._();
   static final UserStore instance = UserStore._();
-
-  static const String _usersUrl =
-      'https://kvdb.io/9TUwbJpBbNYmE2GMG2qXbT/users';
 
   // ── Reactive current-user notifier ────────────────────────────────────────
   final ValueNotifier<MemoriaUser?> currentUserNotifier =
@@ -66,93 +59,92 @@ class UserStore {
 
   // ── Session persistence ───────────────────────────────────────────────────
 
-  /// Loads the saved session from SharedPreferences on app start.
+  /// Loads the saved session from Supabase / SharedPreferences on app start.
   Future<void> loadSession() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      if (!isLoggedIn) return;
-
-      final name = prefs.getString('user_name') ?? '';
-      final email = prefs.getString('user_email') ?? '';
-      final userId = prefs.getString('user_id') ?? '';
-      final password = prefs.getString('user_password') ?? '';
-      final createdAt = prefs.getInt('user_created_at') ?? 0;
-
-      if (userId.isNotEmpty) {
-        currentUserNotifier.value = MemoriaUser(
-          name: name,
-          email: email,
-          userId: userId,
-          password: password,
-          createdAt: createdAt,
-        );
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        final userProfile = await _getProfile(session.user.id);
+        if (userProfile != null) {
+          currentUserNotifier.value = userProfile;
+          
+          // Let's also restore user's avatar seed in local preferences and DiceAvatar state
+          final data = await Supabase.instance.client
+              .from('profiles')
+              .select('avatar_seed')
+              .eq('id', session.user.id)
+              .maybeSingle();
+          if (data != null && data['avatar_seed'] != null) {
+            final seed = data['avatar_seed'] as String;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('dice_bear_seed', seed);
+            await prefs.setBool('avatar_setup_done', true);
+            DiceAvatar.seedNotifier.value = seed;
+          }
+          
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('isLoggedIn', true);
+        }
       }
     } catch (e) {
       debugPrint('UserStore.loadSession error: $e');
     }
   }
 
-  Future<void> _saveSession(MemoriaUser user) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', true);
-    await prefs.setString('user_name', user.name);
-    await prefs.setString('user_email', user.email);
-    await prefs.setString('user_id', user.userId);
-    await prefs.setString('user_password', user.password);
-    await prefs.setInt('user_created_at', user.createdAt);
-  }
-
   Future<void> logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('UserStore.logout error: $e');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', false);
+    await prefs.setBool('avatar_setup_done', false);
+    await prefs.remove('dice_bear_seed');
     currentUserNotifier.value = null;
   }
 
-  // ── Online user registry ──────────────────────────────────────────────────
+  // ── Profile helper ────────────────────────────────────────────────────────
 
-  Future<List<MemoriaUser>> _fetchAllUsers() async {
+  Future<MemoriaUser?> _getProfile(String authUserId) async {
     try {
-      final resp =
-          await http.get(Uri.parse(_usersUrl)).timeout(const Duration(seconds: 8));
-      if (resp.statusCode == 200 && resp.body.trim().isNotEmpty) {
-        final decoded = jsonDecode(resp.body);
-        if (decoded is List) {
-          return decoded
-              .whereType<Map<String, dynamic>>()
-              .map(MemoriaUser.fromJson)
-              .toList();
-        }
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', authUserId)
+          .maybeSingle();
+      if (data != null) {
+        return MemoriaUser(
+          name: data['name'] as String? ?? '',
+          email: data['email'] as String? ?? '',
+          userId: data['user_id'] as String? ?? '',
+          password: '',
+          createdAt: data['created_at'] != null 
+              ? DateTime.parse(data['created_at'] as String).millisecondsSinceEpoch 
+              : 0,
+        );
       }
     } catch (e) {
-      debugPrint('UserStore._fetchAllUsers error: $e');
+      debugPrint('UserStore._getProfile error: $e');
     }
-    return [];
-  }
-
-  Future<bool> _writeAllUsers(List<MemoriaUser> users) async {
-    try {
-      final resp = await http
-          .put(
-            Uri.parse(_usersUrl),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(users.map((u) => u.toJson()).toList()),
-          )
-          .timeout(const Duration(seconds: 10));
-      return resp.statusCode >= 200 && resp.statusCode < 300;
-    } catch (e) {
-      debugPrint('UserStore._writeAllUsers error: $e');
-      return false;
-    }
+    return null;
   }
 
   // ── Uniqueness check ──────────────────────────────────────────────────────
 
   /// Returns true if [userId] is NOT already taken.
   Future<bool> isUserIdAvailable(String userId) async {
-    final users = await _fetchAllUsers();
-    return !users.any(
-        (u) => u.userId.toLowerCase() == userId.trim().toLowerCase());
+    try {
+      final existingUser = await Supabase.instance.client
+          .from('profiles')
+          .select('user_id')
+          .eq('user_id', userId.trim().toLowerCase())
+          .maybeSingle();
+      return existingUser == null;
+    } catch (e) {
+      debugPrint('UserStore.isUserIdAvailable error: $e');
+      rethrow;
+    }
   }
 
   // ── Random ID generation ──────────────────────────────────────────────────
@@ -178,6 +170,13 @@ class UserStore {
   }) async {
     // Basic local validation
     if (name.trim().isEmpty) return const AuthResult(success: false, error: 'Name is required.');
+    if (RegExp(r'[0-9]').hasMatch(name)) {
+      return const AuthResult(success: false, error: 'Name should not contain numbers.');
+    }
+    // Block typical special characters except dots/hyphens for initials/hyphenated names
+    if (RegExp(r'[!@#\$%^&*()_+=\[{\]};:"<>|/?~`,]').hasMatch(name)) {
+      return const AuthResult(success: false, error: 'Name should not contain special characters.');
+    }
     if (email.trim().isEmpty || !email.contains('@')) {
       return const AuthResult(success: false, error: 'Enter a valid email address.');
     }
@@ -188,43 +187,54 @@ class UserStore {
       return const AuthResult(success: false, error: 'Password must be at least 6 characters.');
     }
 
-    // Check uniqueness online
-    final users = await _fetchAllUsers();
-    final taken = users.any(
-        (u) => u.userId.toLowerCase() == userId.trim().toLowerCase());
-    if (taken) {
-      return const AuthResult(
-          success: false,
-          error: 'User ID already exists. Please choose a different one.');
+    try {
+      // 1. Check uniqueness of userId in the profiles table
+      final available = await isUserIdAvailable(userId);
+      if (!available) {
+        return const AuthResult(
+            success: false,
+            error: 'User ID already exists. Please choose a different one.');
+      }
+
+      // 2. SignUp via Supabase Auth
+      final authResponse = await Supabase.instance.client.auth.signUp(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+
+      final user = authResponse.user;
+      if (user == null) {
+        return const AuthResult(
+            success: false, error: 'Sign up failed. Please try again.');
+      }
+
+      // 3. Create profile entry
+      final newProfile = {
+        'id': user.id,
+        'user_id': userId.trim().toLowerCase(),
+        'name': name.trim(),
+        'email': email.trim().toLowerCase(),
+      };
+      await Supabase.instance.client.from('profiles').insert(newProfile);
+
+      final newUser = MemoriaUser(
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        userId: userId.trim().toLowerCase(),
+        password: '',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+
+      currentUserNotifier.value = newUser;
+      return AuthResult(success: true, user: newUser);
+    } on AuthException catch (e) {
+      return AuthResult(success: false, error: e.message);
+    } catch (e) {
+      return AuthResult(success: false, error: 'Registration error: $e');
     }
-
-    // Also check email uniqueness
-    final emailTaken = users.any(
-        (u) => u.email.toLowerCase() == email.trim().toLowerCase());
-    if (emailTaken) {
-      return const AuthResult(
-          success: false,
-          error: 'An account with that email already exists.');
-    }
-
-    final newUser = MemoriaUser(
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      userId: userId.trim().toLowerCase(),
-      password: password,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    );
-
-    users.add(newUser);
-    final saved = await _writeAllUsers(users);
-    // Even if the write fails (no network), let the user in locally
-    if (!saved) {
-      debugPrint('UserStore.register: could not write to kvdb, proceeding locally.');
-    }
-
-    await _saveSession(newUser);
-    currentUserNotifier.value = newUser;
-    return AuthResult(success: true, user: newUser);
   }
 
   // ── Login ─────────────────────────────────────────────────────────────────
@@ -242,32 +252,309 @@ class UserStore {
         password: 'admin',
         createdAt: 0,
       );
-      await _saveSession(adminUser);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
       currentUserNotifier.value = adminUser;
       return AuthResult(success: true, user: adminUser);
     }
 
-    final users = await _fetchAllUsers();
-    final query = emailOrUserId.trim().toLowerCase();
-    MemoriaUser? match;
     try {
-      match = users.firstWhere(
-        (u) =>
-            (u.email.toLowerCase() == query ||
-                u.userId.toLowerCase() == query) &&
-            u.password == password,
+      String resolvedEmail = emailOrUserId.trim().toLowerCase();
+      // If the query is not an email, lookup email by user_id
+      if (!resolvedEmail.contains('@')) {
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('email')
+            .eq('user_id', resolvedEmail)
+            .maybeSingle();
+        if (profile == null) {
+          return const AuthResult(
+              success: false, error: 'Invalid credentials. User ID not found.');
+        }
+        resolvedEmail = profile['email'] as String;
+      }
+
+      // Login via Supabase Auth
+      final authResponse = await Supabase.instance.client.auth.signInWithPassword(
+        email: resolvedEmail,
+        password: password,
       );
-    } catch (_) {
-      match = null;
-    }
 
-    if (match == null) {
-      return const AuthResult(
-          success: false, error: 'Invalid credentials. Please try again.');
-    }
+      final user = authResponse.user;
+      if (user == null) {
+        return const AuthResult(success: false, error: 'Login failed.');
+      }
 
-    await _saveSession(match);
-    currentUserNotifier.value = match;
-    return AuthResult(success: true, user: match);
+      // Fetch profile
+      final memoriaUser = await _getProfile(user.id);
+      if (memoriaUser == null) {
+        return const AuthResult(
+            success: false, error: 'Login succeeded, but profile details not found.');
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+
+      // Check if user has an avatar seed saved
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('avatar_seed')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (data != null && data['avatar_seed'] != null) {
+        final seed = data['avatar_seed'] as String;
+        await prefs.setString('dice_bear_seed', seed);
+        await prefs.setBool('avatar_setup_done', true);
+        DiceAvatar.seedNotifier.value = seed;
+      }
+
+      currentUserNotifier.value = memoriaUser;
+      return AuthResult(success: true, user: memoriaUser);
+    } on AuthException catch (e) {
+      return AuthResult(success: false, error: e.message);
+    } catch (e) {
+      return AuthResult(success: false, error: 'Login error: $e');
+    }
+  }
+
+  Future<AuthResult> deleteAccount() async {
+    try {
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      final currentMemoriaUser = this.currentUser;
+      if (currentUser == null || currentMemoriaUser == null) {
+        return const AuthResult(success: false, error: 'No user logged in.');
+      }
+
+      // 1. Delete user files from Supabase Storage first
+      try {
+        final posts = await Supabase.instance.client
+            .from('posts')
+            .select('image_url, video_url, file_url, file_urls')
+            .eq('user_id', currentMemoriaUser.userId);
+            
+        final List<String> filesToDelete = [];
+        for (var p in posts) {
+          final imageUrl = p['image_url'] as String?;
+          final videoUrl = p['video_url'] as String?;
+          final fileUrl = p['file_url'] as String?;
+          final fileUrls = (p['file_urls'] as List?)?.cast<String>();
+
+          if (imageUrl != null) _extractPathAndAdd(imageUrl, filesToDelete);
+          if (videoUrl != null) _extractPathAndAdd(videoUrl, filesToDelete);
+          if (fileUrl != null) _extractPathAndAdd(fileUrl, filesToDelete);
+          if (fileUrls != null) {
+            for (var url in fileUrls) {
+              _extractPathAndAdd(url, filesToDelete);
+            }
+          }
+        }
+
+        if (filesToDelete.isNotEmpty) {
+          await Supabase.instance.client.storage
+              .from('post-media')
+              .remove(filesToDelete);
+        }
+      } catch (e) {
+        debugPrint('Error clearing user storage files: $e');
+      }
+
+      // 2. Call the secure RPC function to delete the auth user
+      await Supabase.instance.client.rpc('delete_user');
+
+      // 3. Clear local session
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', false);
+      await prefs.setBool('avatar_setup_done', false);
+      await prefs.remove('dice_bear_seed');
+      currentUserNotifier.value = null;
+
+      return const AuthResult(success: true);
+    } on AuthException catch (e) {
+      return AuthResult(success: false, error: e.message);
+    } catch (e) {
+      return AuthResult(success: false, error: 'Account deletion error: $e');
+    }
+  }
+
+  void _extractPathAndAdd(String publicUrl, List<String> list) {
+    try {
+      final uri = Uri.parse(publicUrl);
+      final pathSegments = uri.pathSegments;
+      if (pathSegments.length > 5) {
+        final filePath = pathSegments.sublist(5).join('/');
+        list.add(filePath);
+      }
+    } catch (_) {}
+  }
+
+  // ── Google Sign In ────────────────────────────────────────────────────────
+  
+  Future<AuthResult> loginWithGoogle({
+    required String idToken,
+    required String accessToken,
+  }) async {
+    try {
+      final authResponse = await Supabase.instance.client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      final user = authResponse.user;
+      if (user == null) {
+        return const AuthResult(success: false, error: 'Google sign in failed.');
+      }
+
+      // Check if profile exists; if not, create a default profile for the user
+      var memoriaUser = await _getProfile(user.id);
+      if (memoriaUser == null) {
+        final metadata = user.userMetadata ?? {};
+        final fullName = metadata['full_name'] as String? ?? metadata['name'] as String? ?? 'Google User';
+        final email = user.email ?? '';
+        
+        // Generate a random username or extract it from email
+        String generatedUserId = email.split('@').first.replaceAll(RegExp(r'[^a-z0-9_]'), '');
+        if (generatedUserId.length < 3) {
+          generatedUserId = generateRandomUserId();
+        }
+        
+        // Check uniqueness of generatedUserId
+        bool available = await isUserIdAvailable(generatedUserId);
+        int suffix = 1;
+        final baseId = generatedUserId;
+        while (!available) {
+          generatedUserId = '${baseId}_$suffix';
+          available = await isUserIdAvailable(generatedUserId);
+          suffix++;
+        }
+
+        final newProfile = {
+          'id': user.id,
+          'user_id': generatedUserId,
+          'name': fullName,
+          'email': email,
+        };
+        await Supabase.instance.client.from('profiles').insert(newProfile);
+
+        memoriaUser = MemoriaUser(
+          name: fullName,
+          email: email,
+          userId: generatedUserId,
+          password: '',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+
+      // Check if user has an avatar seed saved
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('avatar_seed')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (data != null && data['avatar_seed'] != null) {
+        final seed = data['avatar_seed'] as String;
+        await prefs.setString('dice_bear_seed', seed);
+        await prefs.setBool('avatar_setup_done', true);
+        DiceAvatar.seedNotifier.value = seed;
+      }
+
+      currentUserNotifier.value = memoriaUser;
+      return AuthResult(success: true, user: memoriaUser);
+    } on AuthException catch (e) {
+      return AuthResult(success: false, error: e.message);
+    } catch (e) {
+      return AuthResult(success: false, error: 'Google sign in error: $e');
+    }
+  }
+
+  Future<AuthResult> handleOAuthSession(Session session, {bool isRegisterMode = false}) async {
+    try {
+      final user = session.user;
+      
+      // Fetch profile to check if account already exists
+      var memoriaUser = await _getProfile(user.id);
+
+      // ── Key check: If user is trying to REGISTER but already has an account ──
+      if (isRegisterMode && memoriaUser != null) {
+        // Profile exists — they're already registered. Sign them out of this
+        // OAuth session and tell them to use the Log In tab instead.
+        await Supabase.instance.client.auth.signOut();
+        return const AuthResult(
+          success: false,
+          error: 'An account with this Google email already exists. Please use "Log In" instead.',
+        );
+      }
+
+      if (memoriaUser == null) {
+        final metadata = user.userMetadata ?? {};
+        final fullName = metadata['full_name'] as String? ?? metadata['name'] as String? ?? 'Google User';
+        final email = user.email ?? '';
+        
+        // Generate a unique username from the email prefix
+        String generatedUserId = email.split('@').first.replaceAll(RegExp(r'[^a-z0-9_]'), '');
+        if (generatedUserId.length < 3) {
+          generatedUserId = generateRandomUserId();
+        }
+        
+        // Ensure uniqueness
+        bool available = await isUserIdAvailable(generatedUserId);
+        int suffix = 1;
+        final baseId = generatedUserId;
+        while (!available) {
+          generatedUserId = '${baseId}_$suffix';
+          available = await isUserIdAvailable(generatedUserId);
+          suffix++;
+        }
+
+        final newProfile = {
+          'id': user.id,
+          'user_id': generatedUserId,
+          'name': fullName,
+          'email': email,
+        };
+        await Supabase.instance.client.from('profiles').insert(newProfile);
+
+        memoriaUser = MemoriaUser(
+          name: fullName,
+          email: email,
+          userId: generatedUserId,
+          password: '',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+
+      // Restore avatar seed if saved
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('avatar_seed')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (data != null && data['avatar_seed'] != null) {
+        final seed = data['avatar_seed'] as String;
+        await prefs.setString('dice_bear_seed', seed);
+        await prefs.setBool('avatar_setup_done', true);
+        DiceAvatar.seedNotifier.value = seed;
+      }
+
+      currentUserNotifier.value = memoriaUser;
+      return AuthResult(success: true, user: memoriaUser);
+    } on AuthException catch (e) {
+      return AuthResult(success: false, error: e.message);
+    } catch (e) {
+      return AuthResult(success: false, error: 'Google sign in session handle error: $e');
+    }
+  }
+
+  Future<void> signInWithGoogleOAuth() async {
+    await Supabase.instance.client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: kIsWeb ? null : 'saverites://login-callback',
+    );
   }
 }

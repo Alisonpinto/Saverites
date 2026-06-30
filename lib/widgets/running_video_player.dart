@@ -10,12 +10,14 @@ import 'shimmer_container.dart';
 class RunningVideoPlayer extends StatefulWidget {
   final File? file;
   final String? assetPath;
+  final String? videoUrl;
   final double? height;
 
   const RunningVideoPlayer({
     super.key,
     this.file,
     this.assetPath,
+    this.videoUrl,
     this.height,
   });
 
@@ -81,6 +83,8 @@ class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBin
       _controller = VideoPlayerController.file(widget.file!);
     } else if (widget.assetPath != null && widget.assetPath!.isNotEmpty) {
       _controller = VideoPlayerController.asset(widget.assetPath!);
+    } else if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl!));
     }
 
     if (_controller == null) return;
@@ -106,7 +110,9 @@ class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBin
   @override
   void didUpdateWidget(covariant RunningVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.file?.path != oldWidget.file?.path || widget.assetPath != oldWidget.assetPath) {
+    if (widget.file?.path != oldWidget.file?.path || 
+        widget.assetPath != oldWidget.assetPath || 
+        widget.videoUrl != oldWidget.videoUrl) {
       _controller?.dispose();
       _isInitialized = false;
       _initialize();

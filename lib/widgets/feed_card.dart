@@ -128,12 +128,14 @@ class FeedCard extends StatelessWidget {
   final bool isLiked;
   final bool isSaved;
   final bool isSelected;
+  final bool isPrivate;
   final VoidCallback? onLikeTap;
   final VoidCallback? onSaveTap;
   final VoidCallback? onShareTap;
   final VoidCallback? onCardTap;
   final VoidCallback? onImageTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onDeleteTap;
 
   const FeedCard({
     super.key,
@@ -149,12 +151,14 @@ class FeedCard extends StatelessWidget {
     this.isLiked = false,
     this.isSaved = false,
     this.isSelected = false,
+    this.isPrivate = false,
     this.onLikeTap,
     this.onSaveTap,
     this.onShareTap,
     this.onCardTap,
     this.onImageTap,
     this.onLongPress,
+    this.onDeleteTap,
   });
 
   String _formatTitle(String text) {
@@ -320,6 +324,26 @@ class FeedCard extends StatelessWidget {
               ],
             ),
           ),
+          if (onDeleteTap != null)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: GestureDetector(
+                onTap: onDeleteTap,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xFFFF453A),
+                    size: 16,
+                  ),
+                ),
+              ),
+            ),
           if (isSelected)
             Positioned(
               top: 8,
@@ -331,6 +355,41 @@ class FeedCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.check, size: 16, color: Colors.black),
+              ),
+            ),
+          if (isPrivate)
+            Positioned(
+              top: 8,
+              right: isSelected ? 36 : 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF7B61FF).withValues(alpha: 0.55),
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.lock_outline_rounded,
+                      color: Color(0xFF7B61FF),
+                      size: 10,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Friends',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF7B61FF),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],

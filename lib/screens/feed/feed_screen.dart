@@ -1956,7 +1956,67 @@ class _FeedPostTileState extends State<_FeedPostTile> {
             }
           },
           onCardTap: onTap,
-          onDeleteTap: null,
+          onDeleteTap: (() {
+            final currentUserId = UserStore.instance.currentUser?.userId;
+            if (currentUserId == null || item is! UserPost) return null;
+            final isAdmin = currentUserId == 'admin';
+            final isOwner = item.username == currentUserId;
+            if (!isAdmin && !isOwner) return null;
+            return () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                barrierColor: Colors.black.withValues(alpha: 0.6),
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: const Color(0xFF1C1C1E),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  title: Text(
+                    'Delete Post?',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  content: Text(
+                    isAdmin && !isOwner
+                        ? 'This will permanently remove this post for all users. This action cannot be undone.'
+                        : 'This will permanently delete your post. This action cannot be undone.',
+                    style: GoogleFonts.inter(
+                      color: Colors.white60,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.inter(color: Colors.white54),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text(
+                        'Delete',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFFF453A),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirmed == true) {
+                PostStore.instance.removeUserPosts({itemId});
+              }
+            };
+          })(),
         );
       },
     );

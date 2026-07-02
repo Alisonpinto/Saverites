@@ -1264,6 +1264,20 @@ class _WritePostScreenState extends State<WritePostScreen>
     }
 
     setState(() => _isPosting = true);
+
+    // If publishing publicly (feed post), verify ban status
+    if (!widget.isSaveItem) {
+      final currentUser = UserStore.instance.currentUser;
+      if (currentUser != null) {
+        final banMsg = await UserStore.instance.checkBanStatus(currentUser.userId);
+        if (banMsg != null) {
+          setState(() => _isPosting = false);
+          _showSnack('Posting disabled: $banMsg');
+          return;
+        }
+      }
+    }
+
     await Future.delayed(const Duration(milliseconds: 300));
 
     String resolvedTitle = title;
@@ -1375,6 +1389,136 @@ class _WritePostScreenState extends State<WritePostScreen>
       SnackBar(
         backgroundColor: const Color(0xFF2C2C2E),
         content: Text(msg, style: GoogleFonts.inter(color: Colors.white)),
+      ),
+    );
+  }
+
+  void _showVisibilitySelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              padding: const EdgeInsets.only(top: 16, bottom: 28, left: 24, right: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36, height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Choose Audience',
+                    style: GoogleFonts.inter(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Control who can view this post on Saverites.',
+                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                  ),
+                  const SizedBox(height: 24),
+                  // Everyone Option
+                  _buildVisibilityOption(
+                    title: 'Everyone',
+                    subtitle: 'Visible to everyone on the public feed',
+                    icon: Icons.public_rounded,
+                    color: const Color(0xFF7B61FF),
+                    selected: _isPublicPost,
+                    onTap: () {
+                      setState(() => _isPublicPost = true);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Followers Option
+                  _buildVisibilityOption(
+                    title: 'Followers',
+                    subtitle: 'Only people who follow you can view this',
+                    icon: Icons.people_alt_rounded,
+                    color: const Color(0xFFFAF096),
+                    selected: !_isPublicPost,
+                    onTap: () {
+                      setState(() => _isPublicPost = false);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildVisibilityOption({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? color.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.08),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.45), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_circle_rounded, color: color, size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -1931,48 +2075,58 @@ class _WritePostScreenState extends State<WritePostScreen>
                       // Image picker
                       IconButton(
                         onPressed: _pickImage,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         icon: Icon(
                           Icons.image_outlined,
                           color: _pickedImagePath != null ? const Color(0xFFFAF096) : Colors.white,
-                          size: 22,
+                          size: 20,
                         ),
-                        splashRadius: 20,
+                        splashRadius: 18,
                       ),
                       // Video picker
                       IconButton(
                         onPressed: _pickVideo,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         icon: Icon(
                           Icons.play_circle_outline,
                           color: _pickedVideoPath != null ? const Color(0xFFFAF096) : Colors.white,
-                          size: 22,
+                          size: 20,
                         ),
-                        splashRadius: 20,
+                        splashRadius: 18,
                       ),
                       // Formatting toolbar toggle
                       IconButton(
                         onPressed: _openRichTextEditor,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         icon: Icon(
                           Icons.text_format_rounded,
                           color: _isFormattingToolOpen ? const Color(0xFFFAF096) : Colors.white,
-                          size: 22,
+                          size: 20,
                         ),
-                        splashRadius: 20,
+                        splashRadius: 18,
                       ),
                       // Add Link Button
                       IconButton(
                         onPressed: _openLinkDialog,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         icon: Icon(
                           Icons.link,
                           color: _urlController.text.isNotEmpty ? const Color(0xFFFAF096) : Colors.white,
-                          size: 22,
+                          size: 20,
                         ),
-                        splashRadius: 20,
+                        splashRadius: 18,
                       ),
                       // Drawing canvas
                       IconButton(
                         onPressed: _openDrawingMode,
-                        icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 22),
-                        splashRadius: 20,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
+                        splashRadius: 18,
                       ),
                       const Spacer(),
                       if (widget.isSaveItem)
@@ -1996,53 +2150,54 @@ class _WritePostScreenState extends State<WritePostScreen>
                             ),
                           ),
                         ),
-                       if (!widget.isSaveItem)
-                         // Public / Private visibility pill
-                         GestureDetector(
-                           onTap: () {
-                             setState(() => _isPublicPost = !_isPublicPost);
-                           },
-                           child: AnimatedContainer(
-                             duration: const Duration(milliseconds: 220),
-                             curve: Curves.easeOutCubic,
-                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                             decoration: BoxDecoration(
-                               color: _isPublicPost
-                                   ? const Color(0xFF7B61FF).withValues(alpha: 0.18)
-                                   : Colors.white.withValues(alpha: 0.06),
-                               borderRadius: BorderRadius.circular(20),
-                               border: Border.all(
-                                 color: _isPublicPost
-                                     ? const Color(0xFF7B61FF).withValues(alpha: 0.55)
-                                     : Colors.white.withValues(alpha: 0.18),
-                                 width: 1,
-                               ),
-                             ),
-                             child: Row(
-                               mainAxisSize: MainAxisSize.min,
-                               children: [
-                                 Icon(
-                                   _isPublicPost ? Icons.public_rounded : Icons.lock_outline_rounded,
-                                   color: _isPublicPost
-                                       ? const Color(0xFF7B61FF)
-                                       : Colors.white60,
-                                   size: 15,
-                                 ),
-                                 const SizedBox(width: 5),
-                                 Text(
-                                   _isPublicPost ? 'Public' : 'Private',
-                                   style: GoogleFonts.inter(
-                                     color: _isPublicPost
-                                         ? const Color(0xFF7B61FF)
-                                         : Colors.white60,
-                                     fontSize: 12,
-                                     fontWeight: FontWeight.w600,
-                                   ),
-                                 ),
-                               ],
-                             ),
-                           ),
-                         ),
+                        if (!widget.isSaveItem)
+                          // Public / Private visibility pill
+                          GestureDetector(
+                            onTap: _showVisibilitySelector,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: _isPublicPost
+                                    ? const Color(0xFF7B61FF).withValues(alpha: 0.18)
+                                    : const Color(0xFFFAF096).withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _isPublicPost
+                                      ? const Color(0xFF7B61FF).withValues(alpha: 0.55)
+                                      : const Color(0xFFFAF096).withValues(alpha: 0.55),
+                                  width: 1,
+                                ),
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _isPublicPost ? Icons.public_rounded : Icons.people_alt_rounded,
+                                      color: _isPublicPost
+                                          ? const Color(0xFF7B61FF)
+                                          : const Color(0xFFFAF096),
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _isPublicPost ? 'Everyone' : 'Followers',
+                                      style: GoogleFonts.inter(
+                                        color: _isPublicPost
+                                            ? const Color(0xFF7B61FF)
+                                            : const Color(0xFFFAF096),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                       const SizedBox(width: 4),
                     ],
                   ),

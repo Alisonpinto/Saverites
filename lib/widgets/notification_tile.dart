@@ -32,57 +32,122 @@ class NotificationTile extends StatelessWidget {
     return text;
   }
 
+  /// Returns a friendly relative time string like "2m ago", "1h ago", "3d ago"
+  String _relativeTime(String timestamp) {
+    try {
+      final DateTime dt = DateTime.parse(timestamp).toLocal();
+      final Duration diff = DateTime.now().difference(dt);
+
+      if (diff.inSeconds < 60) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
+      return '${(diff.inDays / 30).floor()}mo ago';
+    } catch (_) {
+      return timestamp; // fallback to raw value
+    }
+  }
+
+  /// Returns icon and color for the notification type badge
+  (IconData, Color) _actionBadge(String actionType) {
+    switch (actionType) {
+      case 'liked':
+        return (Icons.favorite_rounded, const Color(0xFFFF375F));
+      case 'shared':
+        return (Icons.share_rounded, const Color(0xFF7B61FF));
+      case 'saved':
+        return (Icons.bookmark_rounded, const Color(0xFF30D158));
+      case 'commented':
+        return (Icons.chat_bubble_rounded, const Color(0xFF0A84FF));
+      case 'friend_request':
+        return (Icons.person_add_rounded, const Color(0xFF6B9BF7));
+      case 'friend_request_accepted':
+        return (Icons.people_rounded, const Color(0xFF30D158));
+      default:
+        return (Icons.notifications_rounded, const Color(0xFFFF9F0A));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isFriendRequest = notification.actionType == 'friend_request';
+    final (badgeIcon, badgeColor) = _actionBadge(notification.actionType ?? '');
+    final String timeStr = _relativeTime(notification.timestamp);
 
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1C),
+          color: notification.isRead
+              ? const Color(0xFF111113)
+              : const Color(0xFF1A1A1C),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: isFriendRequest
-                ? const Color(0xFF6B9BF7).withValues(alpha: 0.15)
-                : Colors.white.withValues(alpha: 0.05),
+                ? const Color(0xFF6B9BF7).withValues(alpha: 0.18)
+                : notification.isRead
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white.withValues(alpha: 0.07),
             width: 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: notification.isRead
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Main row: avatar + text + timestamp ──────────────────────
+            // ── Main row ────────────────────────────────────────────
             Padding(
-              padding: EdgeInsets.fromLTRB(14, 14, 14, isFriendRequest ? 4 : 14),
+              padding: EdgeInsets.fromLTRB(14, 13, 14, isFriendRequest ? 6 : 13),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Avatar with optional notification dot overlay
+                  // ── Avatar with action badge overlay ────────────────
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
                       _Avatar(notification: notification),
+                      // Action type badge (bottom-right)
+                      Positioned(
+                        bottom: -2,
+                        right: -2,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: badgeColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF111113),
+                              width: 2,
+                            ),
+                          ),
+                          child: Icon(badgeIcon, size: 10, color: Colors.white),
+                        ),
+                      ),
+                      // Unread blue dot (top-right)
                       if (!notification.isRead)
                         Positioned(
-                          bottom: 0,
-                          right: 0,
+                          top: -1,
+                          right: -1,
                           child: Container(
-                            width: 10,
-                            height: 10,
+                            width: 9,
+                            height: 9,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9BF7),
+                              color: const Color(0xFF0A84FF),
                               shape: BoxShape.circle,
-                              border: Border.all(color: const Color(0xFF1A1A1C), width: 2),
+                              border: Border.all(
+                                  color: const Color(0xFF111113), width: 1.5),
                             ),
                           ),
                         ),
@@ -91,33 +156,36 @@ class NotificationTile extends StatelessWidget {
 
                   const SizedBox(width: 12),
 
-                  // Username + preview text
+                  // ── Text content ────────────────────────────────────
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // User ID + timestamp
                         Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(
                               child: Text(
-                                notification.username,
+                                '@${notification.username}',
                                 style: GoogleFonts.inter(
                                   color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
                                   letterSpacing: -0.2,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              notification.timestamp,
+                              timeStr,
                               style: GoogleFonts.inter(
                                 color: const Color(0xFF636366),
                                 fontSize: 11,
-                                fontWeight: FontWeight.w400,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -125,6 +193,7 @@ class NotificationTile extends StatelessWidget {
 
                         const SizedBox(height: 3),
 
+                        // Action reason
                         Text(
                           _translatePreviewText(notification.previewText),
                           style: GoogleFonts.inter(
@@ -143,10 +212,10 @@ class NotificationTile extends StatelessWidget {
               ),
             ),
 
-            // ── Friend request action row ────────────────────────────────
+            // ── Friend request action row ────────────────────────────
             if (isFriendRequest) ...[
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 13),
                 child: Row(
                   children: [
                     // Accept
@@ -165,7 +234,7 @@ class NotificationTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    // Decline — subtle outlined style
+                    // Decline
                     Expanded(
                       child: _ActionButton(
                         label: 'Decline',
@@ -190,7 +259,7 @@ class NotificationTile extends StatelessWidget {
   }
 }
 
-// ── Premium action button ──────────────────────────────────────────────────────
+// ── Premium action button ─────────────────────────────────────────────────────
 
 class _ActionButton extends StatelessWidget {
   final String label;

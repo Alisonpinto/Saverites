@@ -57,6 +57,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
       final List<String> follows = [];
       final List<String> requests = [];
 
+      final currentUserId = UserStore.instance.currentUser?.userId ?? '';
       if (currentUserUuid != null) {
         // Query follows
         final followsRes = await client
@@ -69,7 +70,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
         final reqsRes = await client
             .from('notifications')
             .select('to_user_id')
-            .eq('from_user_id', currentUserUuid)
+            .eq('from_user_id', currentUserId)
             .eq('action_type', 'friend_request');
         requests.addAll(List<String>.from(reqsRes.map((r) => r['to_user_id'].toString())));
       }
@@ -108,15 +109,15 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
     if (currentUserUuid == null) return;
 
     final isFollowing = _followingUserIds.contains(targetUuid);
-    final isRequested = _requestedUserIds.contains(targetUuid);
+    final isRequested = _requestedUserIds.contains(targetUsername);
 
     setState(() {
       if (isFollowing) {
         _followingUserIds.remove(targetUuid);
       } else if (isRequested) {
-        _requestedUserIds.remove(targetUuid);
+        _requestedUserIds.remove(targetUsername);
       } else {
-        _requestedUserIds.add(targetUuid);
+        _requestedUserIds.add(targetUsername);
       }
     });
 
@@ -504,7 +505,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
         final username = (profile['user_id'] ?? profile['username'] ?? id).toString();
         final seed = (profile['avatar_seed'] ?? username).toString();
         final isFollowing = _followingUserIds.contains(id);
-        final isRequested = _requestedUserIds.contains(id);
+        final isRequested = _requestedUserIds.contains(username);
 
         String btnLabel = 'Connect';
         Color btnColor = const Color(0xFFFFF78E);
@@ -659,7 +660,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
             ? (matchedProfile['user_id'] ?? matchedProfile['username'] ?? "").toString()
             : "";
         final isFollowing = _followingUserIds.contains(followTargetId);
-        final isRequested = _requestedUserIds.contains(followTargetId);
+        final isRequested = _requestedUserIds.contains(targetUsername);
 
         String btnLabel = 'Connect';
         Color btnColor = const Color(0xFFFFF78E);

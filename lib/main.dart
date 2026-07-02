@@ -5,6 +5,7 @@ import 'utils/notification_manager.dart';
 
 import 'dart:async';
 import 'package:app_links/app_links.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'utils/post_store.dart';
 import 'screens/post_detail/post_detail_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -65,12 +66,126 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _handleDeepLink(Uri uri) {
-    if (uri.scheme == 'saverites' && uri.host == 'post') {
-      final String? postId = uri.queryParameters['id'];
-      if (postId != null) {
-        _navigateToPost(postId);
+    debugPrint('Received Deep Link: $uri');
+    if (uri.scheme == 'saverites') {
+      if (uri.host == 'post') {
+        final String? postId = uri.queryParameters['id'];
+        if (postId != null) {
+          _navigateToPost(postId);
+        }
+      } else if (uri.host == 'reset-password' || uri.path.contains('reset-password')) {
+        _showResetPasswordDialog();
       }
     }
+  }
+
+  void _showResetPasswordDialog() {
+    final context = MyApp.navigatorKey.currentContext;
+    if (context == null) return;
+
+    final controller = TextEditingController();
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF141414),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              title: Text(
+                'Reset Password',
+                style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter your new password below.',
+                    style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.6), fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    obscureText: true,
+                    style: GoogleFonts.inter(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'New Password',
+                      hintStyle: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.3)),
+                      filled: true,
+                      fillColor: const Color(0xFF222222),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: loading ? null : () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5))),
+                ),
+                ElevatedButton(
+                  onPressed: loading ? null : () async {
+                    final pass = controller.text.trim();
+                    if (pass.length < 6) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Password must be at least 6 characters.')),
+                        );
+                      }
+                      return;
+                    }
+                    setDialogState(() => loading = true);
+                    try {
+                      await Supabase.instance.client.auth.updateUser(
+                        UserAttributes(password: pass),
+                      );
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password reset successfully!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setDialogState(() => loading = false);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        )
+                      : Text('Save', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _navigateToPost(String postId) async {
@@ -84,25 +199,23 @@ class _MyAppState extends State<MyApp> {
     final userPost = PostStore.instance.posts
         .where((p) => p.id == postId)
         .firstOrNull;
+    
+    final context = MyApp.navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+
     if (userPost != null) {
-      final context = MyApp.navigatorKey.currentContext;
-      if (context != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PostDetailScreen(userPost: userPost),
-          ),
-        );
-      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PostDetailScreen(userPost: userPost),
+        ),
+      );
     } else {
-      final context = MyApp.navigatorKey.currentContext;
-      if (context != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Post not found or is no longer available.'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Post not found or is no longer available.'),
+        ),
+      );
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -805,6 +806,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16.0),
                             child: Column(
                               children: [
+                                ValueListenableBuilder<MemoriaUser?>(
+                                  valueListenable: UserStore.instance.currentUserNotifier,
+                                  builder: (context, user, _) => _buildRow(
+                                    icon: Icons.alternate_email_rounded,
+                                    label: 'Change User ID',
+                                    value: '@${user?.userId ?? ''}',
+                                    onTap: _showChangeUserIdDialog,
+                                  ),
+                                ),
+                                _buildDivider(),
                                 _buildRow(
                                   icon: Icons.logout_outlined,
                                   label: _t('logout'),
@@ -1031,6 +1042,171 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     }
+  }
+
+  void _showChangeUserIdDialog() {
+    final ctrl = TextEditingController(
+      text: UserStore.instance.currentUser?.userId ?? '',
+    );
+    bool checking = false;
+    bool? available;
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          void onChanged(String val) {
+            final trimmed = val.trim();
+            if (trimmed.length < 3) {
+              setSheet(() { available = null; checking = false; });
+              return;
+            }
+            setSheet(() { checking = true; available = null; });
+            Future.delayed(const Duration(milliseconds: 600), () async {
+              if (ctrl.text.trim() != trimmed) return;
+              try {
+                final ok = await UserStore.instance.isUserIdAvailable(trimmed);
+                setSheet(() { available = ok; checking = false; });
+              } catch (_) {
+                setSheet(() { available = null; checking = false; });
+              }
+            });
+          }
+
+          final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+          return Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF111111),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(28),
+                topRight: Radius.circular(28),
+              ),
+            ),
+            padding: EdgeInsets.only(top: 24, left: 28, right: 28, bottom: bottom > 0 ? bottom + 24 : 36),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('Change User ID', style: GoogleFonts.inter(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('Your User ID is how others find you. Lowercase letters, numbers and _ only.',
+                  style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 13.5, height: 1.5)),
+                const SizedBox(height: 24),
+                // Input row
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF141414),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: available == true
+                          ? const Color(0xFF2ECC71).withValues(alpha: 0.7)
+                          : available == false
+                              ? const Color(0xFFCF3A55).withValues(alpha: 0.7)
+                              : Colors.white.withValues(alpha: 0.08),
+                      width: 1.2,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Text('@', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.35), fontSize: 15)),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: TextField(
+                          controller: ctrl,
+                          onChanged: onChanged,
+                          autofocus: true,
+                          style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: 'new_user_id',
+                            hintStyle: GoogleFonts.inter(color: const Color(0xFF515151), fontSize: 13),
+                            border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
+                            LengthLimitingTextInputFormatter(20),
+                          ],
+                          autocorrect: false,
+                        ),
+                      ),
+                      if (checking)
+                        const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 1.8, color: Color(0xFFFAF096)))
+                      else if (available == true)
+                        const Icon(Icons.check_circle_rounded, color: Color(0xFF2ECC71), size: 18)
+                      else if (available == false)
+                        const Icon(Icons.cancel_rounded, color: Color(0xFFCF3A55), size: 18),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (available == true)
+                  Row(children: [
+                    const Icon(Icons.check, color: Color(0xFF2ECC71), size: 13),
+                    const SizedBox(width: 4),
+                    Text('Available!', style: GoogleFonts.inter(color: const Color(0xFF2ECC71), fontSize: 12, fontWeight: FontWeight.w500)),
+                  ])
+                else if (available == false)
+                  Row(children: [
+                    const Icon(Icons.close, color: Color(0xFFCF3A55), size: 13),
+                    const SizedBox(width: 4),
+                    Text('Already taken', style: GoogleFonts.inter(color: const Color(0xFFCF3A55), fontSize: 12, fontWeight: FontWeight.w500)),
+                  ])
+                else
+                  Text('Only lowercase letters, numbers and _', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.3), fontSize: 11.5)),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity, height: 50,
+                  child: TextButton(
+                    onPressed: (saving || available != true) ? null : () async {
+                      setSheet(() => saving = true);
+                      final result = await UserStore.instance.updateUserId(ctrl.text.trim());
+                      setSheet(() => saving = false);
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                      if (result.success) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('User ID updated to @${ctrl.text.trim()}', style: GoogleFonts.inter(color: Colors.white)),
+                            backgroundColor: const Color(0xFF2ECC71),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ));
+                          setState(() {});
+                        }
+                      } else {
+                        if (mounted) _showErrorSnackBar(result.error ?? 'Failed to update User ID');
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      disabledBackgroundColor: Colors.white.withValues(alpha: 0.3),
+                    ),
+                    child: saving
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.black))
+                        : Text('Save User ID', style: GoogleFonts.inter(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
   }
 
   void _showErrorSnackBar(String message) {

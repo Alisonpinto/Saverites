@@ -57,6 +57,35 @@ class UserStore {
 
   MemoriaUser? get currentUser => currentUserNotifier.value;
 
+  /// Returns a message explaining the ban if the user is banned, or null if not.
+  Future<String?> checkBanStatus(String userId) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('posts')
+          .select('body')
+          .eq('type', 'ban')
+          .eq('title', userId)
+          .maybeSingle();
+
+      if (response != null) {
+        final expiryStr = response['body'] as String?;
+        if (expiryStr != null) {
+          if (expiryStr == 'permanent') {
+            return 'This account is permanently banned by the administrator.';
+          } else {
+            final expiry = DateTime.tryParse(expiryStr);
+            if (expiry != null && expiry.isAfter(DateTime.now())) {
+              return 'This account is banned until ${expiry.toLocal()}.';
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('UserStore.checkBanStatus error: $e');
+    }
+    return null;
+  }
+
   // ── Session persistence ───────────────────────────────────────────────────
 
   /// Loads the saved session from Supabase / SharedPreferences on app start.
@@ -66,6 +95,14 @@ class UserStore {
       if (session != null) {
         final userProfile = await _getProfile(session.user.id);
         if (userProfile != null) {
+          // Check ban status
+          final banMsg = await checkBanStatus(userProfile.userId);
+          if (banMsg != null) {
+            debugPrint('User is banned: $banMsg. Logging out...');
+            await logout();
+            return;
+          }
+
           currentUserNotifier.value = userProfile;
           
           // Let's also restore user's avatar seed in local preferences and DiceAvatar state
@@ -292,6 +329,13 @@ class UserStore {
             success: false, error: 'Login succeeded, but profile details not found.');
       }
 
+      // Check ban status
+      final banMsg = await checkBanStatus(memoriaUser.userId);
+      if (banMsg != null) {
+        await Supabase.instance.client.auth.signOut();
+        return AuthResult(success: false, error: banMsg);
+      }
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', true);
 
@@ -331,7 +375,7 @@ class UserStore {
             .from('posts')
             .select('image_url, video_url, file_url, file_urls')
             .eq('user_id', currentMemoriaUser.userId);
-            
+
         final List<String> filesToDelete = [];
         for (var p in posts) {
           final imageUrl = p['image_url'] as String?;
@@ -373,6 +417,60 @@ class UserStore {
       return AuthResult(success: false, error: e.message);
     } catch (e) {
       return AuthResult(success: false, error: 'Account deletion error: $e');
+    }
+  }
+
+  // ── Update User ID ────────────────────────────────────────────────────────
+
+  /// Lets the signed-in user change their unique user ID.
+  /// Returns an [AuthResult] with success/error info.
+  Future<AuthResult> updateUserId(String newUserId) async {
+    final trimmed = newUserId.trim().toLowerCase();
+
+    if (trimmed.isEmpty || trimmed.length < 3) {
+      return const AuthResult(success: false, error: 'User ID must be at least 3 characters.');
+    }
+    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(trimmed)) {
+      return const AuthResult(
+          success: false, error: 'Only lowercase letters, numbers, and underscores are allowed.');
+    }
+
+    try {
+      final currentAuth = Supabase.instance.client.auth.currentUser;
+      if (currentAuth == null) {
+        return const AuthResult(success: false, error: 'Not signed in.');
+      }
+
+      // 1. Check uniqueness
+      final available = await isUserIdAvailable(trimmed);
+      if (!available) {
+        return const AuthResult(
+            success: false, error: 'User ID is already taken. Choose a different one.');
+      }
+
+      // 2. Update in Supabase profiles table
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'user_id': trimmed})
+          .eq('id', currentAuth.id);
+
+      // 3. Update local state so UI reflects immediately
+      final old = currentUserNotifier.value;
+      if (old != null) {
+        currentUserNotifier.value = MemoriaUser(
+          name: old.name,
+          email: old.email,
+          userId: trimmed,
+          password: old.password,
+          createdAt: old.createdAt,
+        );
+      }
+
+      return const AuthResult(success: true);
+    } on AuthException catch (e) {
+      return AuthResult(success: false, error: e.message);
+    } catch (e) {
+      return AuthResult(success: false, error: 'Update error: $e');
     }
   }
 
@@ -443,6 +541,13 @@ class UserStore {
           password: '',
           createdAt: DateTime.now().millisecondsSinceEpoch,
         );
+      }
+
+      // Check ban status
+      final banMsg = await checkBanStatus(memoriaUser.userId);
+      if (banMsg != null) {
+        await Supabase.instance.client.auth.signOut();
+        return AuthResult(success: false, error: banMsg);
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -524,6 +629,13 @@ class UserStore {
           password: '',
           createdAt: DateTime.now().millisecondsSinceEpoch,
         );
+      }
+
+      // Check ban status
+      final banMsg = await checkBanStatus(memoriaUser.userId);
+      if (banMsg != null) {
+        await Supabase.instance.client.auth.signOut();
+        return AuthResult(success: false, error: banMsg);
       }
 
       final prefs = await SharedPreferences.getInstance();

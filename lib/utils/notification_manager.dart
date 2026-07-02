@@ -532,10 +532,10 @@ class NotificationManager {
 
     final newNotif = NotificationModel(
       id: id,
-      avatarSeed: 'memoria_vault',
+      avatarSeed: 'saverites_vault',
       avatarInitial: vaultInitial,
       avatarColor: vaultColor,
-      username: 'Memoria Vault',
+      username: 'Saverites Vault',
       previewText: body,
       timestamp: DateTime.now().toIso8601String(),
       isRead: false,
@@ -548,7 +548,7 @@ class NotificationManager {
 
     await showLocalNotification(
       id: Random().nextInt(100000),
-      title: 'Memoria Vault Reminder',
+      title: 'Saverites Vault Reminder',
       body: 'You added a new memory: "$title"',
     );
   }
@@ -569,18 +569,20 @@ class NotificationManager {
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      'memoria_notifications_silent',
-      'Memoria Notifications',
-      channelDescription: 'Notifications for likes, comments, and posts',
+      'saverites_notifications_push',
+      'Saverites Notifications',
+      channelDescription: 'Notifications for likes, comments, follows and posts on Saverites',
       importance: Importance.max,
       priority: Priority.high,
-      ticker: 'ticker',
-      playSound: false,
+      ticker: 'Saverites',
+      playSound: true,
+      channelShowBadge: true,
+      icon: '@mipmap/ic_launcher',
     );
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
-      presentSound: false,
+      presentSound: true,
     );
     const NotificationDetails platformDetails = NotificationDetails(
       android: androidDetails,
@@ -711,10 +713,10 @@ class NotificationManager {
 
         final newNotif = NotificationModel(
           id: notifId,
-          avatarSeed: 'memoria_reminder',
+          avatarSeed: 'saverites_reminder',
           avatarInitial: 'R',
           avatarColor: const Color(0xFFFF9500),
-          username: 'Memoria Reminder',
+          username: 'Saverites Reminder',
           previewText: body,
           timestamp: DateTime.now().toIso8601String(),
           isRead: false,

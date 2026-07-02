@@ -27,6 +27,7 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
@@ -43,3 +44,36 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ── Project-specific ignores ──────────────────────────────────────────────────
+
+# Compiled APKs / release binaries (too large for source control)
+*.apk
+*.aab
+*.ipa
+
+# Large local data / test blobs
+jsonblob_test.json
+prefs.xml
+
+# Scratch / one-off scripts at the project root
+*.py
+clear_db.dart
+test_gas.dart
+test_yt.dart
+
+# Stray version / metadata files
+12.0.0-beta.1
+
+# Secrets & environment files
+.env
+.env.*
+google-services.json
+GoogleService-Info.plist
+
+# Dashboard specific build/dependency outputs
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.env.local
+dashboard/.env.*.local
+

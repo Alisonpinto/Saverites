@@ -24,7 +24,7 @@ class InAppNotificationHelper {
     String? imagePath,
     String? assetImagePath,
     bool showMedia = false,
-    String avatarInitial = 'M',
+    String avatarInitial = 'S',
     Color avatarColor = const Color(0xFF7B61FF),
     String? avatarImagePath,
     String? avatarAssetPath,
@@ -104,7 +104,7 @@ class InAppNotificationBanner extends StatefulWidget {
     this.assetImagePath,
     required this.showMedia,
     required this.onDismiss,
-    this.avatarInitial = 'M',
+    this.avatarInitial = 'S',
     this.avatarColor = const Color(0xFF7B61FF),
     this.avatarImagePath,
     this.avatarAssetPath,
@@ -168,39 +168,35 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
     super.dispose();
   }
 
-  /// Builds the round avatar — profile pic > asset > initials fallback.
+  /// Builds the app logo for the notification header (always shows Saverites logo)
   Widget _buildAvatar() {
     const double size = 36.0;
-
-    // Try local file avatar
-    if (widget.avatarImagePath != null && widget.avatarImagePath!.isNotEmpty) {
-      final f = File(widget.avatarImagePath!);
-      if (f.existsSync()) {
-        return ClipOval(
-          child: Image.file(
-            f,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-          ),
-        );
-      }
-    }
-
-    // Try asset avatar (e.g. panda.png)
-    if (widget.avatarAssetPath != null && widget.avatarAssetPath!.isNotEmpty) {
-      return ClipOval(
-        child: Image.asset(
-          widget.avatarAssetPath!,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.asset(
+        'assets/images/logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
           width: size,
           height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, e, _) => _initialsAvatar(size),
+          decoration: BoxDecoration(
+            color: const Color(0xFF7B61FF),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'S',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
-      );
-    }
-
-    return _initialsAvatar(size);
+      ),
+    );
   }
 
   Widget _initialsAvatar(double size) {
@@ -328,7 +324,7 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
                         const SizedBox(width: 10),
                         // App name
                         Text(
-                          'memoria',
+                          'saverites',
                           style: GoogleFonts.inter(
                             color: Colors.white,
                             fontSize: 14,

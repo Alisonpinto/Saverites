@@ -436,6 +436,23 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  // ── Forgot Password ─────────────────────────────────────────────────────────
+
+  void _doForgotPassword() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ForgotPasswordSheet(
+        prefillEmail: _loginEmailCtrl.text.trim(),
+        onSuccess: (email) {
+          _showSuccess('Password reset email sent to $email. Check your inbox!');
+        },
+        onError: _showError,
+      ),
+    );
+  }
+
   // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
@@ -541,6 +558,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   onLogin: _doLogin,
                                   onSwitchToRegister: () => _switchMode(true),
                                   onGoogleSignIn: _doGoogleSignIn,
+                                  onForgotPassword: _doForgotPassword,
                                 ),
                         ),
                       ],
@@ -617,6 +635,7 @@ class _LoginForm extends StatelessWidget {
   final VoidCallback onLogin;
   final VoidCallback onSwitchToRegister;
   final VoidCallback onGoogleSignIn;
+  final VoidCallback onForgotPassword;
 
   const _LoginForm({
     super.key,
@@ -630,6 +649,7 @@ class _LoginForm extends StatelessWidget {
     required this.onLogin,
     required this.onSwitchToRegister,
     required this.onGoogleSignIn,
+    required this.onForgotPassword,
   });
 
   @override
@@ -660,7 +680,22 @@ class _LoginForm extends StatelessWidget {
           onSubmitted: (_) => onLogin(),
           suffix: _EyeToggle(visible: passwordVisible, onTap: onTogglePassword),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+            onTap: onForgotPassword,
+            child: Text(
+              'Forgot Password?',
+              style: GoogleFonts.inter(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
         _PrimaryButton(
           label: 'Log In',
           isLoading: isLoading,
@@ -1222,6 +1257,188 @@ class _GoogleSignInButton extends StatelessWidget {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Forgot Password Bottom Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ForgotPasswordSheet extends StatefulWidget {
+  final String prefillEmail;
+  final void Function(String email) onSuccess;
+  final void Function(String error) onError;
+
+  const _ForgotPasswordSheet({
+    required this.prefillEmail,
+    required this.onSuccess,
+    required this.onError,
+  });
+
+  @override
+  State<_ForgotPasswordSheet> createState() => _ForgotPasswordSheetState();
+}
+
+class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
+  late final TextEditingController _emailCtrl;
+  bool _sending = false;
+  bool _sent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCtrl = TextEditingController(text: widget.prefillEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendReset() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      widget.onError('Please enter a valid email address.');
+      return;
+    }
+
+    setState(() => _sending = true);
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'saverites://reset-password',
+      );
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _sent = true;
+        });
+        widget.onSuccess(email);
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (mounted) Navigator.of(context).pop();
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _sending = false);
+        widget.onError(e.message);
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sending = false);
+        widget.onError('Error: $e');
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(28),
+          topRight: Radius.circular(28),
+        ),
+      ),
+      padding: EdgeInsets.only(
+        top: 24, left: 28, right: 28,
+        bottom: bottom > 0 ? bottom + 24 : 36,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle bar
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Reset Password',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Enter your account email and we'll send you a reset link.",
+            style: GoogleFonts.inter(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 13.5,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+          _FieldLabel('Email Address'),
+          const SizedBox(height: 10),
+          _InputBox(
+            controller: _emailCtrl,
+            hint: 'you@example.com',
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _sendReset(),
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: TextButton(
+              onPressed: (_sending || _sent) ? null : _sendReset,
+              style: TextButton.styleFrom(
+                backgroundColor: _sent ? const Color(0xFF2ECC71) : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                disabledBackgroundColor: Colors.white.withValues(alpha: 0.4),
+              ),
+              child: _sending
+                  ? const SizedBox(
+                      width: 20, height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2, color: Colors.black,
+                      ),
+                    )
+                  : _sent
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Email Sent!',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          'Send Reset Link',
+                          style: GoogleFonts.inter(
+                            color: Colors.black,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+            ),
+          ),
+        ],
       ),
     );
   }

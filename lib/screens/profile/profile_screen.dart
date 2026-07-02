@@ -28,6 +28,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../models/notification_model.dart';
 import '../../utils/notification_manager.dart';
 import 'add_friends_screen.dart';
+import 'friends_list_screen.dart';
 import 'locked_folder/locked_folder_screen.dart';
 import 'locked_folder/pin_entry_screen.dart';
 import 'locked_folder/pin_setup_screen.dart';
@@ -372,12 +373,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                     .eq('follower_id', currentUuid)
                     .eq('followed_id', targetUuid);
               } else if (_isRequestedTarget) {
-                // Cancel friend request
+                // Cancel friend request — use userId strings matching how insert stored them
+                final cancelUserId = UserStore.instance.currentUser?.userId ?? '';
                 await Supabase.instance.client
                     .from('notifications')
                     .delete()
-                    .eq('from_user_id', currentUuid)
-                    .eq('to_user_id', targetUuid)
+                    .eq('from_user_id', cancelUserId)
+                    .eq('to_user_id', targetUserId ?? '')
                     .eq('action_type', 'friend_request');
               } else {
                 if (_isProfilePrivate) {
@@ -446,6 +448,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_isMyProfile) return;
     try {
       final currentUuid = Supabase.instance.client.auth.currentUser?.id;
+      final currentUserId = UserStore.instance.currentUser?.userId ?? '';
       if (currentUuid == null) return;
 
       final targetUserId = widget.username;
@@ -458,6 +461,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (pResponse != null) {
         final targetUuid = pResponse['id'] as String?;
         if (targetUuid != null) {
+          // Check if already following (UUID-based in user_follows)
           final followCheck = await Supabase.instance.client
               .from('user_follows')
               .select('followed_id')
@@ -465,18 +469,21 @@ class _ProfileScreenState extends State<ProfileScreen>
               .eq('followed_id', targetUuid)
               .maybeSingle();
 
+          // Check pending request: from_user_id and to_user_id are stored as
+          // userId STRINGS (not UUIDs) — must match insert at line ~389
           final requestCheck = await Supabase.instance.client
               .from('notifications')
               .select('id')
-              .eq('from_user_id', currentUuid)
-              .eq('to_user_id', targetUuid)
+              .eq('from_user_id', currentUserId)
+              .eq('to_user_id', targetUserId ?? '')
               .eq('action_type', 'friend_request')
               .maybeSingle();
 
           if (mounted) {
             setState(() {
               _isFollowingTarget = followCheck != null;
-              _isRequestedTarget = requestCheck != null;
+              // Only show Requested if NOT already following
+              _isRequestedTarget = followCheck == null && requestCheck != null;
             });
           }
         }
@@ -855,8 +862,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                   Transform.translate(
                                                     offset: Offset(0, -(_scrollOffset * 0.04).clamp(-8.0, 8.0)),
                                                     child: SizedBox(
-                                                      width: 130,
-                                                      height: 130,
+                                                      width: 100,
+                                                      height: 100,
                                                       child: _isMyProfile
                                                           ? GestureDetector(
                                                               onTap: () async {
@@ -873,7 +880,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                                 child: Tooltip(
                                                                   message: 'Customize Avatar',
                                                                   child: const DiceAvatar(
-                                                                    radius: 65,
+                                                                    radius: 50,
                                                                     backgroundColor: Colors.transparent,
                                                                   ),
                                                                 ),
@@ -890,7 +897,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                                   ),
                                                                 )
                                                               : DiceAvatar(
-                                                                  radius: 65,
+                                                                  radius: 50,
                                                                   seed: widget.username ?? '?',
                                                                   backgroundColor: Colors.transparent,
                                                                 ),
@@ -935,80 +942,115 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                           _buildConnectButton(),
                                                         ],
                                                         const SizedBox(height: 16),
-                                                        Wrap(
-                                                          spacing: 16,
-                                                          runSpacing: 8,
-                                                          children: [
-                                                            Row(
-                                                              mainAxisSize: MainAxisSize.min,
-                                                              crossAxisAlignment: CrossAxisAlignment.center,
-                                                              children: [
-                                                                Text(
-                                                                  '$likesCount',
-                                                                  style: GoogleFonts.inter(
-                                                                    color: Colors.white,
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w600,
+                                                        FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          alignment: Alignment.centerLeft,
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                                            children: [
+                                                              Row(
+                                                                mainAxisSize: MainAxisSize.min,
+                                                                crossAxisAlignment: CrossAxisAlignment.center,
+                                                                children: [
+                                                                  Text(
+                                                                    '$likesCount',
+                                                                    style: GoogleFonts.inter(
+                                                                      color: Colors.white,
+                                                                      fontSize: 14,
+                                                                      fontWeight: FontWeight.w600,
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(width: 4),
+                                                                  Text(
+                                                                    'likes',
+                                                                    style: GoogleFonts.inter(
+                                                                      color: const Color(0xFF7C7C81),
+                                                                      fontSize: 14,
+                                                                      fontWeight: FontWeight.w500,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                              const SizedBox(width: 12),
+                                                              Row(
+                                                                mainAxisSize: MainAxisSize.min,
+                                                                crossAxisAlignment: CrossAxisAlignment.center,
+                                                                children: [
+                                                                  Text(
+                                                                    '$postsCount',
+                                                                    style: GoogleFonts.inter(
+                                                                      color: Colors.white,
+                                                                      fontSize: 14,
+                                                                      fontWeight: FontWeight.w600,
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(width: 4),
+                                                                  Text(
+                                                                    'posts',
+                                                                    style: GoogleFonts.inter(
+                                                                      color: const Color(0xFF7C7C81),
+                                                                      fontSize: 14,
+                                                                      fontWeight: FontWeight.w500,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                              const SizedBox(width: 12),
+                                                              GestureDetector(
+                                                                onTap: () => Navigator.push(
+                                                                  context,
+                                                                  PageRouteBuilder(
+                                                                    pageBuilder: (ctx, anim, _) => FriendsListScreen(
+                                                                      userId: _isMyProfile
+                                                                          ? UserStore.instance.currentUser?.userId
+                                                                          : widget.username,
+                                                                    ),
+                                                                    transitionsBuilder: (ctx, anim, _, child) => FadeTransition(
+                                                                      opacity: anim,
+                                                                      child: SlideTransition(
+                                                                        position: Tween<Offset>(
+                                                                          begin: const Offset(0, 0.04),
+                                                                          end: Offset.zero,
+                                                                        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+                                                                        child: child,
+                                                                      ),
+                                                                    ),
+                                                                    transitionDuration: const Duration(milliseconds: 380),
                                                                   ),
                                                                 ),
-                                                                const SizedBox(width: 6),
-                                                                Text(
-                                                                  'likes',
-                                                                  style: GoogleFonts.inter(
-                                                                    color: const Color(0xFF7C7C81),
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
+                                                                child: Row(
+                                                                  mainAxisSize: MainAxisSize.min,
+                                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                                  children: [
+                                                                    Text(
+                                                                      '$_friendsCount',
+                                                                      style: GoogleFonts.inter(
+                                                                        color: Colors.white,
+                                                                        fontSize: 14,
+                                                                        fontWeight: FontWeight.w600,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(width: 4),
+                                                                    Text(
+                                                                      'friends',
+                                                                      style: GoogleFonts.inter(
+                                                                        color: const Color(0xFF7C7C81),
+                                                                        fontSize: 14,
+                                                                        fontWeight: FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(width: 2),
+                                                                    const Icon(
+                                                                      Icons.chevron_right_rounded,
+                                                                      color: Color(0xFF7C7C81),
+                                                                      size: 14,
+                                                                    ),
+                                                                  ],
                                                                 ),
-                                                              ],
-                                                            ),
-                                                            Row(
-                                                              mainAxisSize: MainAxisSize.min,
-                                                              crossAxisAlignment: CrossAxisAlignment.center,
-                                                              children: [
-                                                                Text(
-                                                                  '$postsCount',
-                                                                  style: GoogleFonts.inter(
-                                                                    color: Colors.white,
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w600,
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(width: 6),
-                                                                Text(
-                                                                  'posts',
-                                                                  style: GoogleFonts.inter(
-                                                                    color: const Color(0xFF7C7C81),
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                            Row(
-                                                              mainAxisSize: MainAxisSize.min,
-                                                              crossAxisAlignment: CrossAxisAlignment.center,
-                                                              children: [
-                                                                Text(
-                                                                  '$_friendsCount',
-                                                                  style: GoogleFonts.inter(
-                                                                    color: Colors.white,
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w600,
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(width: 6),
-                                                                Text(
-                                                                  'friends',
-                                                                  style: GoogleFonts.inter(
-                                                                    color: const Color(0xFF7C7C81),
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ],
+                                                              ),
+                                                            ],
+                                                          ),
                                                         ),
                                                       ],
                                                     ),
@@ -1422,22 +1464,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                             .eq('follower_id', currentUuid)
                             .eq('followed_id', targetUuid);
                       } else if (_isRequestedTarget) {
-                        // Cancel friend request
+                        // Cancel friend request — use userId strings matching how insert stored them
                         await Supabase.instance.client
                             .from('notifications')
                             .delete()
-                            .eq('from_user_id', currentUuid)
-                            .eq('to_user_id', targetUuid)
+                            .eq('from_user_id', currentUserId)
+                            .eq('to_user_id', targetUserId ?? '')
                             .eq('action_type', 'friend_request');
                       } else {
                         // Connect (Follow)
                         if (_isProfilePrivate) {
-                          // Private: send request
+                          // Private: send request — store as userId strings for consistent lookup
                           final String notifId = 'freq-${DateTime.now().millisecondsSinceEpoch}';
                           await Supabase.instance.client.from('notifications').insert({
                             'id': notifId,
-                            'to_user_id': targetUuid,
-                            'from_user_id': currentUuid,
+                            'to_user_id': targetUserId,
+                            'from_user_id': currentUserId,
                             'avatar_seed': currentUserId,
                             'avatar_initial': currentUserId.isNotEmpty ? currentUserId[0].toUpperCase() : 'U',
                             'avatar_color': const Color(0xFF6B9BF7).toARGB32(),
@@ -1590,6 +1632,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 selectedIds: _selectedIds,
                 onSelectToggle: _toggleSelection,
                 onLongPress: _onLongPress,
+                isSocialSave: true,
               );
             },
           );
@@ -1639,6 +1682,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 selectedIds: _selectedIds,
                 onSelectToggle: _toggleSelection,
                 onLongPress: _onLongPress,
+                isSocialSave: false,
               );
             },
           );
@@ -1922,6 +1966,7 @@ class ProfileMasonryGrid extends StatelessWidget {
   final Set<String> selectedIds;
   final Function(String) onSelectToggle;
   final Function(String) onLongPress;
+  final bool isSocialSave;
 
   const ProfileMasonryGrid({
     required this.items,
@@ -1930,6 +1975,7 @@ class ProfileMasonryGrid extends StatelessWidget {
     this.selectedIds = const {},
     required this.onSelectToggle,
     required this.onLongPress,
+    this.isSocialSave = false,
   });
 
   @override
@@ -2013,6 +2059,7 @@ class ProfileMasonryGrid extends StatelessWidget {
                   selectedIds: selectedIds,
                   onSelectToggle: onSelectToggle,
                   onLongPress: onLongPress,
+                  isSocialSave: isSocialSave,
                 ),
               ),
               const SizedBox(width: 16),
@@ -2024,6 +2071,7 @@ class ProfileMasonryGrid extends StatelessWidget {
                   selectedIds: selectedIds,
                   onSelectToggle: onSelectToggle,
                   onLongPress: onLongPress,
+                  isSocialSave: isSocialSave,
                 ),
               ),
             ],
@@ -2041,6 +2089,7 @@ class _ProfileMasonryColumn extends StatelessWidget {
   final Set<String> selectedIds;
   final Function(String) onSelectToggle;
   final Function(String) onLongPress;
+  final bool isSocialSave;
 
   const _ProfileMasonryColumn({
     required this.items,
@@ -2049,6 +2098,7 @@ class _ProfileMasonryColumn extends StatelessWidget {
     required this.selectedIds,
     required this.onSelectToggle,
     required this.onLongPress,
+    this.isSocialSave = false,
   });
 
   @override
@@ -2064,6 +2114,7 @@ class _ProfileMasonryColumn extends StatelessWidget {
             isSelected: selectedIds.contains(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
             onSelectToggle: () => onSelectToggle(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
             onLongPress: () => onLongPress(items[i] is UserPost ? (items[i] as UserPost).id : (items[i] as PostModel).id),
+            isSocialSave: isSocialSave,
           ),
           if (i < items.length - 1) const SizedBox(height: 16),
         ],
@@ -2079,6 +2130,7 @@ class ProfilePostTile extends StatefulWidget {
   final bool isSelected;
   final VoidCallback onSelectToggle;
   final VoidCallback onLongPress;
+  final bool isSocialSave;
 
   const ProfilePostTile({
     super.key,
@@ -2088,6 +2140,7 @@ class ProfilePostTile extends StatefulWidget {
     this.isSelected = false,
     required this.onSelectToggle,
     required this.onLongPress,
+    this.isSocialSave = false,
   });
 
   @override
@@ -2825,6 +2878,65 @@ class _ProfilePostTileState extends State<ProfilePostTile> {
           isSelected: widget.isSelected,
           onLikeTap: () => PostStore.instance.toggleLikedPost(itemId),
           onSaveTap: () => PostStore.instance.toggleSavedSocialPost(itemId),
+          onDeleteTap: widget.isSocialSave
+              ? () async {
+                  final currentUserId = UserStore.instance.currentUser?.userId;
+                  final isOwner = widget.item is UserPost && (widget.item as UserPost).username == currentUserId;
+                  if (isOwner) {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      barrierColor: Colors.black.withValues(alpha: 0.6),
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: const Color(0xFF1C1C1E),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        title: Text(
+                          'Delete Post?',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        content: Text(
+                          'This will permanently delete your post. This action cannot be undone.',
+                          style: GoogleFonts.inter(
+                            color: Colors.white60,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text(
+                              'Cancel',
+                              style: GoogleFonts.inter(color: Colors.white54),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: Text(
+                              'Delete',
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFFFF453A),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      PostStore.instance.removeUserPosts({itemId});
+                    }
+                  } else {
+                    PostStore.instance.toggleSavedSocialPost(itemId);
+                  }
+                }
+              : null,
           onShareTap: () async {
             if (widget.item is UserPost) {
               final post = widget.item as UserPost;

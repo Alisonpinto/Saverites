@@ -1,1 +1,0 @@
-import 'package:http/http.dart' as http; void main() async { await http.put(Uri.parse('https://jsonblob.com/api/jsonBlob/019ed7cb-fda2-716d-b43c-b868d304b6fd'), headers: {'Content-Type': 'application/json'}, body: '[]'); print('Cleared!'); }

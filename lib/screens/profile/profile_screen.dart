@@ -1078,22 +1078,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                                               ),
                                             ),
 
-                                            const SizedBox(height: 24),
-
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 20),
-                                              child: _PremiumTabBar(
-                                                activeTab: _activeTab,
-                                                onTabChanged: (i) => setState(() => _activeTab = i),
+                                            if (_isMyProfile) ...[
+                                              const SizedBox(height: 24),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                                child: _PremiumTabBar(
+                                                  activeTab: _activeTab,
+                                                  onTabChanged: (i) => setState(() => _activeTab = i),
+                                                ),
                                               ),
-                                            ),
-
-                                            if (_activeTab == 0) ...[
-                                              const SizedBox(height: 16),
-                                              _buildCategoryChips(),
-                                            ] else if (_activeTab == 1 && _isMyProfile) ...[
-                                              const SizedBox(height: 16),
-                                              _buildSocialCategoryChips(),
+                                              if (_activeTab == 0) ...[
+                                                const SizedBox(height: 16),
+                                                _buildCategoryChips(),
+                                              ] else if (_activeTab == 1) ...[
+                                                const SizedBox(height: 16),
+                                                _buildSocialCategoryChips(),
+                                              ],
                                             ],
 
                                             const SizedBox(height: 18),
@@ -1688,21 +1688,31 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         }
       } else {
-        var friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
-        if (query.isNotEmpty) {
-          friendPosts = friendPosts.where((p) {
-            return (p.title?.toLowerCase().contains(query) ?? false) ||
-                   (p.description?.toLowerCase().contains(query) ?? false) ||
-                   (p.url?.toLowerCase().contains(query) ?? false);
-          }).toList();
-        }
-        return ProfileMasonryGrid(
-          items: friendPosts, 
-          isOnline: _isOnline,
-          isSelectionMode: _isSelectionMode,
-          selectedIds: _selectedIds,
-          onSelectToggle: _toggleSelection,
-          onLongPress: _onLongPress,
+        return ValueListenableBuilder<List<UserPost>>(
+          valueListenable: PostStore.instance.postsNotifier,
+          builder: (context, postsList, _) {
+            final predefined = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+            final dynamicPosts = postsList.where((p) => !p.savedInProfile && p.username == widget.username).toList();
+            var friendPosts = <dynamic>[...predefined, ...dynamicPosts];
+
+            if (query.isNotEmpty) {
+              friendPosts = friendPosts.where((item) {
+                final title = (item.title ?? '').toLowerCase();
+                final body = (item.runtimeType.toString() == 'UserPost' ? item.body : (item.description ?? '')).toLowerCase();
+                final url = (item.url ?? '').toLowerCase();
+                return title.contains(query) || body.contains(query) || url.contains(query);
+              }).toList();
+            }
+
+            return ProfileMasonryGrid(
+              items: friendPosts, 
+              isOnline: _isOnline,
+              isSelectionMode: _isSelectionMode,
+              selectedIds: _selectedIds,
+              onSelectToggle: _toggleSelection,
+              onLongPress: _onLongPress,
+            );
+          }
         );
       }
     } else {
@@ -1782,21 +1792,31 @@ class _ProfileScreenState extends State<ProfileScreen>
           },
         );
       } else {
-        var friendPosts = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
-        if (query.isNotEmpty) {
-          friendPosts = friendPosts.where((p) {
-            return (p.title?.toLowerCase().contains(query) ?? false) ||
-                   (p.description?.toLowerCase().contains(query) ?? false) ||
-                   (p.url?.toLowerCase().contains(query) ?? false);
-          }).toList();
-        }
-        return ProfileMasonryGrid(
-          items: friendPosts, 
-          isOnline: _isOnline,
-          isSelectionMode: _isSelectionMode,
-          selectedIds: _selectedIds,
-          onSelectToggle: _toggleSelection,
-          onLongPress: _onLongPress,
+        return ValueListenableBuilder<List<UserPost>>(
+          valueListenable: PostStore.instance.postsNotifier,
+          builder: (context, postsList, _) {
+            final predefined = PostStore.predefinedPosts.where((p) => p.username == widget.username).toList();
+            final dynamicPosts = postsList.where((p) => !p.savedInProfile && p.username == widget.username).toList();
+            var friendPosts = <dynamic>[...predefined, ...dynamicPosts];
+
+            if (query.isNotEmpty) {
+              friendPosts = friendPosts.where((item) {
+                final title = (item.title ?? '').toLowerCase();
+                final body = (item.runtimeType.toString() == 'UserPost' ? item.body : (item.description ?? '')).toLowerCase();
+                final url = (item.url ?? '').toLowerCase();
+                return title.contains(query) || body.contains(query) || url.contains(query);
+              }).toList();
+            }
+
+            return ProfileMasonryGrid(
+              items: friendPosts, 
+              isOnline: _isOnline,
+              isSelectionMode: _isSelectionMode,
+              selectedIds: _selectedIds,
+              onSelectToggle: _toggleSelection,
+              onLongPress: _onLongPress,
+            );
+          }
         );
       }
     }

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../widgets/dice_avatar.dart';
 import '../../utils/user_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AddFriendsScreen extends StatefulWidget {
   const AddFriendsScreen({super.key});
@@ -27,13 +28,30 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
   bool _isLoadingProfiles = true;
   final Set<String> _followingUserIds = {};
   final Set<String> _requestedUserIds = {};
+  final Set<String> _localSentRequests = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadLocalRequests();
     _loadProfiles();
     _fetchContacts();
+  }
+
+  Future<void> _loadLocalRequests() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String>? saved = prefs.getStringList('local_sent_requests');
+    if (saved != null && mounted) {
+      setState(() {
+        _localSentRequests.addAll(saved);
+      });
+    }
+  }
+
+  Future<void> _saveLocalRequests() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('local_sent_requests', _localSentRequests.toList());
   }
 
   @override
@@ -109,17 +127,20 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
     if (currentUserUuid == null) return;
 
     final isFollowing = _followingUserIds.contains(targetUuid);
-    final isRequested = _requestedUserIds.contains(targetUsername);
+    final isRequested = _requestedUserIds.contains(targetUsername) || _localSentRequests.contains(targetUsername);
 
     setState(() {
       if (isFollowing) {
         _followingUserIds.remove(targetUuid);
       } else if (isRequested) {
         _requestedUserIds.remove(targetUsername);
+        _localSentRequests.remove(targetUsername);
       } else {
         _requestedUserIds.add(targetUsername);
+        _localSentRequests.add(targetUsername);
       }
     });
+    _saveLocalRequests();
 
     try {
       if (isFollowing) {
@@ -216,6 +237,30 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
         });
       }
     }
+  }
+
+  void _showUnfriendDialog(BuildContext context, String targetUuid, String targetName, String targetUsername) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: Text('Unfriend $targetName?', style: GoogleFonts.inter(color: Colors.white)),
+        content: Text('Are you sure you want to remove them from your friends list?', style: GoogleFonts.inter(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _toggleFollowOrRequest(targetUuid, targetUsername);
+            },
+            child: Text('Unfriend', style: GoogleFonts.inter(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, dynamic>? _getMatchingProfile(Contact contact) {
@@ -505,7 +550,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
         final username = (profile['user_id'] ?? profile['username'] ?? id).toString();
         final seed = (profile['avatar_seed'] ?? username).toString();
         final isFollowing = _followingUserIds.contains(id);
-        final isRequested = _requestedUserIds.contains(username);
+        final isRequested = _requestedUserIds.contains(username) || _localSentRequests.contains(username);
 
         String btnLabel = 'Connect';
         Color btnColor = const Color(0xFFFFF78E);
@@ -513,14 +558,14 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
         Color borderColor = const Color(0xFFFFF78E);
 
         if (isFollowing) {
-          btnLabel = 'Connected';
+          btnLabel = 'Friends';
           btnColor = Colors.transparent;
           textColor = const Color(0xFFFFF78E);
           borderColor = const Color(0xFFFFF78E);
         } else if (isRequested) {
-          btnLabel = 'Requested';
+          btnLabel = 'Request Sent';
           btnColor = const Color(0xFF2C2C2E);
-          textColor = Colors.white70;
+          textColor = Colors.white54;
           borderColor = const Color(0xFF2C2C2E);
         }
 
@@ -554,7 +599,11 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
                 ),
               ),
               GestureDetector(
-                onTap: () => _toggleFollowOrRequest(id, username),
+                onTap: isRequested 
+                    ? null 
+                    : (isFollowing 
+                        ? () => _showUnfriendDialog(context, id, name, username) 
+                        : () => _toggleFollowOrRequest(id, username)),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
@@ -660,7 +709,7 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
             ? (matchedProfile['user_id'] ?? matchedProfile['username'] ?? "").toString()
             : "";
         final isFollowing = _followingUserIds.contains(followTargetId);
-        final isRequested = _requestedUserIds.contains(targetUsername);
+        final isRequested = _requestedUserIds.contains(targetUsername) || _localSentRequests.contains(targetUsername);
 
         String btnLabel = 'Connect';
         Color btnColor = const Color(0xFFFFF78E);
@@ -668,14 +717,14 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
         Color borderColor = const Color(0xFFFFF78E);
 
         if (isFollowing) {
-          btnLabel = 'Connected';
+          btnLabel = 'Friends';
           btnColor = Colors.transparent;
           textColor = const Color(0xFFFFF78E);
           borderColor = const Color(0xFFFFF78E);
         } else if (isRequested) {
-          btnLabel = 'Requested';
+          btnLabel = 'Request Sent';
           btnColor = const Color(0xFF2C2C2E);
-          textColor = Colors.white70;
+          textColor = Colors.white54;
           borderColor = const Color(0xFF2C2C2E);
         }
 
@@ -710,7 +759,11 @@ class _AddFriendsScreenState extends State<AddFriendsScreen> with SingleTickerPr
               ),
               if (isAlreadyOnSaverites)
                 GestureDetector(
-                  onTap: () => _toggleFollowOrRequest(followTargetId, targetUsername),
+                  onTap: isRequested 
+                      ? null 
+                      : (isFollowing 
+                          ? () => _showUnfriendDialog(context, followTargetId, name, targetUsername) 
+                          : () => _toggleFollowOrRequest(followTargetId, targetUsername)),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(

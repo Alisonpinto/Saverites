@@ -156,13 +156,7 @@ class NotificationManager {
                   body: notif.previewText,
                 );
 
-                InAppNotificationHelper.show(
-                  body: notif.previewText,
-                  showMedia: false,
-                  avatarInitial: notif.avatarInitial,
-                  avatarColor: notif.avatarColor,
-                  avatarAssetPath: notif.avatarAssetPath,
-                );
+
               }
             } catch (e) {
               debugPrint('Error processing realtime notification: $e');
@@ -488,13 +482,7 @@ class NotificationManager {
         body: body,
       );
 
-      InAppNotificationHelper.show(
-        body: body,
-        showMedia: false,
-        avatarInitial: initial,
-        avatarColor: avatarColor,
-        avatarAssetPath: avatarAsset,
-      );
+
     } else {
       if (postAuthorId != null && postAuthorId != currentUserId) {
         final remoteNotif = NotificationModel(
@@ -733,15 +721,7 @@ class NotificationManager {
           body: body,
         );
 
-        await InAppNotificationHelper.show(
-          body: body,
-          imagePath: localImagePath,
-          assetImagePath: assetImagePath,
-          showMedia: localImagePath != null || assetImagePath != null,
-          avatarInitial: 'R',
-          avatarColor: const Color(0xFFFF9500),
-          avatarAssetPath: 'assets/images/panda.png',
-        );
+
       }
     } catch (e) {
       debugPrint("Error running saved items reminder check: $e");

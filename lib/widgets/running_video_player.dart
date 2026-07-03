@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'shimmer_container.dart';
 
-/// A premium, silent, looping video player that scales to cover its bounds.
+/// A silent, auto-looping video player used in the feed/profile grid cards.
 ///
-/// Supports loading video from a local file path (for user posts) or
-/// an asset path (for predefined posts).
+/// Automatically pauses when another route is pushed on top (e.g. detail screen)
+/// and resumes when popped back.
 class RunningVideoPlayer extends StatefulWidget {
   final File? file;
   final String? assetPath;
   final String? videoUrl;
   final double? height;
+
+  /// Global route observer — must be registered in [MaterialApp.navigatorObservers].
+  static final RouteObserver<ModalRoute<void>> routeObserver =
+      RouteObserver<ModalRoute<void>>();
 
   const RunningVideoPlayer({
     super.key,
@@ -25,9 +29,11 @@ class RunningVideoPlayer extends StatefulWidget {
   State<RunningVideoPlayer> createState() => _RunningVideoPlayerState();
 }
 
-class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBindingObserver {
+class _RunningVideoPlayerState extends State<RunningVideoPlayer>
+    with WidgetsBindingObserver, RouteAware {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -37,43 +43,63 @@ class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBin
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-      if (isCurrentRoute && _isInitialized && _controller != null && !_controller!.value.isPlaying) {
-        _controller!.play();
-      }
-    } else if (state == AppLifecycleState.paused) {
-      if (_isInitialized && _controller != null && _controller!.value.isPlaying) {
-        _controller!.pause();
-      }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      RunningVideoPlayer.routeObserver.subscribe(this, route);
     }
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _handleRouteVisibility();
+  void dispose() {
+    _disposed = true;
+    RunningVideoPlayer.routeObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    _controller = null;
+    super.dispose();
   }
 
-  void _handleRouteVisibility() {
-    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-    if (_controller != null && _isInitialized) {
-      if (isCurrentRoute) {
-        if (!_controller!.value.isPlaying) {
-          _controller!.play();
-        }
-      } else {
-        if (_controller!.value.isPlaying) {
-          _controller!.pause();
-        }
+  // ── RouteAware callbacks ─────────────────────────────────────────────────
+
+  /// Called when this route becomes the top-most route (e.g. detail screen popped).
+  @override
+  void didPopNext() {
+    _resumeIfReady();
+  }
+
+  /// Called when a new route is pushed on top of this one.
+  @override
+  void didPushNext() {
+    _pauseIfPlaying();
+  }
+
+  // ── AppLifecycle ──────────────────────────────────────────────────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _pauseIfPlaying();
+    } else if (state == AppLifecycleState.resumed) {
+      _resumeIfReady();
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  void _pauseIfPlaying() {
+    if (_isInitialized && _controller != null && _controller!.value.isPlaying) {
+      _controller!.pause();
+    }
+  }
+
+  void _resumeIfReady() {
+    if (!_disposed && mounted && _isInitialized && _controller != null) {
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+      if (isCurrentRoute && !_controller!.value.isPlaying) {
+        _controller!.play();
       }
     }
   }
@@ -84,40 +110,41 @@ class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBin
     } else if (widget.assetPath != null && widget.assetPath!.isNotEmpty) {
       _controller = VideoPlayerController.asset(widget.assetPath!);
     } else if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl!));
+      _controller =
+          VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl!));
     }
 
     if (_controller == null) return;
 
     _controller!.initialize().then((_) {
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-        });
-        _controller!.setLooping(true);
-        _controller!.setVolume(0.0);
-        
-        final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-        if (isCurrentRoute) {
-          _controller!.play();
-        }
+      if (_disposed || !mounted) return;
+      _controller!.setLooping(true);
+      _controller!.setVolume(0.0); // silent in feed
+
+      setState(() {
+        _isInitialized = true;
+      });
+
+      // Only play if this is still the top-most route.
+      final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+      if (isCurrentRoute) {
+        _controller!.play();
       }
     }).catchError((error) {
-      debugPrint('Video player initialization failed: $error');
+      debugPrint('[RunningVideoPlayer] init error: $error');
     });
   }
 
   @override
   void didUpdateWidget(covariant RunningVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.file?.path != oldWidget.file?.path || 
-        widget.assetPath != oldWidget.assetPath || 
+    if (widget.file?.path != oldWidget.file?.path ||
+        widget.assetPath != oldWidget.assetPath ||
         widget.videoUrl != oldWidget.videoUrl) {
       _controller?.dispose();
+      _controller = null;
       _isInitialized = false;
       _initialize();
-    } else {
-      _handleRouteVisibility();
     }
   }
 
@@ -127,7 +154,7 @@ class _RunningVideoPlayerState extends State<RunningVideoPlayer> with WidgetsBin
       return ShimmerContainer(
         height: widget.height ?? 200,
         baseColor: const Color(0xFF2A2A2E),
-        borderRadius: 0, // Let ClipRRect handle rounding
+        borderRadius: 0,
       );
     }
 

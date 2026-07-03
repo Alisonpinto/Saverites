@@ -11,6 +11,7 @@ import '../../utils/post_store.dart';
 import '../../utils/user_store.dart';
 import '../../utils/share_helper.dart';
 import '../../widgets/running_video_player.dart';
+import '../../widgets/interactive_video_player.dart';
 import '../../widgets/feed_card.dart';
 import '../../widgets/dice_avatar.dart';
 import '../../models/comment_model.dart';
@@ -129,8 +130,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   bool get isVideo {
-    return widget.userPost?.videoPath != null ||
-        widget.postModel?.mediaType == PostMediaType.video;
+    if (widget.userPost != null) {
+      final post = widget.userPost!;
+      // videoPath works if the file exists locally, videoUrl is the remote fallback
+      final hasLocalVideo = post.videoPath != null && File(post.videoPath!).existsSync();
+      final hasRemoteVideo = post.videoUrl != null && post.videoUrl!.isNotEmpty;
+      return hasLocalVideo || hasRemoteVideo;
+    }
+    return widget.postModel?.mediaType == PostMediaType.video;
   }
 
   String _format(int count) {
@@ -697,11 +704,14 @@ Thank you for helping keep Memoria safe.
                   children: [
                     // Media Widget (Preserves Aspect Ratio, BoxFit.contain)
                     isVideo
-                        ? RunningVideoPlayer(
-                            file: widget.userPost?.videoPath != null
+                        ? InteractiveVideoPlayer(
+                            file: (widget.userPost?.videoPath != null &&
+                                    File(widget.userPost!.videoPath!).existsSync())
                                 ? File(widget.userPost!.videoPath!)
                                 : null,
+                            videoUrl: widget.userPost?.videoUrl,
                             assetPath: widget.postModel?.mediaAssetPath,
+                            autoPlay: true,
                           )
                         : (widget.userPost?.imagePath != null
                             ? Image.file(

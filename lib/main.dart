@@ -8,6 +8,7 @@ import 'package:app_links/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'utils/post_store.dart';
 import 'screens/post_detail/post_detail_screen.dart';
+import 'widgets/running_video_player.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
@@ -229,6 +230,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       navigatorKey: MyApp.navigatorKey,
+      navigatorObservers: [RunningVideoPlayer.routeObserver],
       title: 'Saverites',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

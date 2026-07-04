@@ -1,16 +1,22 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 import '../models/notification_model.dart';
 import '../widgets/dice_avatar.dart';
-import '../widgets/in_app_notification.dart';
 import 'post_store.dart';
 import 'user_store.dart';
+import '../main.dart';
+import '../screens/post_detail/post_detail_screen.dart';
+import '../models/post_model.dart';
 
 class NotificationManager {
   NotificationManager._();
@@ -35,6 +41,7 @@ class NotificationManager {
 
   Timer? _simulationTimer;
   Timer? _remoteSyncTimer;
+  Timer? _savedItemsReminderTimer;
   RealtimeChannel? _realtimeChannel;
 
   /// Initialize local notification plugins and set the initial launcher icon badge count.
@@ -58,6 +65,11 @@ class NotificationManager {
         settings: initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
           debugPrint("Notification clicked: ${response.payload}");
+          final payload = response.payload;
+          if (payload != null && payload.startsWith('post:')) {
+            final postId = payload.substring(5);
+            _handleNotificationNavigation(postId);
+          }
         },
       );
 
@@ -94,6 +106,9 @@ class NotificationManager {
     // 4. Start remote sync timer for fallback sync
     startRemoteSyncTimer();
 
+    // Start saved items reminder timer
+    startSavedItemsReminderTimer();
+
     // 5. Reset and re-subscribe Realtime channel when user logs in/out
     UserStore.instance.currentUserNotifier.addListener(() {
       _realtimeChannel?.unsubscribe();
@@ -114,6 +129,104 @@ class NotificationManager {
     _simulationTimer?.cancel();
   }
 
+  Future<String> _generateIconThumbnail(String type, String title) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 400, 400));
+
+    // Choose colors based on type
+    Color bgColor = const Color(0xFF333333);
+    String symbol = "📄";
+
+    switch (type) {
+      case 'checklist':
+        bgColor = const Color(0xFF2ECC71); // Green
+        symbol = "📝";
+        break;
+      case 'audio':
+        bgColor = const Color(0xFFE74C3C); // Red
+        symbol = "🎙️";
+        break;
+      case 'document':
+        bgColor = const Color(0xFF3498DB); // Blue
+        symbol = "📁";
+        break;
+      case 'contact':
+        bgColor = const Color(0xFF9B59B6); // Purple
+        symbol = "👤";
+        break;
+      case 'code':
+        bgColor = const Color(0xFF34495E); // Dark Slate
+        symbol = "💻";
+        break;
+      case 'link':
+        bgColor = const Color(0xFF1ABC9C); // Teal
+        symbol = "🔗";
+        break;
+      case 'text':
+      default:
+        bgColor = const Color(0xFFF1C40F); // Yellow/Amber
+        symbol = "🧠";
+        break;
+    }
+
+    // Draw background rounded rectangle
+    final paint = Paint()
+      ..color = bgColor
+      ..style = ui.PaintingStyle.fill;
+    canvas.drawRRect(
+      ui.RRect.fromRectAndRadius(
+        const Rect.fromLTWH(0, 0, 400, 400),
+        const Radius.circular(60),
+      ),
+      paint,
+    );
+
+    // Draw symbol (emoji icon) in the center
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.text = TextSpan(
+      text: symbol,
+      style: const TextStyle(
+        fontSize: 150,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset((400 - textPainter.width) / 2, (360 - textPainter.height) / 2),
+    );
+
+    // Draw a small title text at the bottom
+    final titlePainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '...',
+    );
+    titlePainter.text = TextSpan(
+      text: title,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 26,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    titlePainter.layout(maxWidth: 360);
+    titlePainter.paint(
+      canvas,
+      Offset((400 - titlePainter.width) / 2, 310),
+    );
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(400, 400);
+    final pngBytes = await img.toByteData(format: ui.ImageByteFormat.png);
+
+    final tempFile = File('${Directory.systemTemp.path}/icon_${type}_${DateTime.now().millisecondsSinceEpoch}.png');
+    await tempFile.writeAsBytes(pngBytes!.buffer.asUint8List());
+    return tempFile.path;
+  }
+
   /// Periodically fetch remote notifications
   void startRemoteSyncTimer() {
     _remoteSyncTimer?.cancel();
@@ -127,6 +240,62 @@ class NotificationManager {
     _remoteSyncTimer?.cancel();
     _realtimeChannel?.unsubscribe();
     _realtimeChannel = null;
+  }
+
+  void startSavedItemsReminderTimer() {
+    _savedItemsReminderTimer?.cancel();
+    // Run an initial check after 5 seconds
+    Future.delayed(const Duration(seconds: 5), () {
+      checkAndTriggerSavedItemsReminder();
+    });
+    // Check every 30 seconds if a reminder is due
+    _savedItemsReminderTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      checkAndTriggerSavedItemsReminder();
+    });
+  }
+
+  void stopSavedItemsReminderTimer() {
+    _savedItemsReminderTimer?.cancel();
+  }
+
+  void _handleNotificationNavigation(String postId) async {
+    // Wait briefly if PostStore is still initializing (e.g., from cold start)
+    int retries = 0;
+    while (PostStore.instance.posts.isEmpty && retries < 6) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      retries++;
+    }
+
+    // Try finding UserPost first
+    UserPost? userPost = PostStore.instance.posts
+        .where((p) => p.id == postId)
+        .firstOrNull;
+
+    PostModel? postModel;
+    if (userPost == null) {
+      // Try finding in PredefinedPost
+      final idx = PostStore.predefinedPosts.indexWhere((p) => p.id == postId);
+      if (idx != -1) {
+        postModel = PostStore.predefinedPosts[idx];
+      }
+    }
+
+    final navState = MyApp.navigatorKey.currentState;
+    if (navState != null) {
+      if (userPost != null) {
+        navState.push(
+          MaterialPageRoute(
+            builder: (_) => PostDetailScreen(userPost: userPost),
+          ),
+        );
+      } else if (postModel != null) {
+        navState.push(
+          MaterialPageRoute(
+            builder: (_) => PostDetailScreen(postModel: postModel),
+          ),
+        );
+      }
+    }
   }
 
   void subscribeToNotifications(String currentUserId) {
@@ -154,6 +323,7 @@ class NotificationManager {
                   id: Random().nextInt(100000),
                   title: notif.username,
                   body: notif.previewText,
+                  payload: notif.postId != null ? 'post:${notif.postId}' : null,
                 );
 
 
@@ -264,19 +434,21 @@ class NotificationManager {
           return bDate.compareTo(aDate);
         });
         notificationsNotifier.value = mergedList;
-        if (hasNew) {
+        if (hasNew && currentIds.isNotEmpty) {
           _playNotificationSound();
         }
         _updateLauncherBadge();
 
         // Show local heads-up for the most recent NEW notification
-        if (hasNew && remoteNotifications.isNotEmpty) {
+        // BUT do not show it if the in-memory list was empty initially (to prevent startup notifications)
+        if (hasNew && remoteNotifications.isNotEmpty && currentIds.isNotEmpty) {
           final mostRecent = remoteNotifications.first;
           if (!currentIds.contains(mostRecent.id)) {
             await showLocalNotification(
               id: Random().nextInt(100000),
               title: mostRecent.username,
               body: mostRecent.previewText,
+              payload: mostRecent.postId != null ? 'post:${mostRecent.postId}' : null,
             );
           }
         }
@@ -459,6 +631,7 @@ class NotificationManager {
     if (isIncoming) {
       final newNotif = NotificationModel(
         id: id,
+        avatarAssetPath: avatarAsset,
         avatarSeed: actorName,
         avatarInitial: initial,
         avatarColor: avatarColor,
@@ -480,6 +653,7 @@ class NotificationManager {
         id: rand.nextInt(100000),
         title: title,
         body: body,
+        payload: postId != null ? 'post:$postId' : null,
       );
 
 
@@ -546,6 +720,8 @@ class NotificationManager {
     required int id,
     required String title,
     required String body,
+    String? payload,
+    String? imagePath,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -555,7 +731,40 @@ class NotificationManager {
       debugPrint("Error reading notification setting: $e");
     }
 
-    const AndroidNotificationDetails androidDetails =
+    String? localImagePath = imagePath;
+    if (imagePath != null && imagePath.startsWith('assets/')) {
+      try {
+        final byteData = await rootBundle.load(imagePath);
+        final tempFile = File('${Directory.systemTemp.path}/${imagePath.split('/').last}');
+        if (!tempFile.existsSync() || tempFile.lengthSync() == 0) {
+          await tempFile.writeAsBytes(
+            byteData.buffer.asUint8List(
+              byteData.offsetInBytes,
+              byteData.lengthInBytes,
+            ),
+          );
+        }
+        localImagePath = tempFile.path;
+      } catch (e) {
+        debugPrint("Error copying asset image for notification: $e");
+        localImagePath = null;
+      }
+    }
+
+    StyleInformation? styleInformation;
+    if (localImagePath != null && localImagePath.isNotEmpty) {
+      final file = File(localImagePath);
+      if (file.existsSync()) {
+        styleInformation = BigPictureStyleInformation(
+          FilePathAndroidBitmap(localImagePath),
+          largeIcon: FilePathAndroidBitmap(localImagePath),
+          contentTitle: title,
+          summaryText: body,
+        );
+      }
+    }
+
+    final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'saverites_notifications_push',
       'Saverites Notifications',
@@ -566,13 +775,14 @@ class NotificationManager {
       playSound: true,
       channelShowBadge: true,
       icon: '@mipmap/ic_launcher',
+      styleInformation: styleInformation,
     );
     const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
     );
-    const NotificationDetails platformDetails = NotificationDetails(
+    final NotificationDetails platformDetails = NotificationDetails(
       android: androidDetails,
       iOS: iOSDetails,
     );
@@ -583,7 +793,7 @@ class NotificationManager {
         title: title,
         body: body,
         notificationDetails: platformDetails,
-        payload: 'notification_screen',
+        payload: payload ?? 'notification_screen',
       );
     } catch (e) {
       debugPrint("Error showing local notification: $e");
@@ -636,8 +846,9 @@ class NotificationManager {
       final enabled = prefs.getBool('notificationsEnabled') ?? true;
       if (!enabled) return;
 
-      final interval =
-          prefs.getString('savedItemsReminderInterval') ?? 'Always';
+      final storedInterval =
+          prefs.getString('savedItemsReminderInterval') ?? 'Once a Day';
+      final interval = storedInterval == 'Always' ? 'Once a Day' : storedInterval;
       if (interval == 'Never') return;
 
       final savedPredefinedCount = PostStore.instance.savedSocialPostIds.length;
@@ -654,8 +865,10 @@ class NotificationManager {
       final now = DateTime.now();
 
       Duration checkDuration;
-      if (interval == 'Always') {
-        checkDuration = const Duration(seconds: 45);
+      if (interval == 'Test (1 Min)') {
+        checkDuration = const Duration(minutes: 1);
+      } else if (interval == 'Once a Day') {
+        checkDuration = const Duration(days: 1);
       } else if (interval == '2 Days') {
         checkDuration = const Duration(days: 2);
       } else if (interval == '1 Week') {
@@ -672,16 +885,119 @@ class NotificationManager {
           now.millisecondsSinceEpoch,
         );
 
-        String title = "your saved items";
-        String? localImagePath;
-        String? assetImagePath;
+        String notifTitle = "Saved Memory Reminder";
+        String notifDesc = "You saved this item to review later.";
+        String? targetPostId;
+        String? notifImagePath;
 
         if (savedUserPosts.isNotEmpty &&
             (savedPredefinedCount == 0 || Random().nextBool())) {
           final rand = Random();
           final post = savedUserPosts[rand.nextInt(savedUserPosts.length)];
-          title = '"${post.title}"';
-          localImagePath = post.imagePath;
+          targetPostId = post.id;
+          notifTitle = post.title;
+
+          switch (post.type) {
+            case 'checklist':
+              final List<String> uncheckedItems = [];
+              if (post.checklistItems != null && post.checklistStates != null) {
+                for (int i = 0; i < post.checklistItems!.length; i++) {
+                  if (i < post.checklistStates!.length && !post.checklistStates![i]) {
+                    uncheckedItems.add(post.checklistItems![i]);
+                  }
+                }
+              }
+              if (uncheckedItems.isNotEmpty) {
+                notifDesc = "Remember to finish: ${uncheckedItems.take(2).join(', ')}${uncheckedItems.length > 2 ? ' and ${uncheckedItems.length - 2} more' : ''}";
+              } else {
+                notifDesc = "Review your checklist";
+              }
+              break;
+
+            case 'audio':
+              notifDesc = "Listen back to your voice memo${post.duration != null ? ' (${post.duration})' : ''}";
+              break;
+
+            case 'link':
+              final domain = Uri.tryParse(post.url ?? '')?.host ?? '';
+              notifDesc = "Review saved article${domain.isNotEmpty ? ' ($domain)' : ''}";
+              break;
+
+            case 'contact':
+              notifDesc = "Reach out to: ${post.contactName ?? post.title}${post.contactPhone != null ? ' (${post.contactPhone})' : ''}";
+              break;
+
+            case 'code':
+              notifDesc = "Review your code snippet";
+              break;
+
+            case 'document':
+              notifDesc = "Open and review document";
+              break;
+
+            case 'image':
+              notifDesc = "Take a look at your photo";
+              if (post.imagePath != null && File(post.imagePath!).existsSync()) {
+                notifImagePath = post.imagePath;
+              } else if (post.imageUrl != null && post.imageUrl!.isNotEmpty) {
+                final ext = post.imageUrl!.split('.').last.split('?').first;
+                final tempFile = File('${Directory.systemTemp.path}/img_${post.id}.$ext');
+                if (tempFile.existsSync() && tempFile.lengthSync() > 0) {
+                  notifImagePath = tempFile.path;
+                }
+              }
+              break;
+
+            case 'video':
+              notifDesc = "Watch your saved video";
+              if (post.videoPath != null && File(post.videoPath!).existsSync()) {
+                try {
+                  final thumb = await VideoThumbnail.thumbnailFile(
+                    video: post.videoPath!,
+                    thumbnailPath: Directory.systemTemp.path,
+                    imageFormat: ImageFormat.JPEG,
+                    quality: 75,
+                  );
+                  if (thumb != null) {
+                    notifImagePath = thumb;
+                  }
+                } catch (e) {
+                  debugPrint("Error generating video thumbnail: $e");
+                }
+              } else if (post.videoUrl != null && post.videoUrl!.isNotEmpty) {
+                try {
+                  final thumb = await VideoThumbnail.thumbnailFile(
+                    video: post.videoUrl!,
+                    thumbnailPath: Directory.systemTemp.path,
+                    imageFormat: ImageFormat.JPEG,
+                    quality: 75,
+                  );
+                  if (thumb != null) {
+                    notifImagePath = thumb;
+                  }
+                } catch (e) {
+                  debugPrint("Error generating remote video thumbnail: $e");
+                }
+              }
+              break;
+
+            case 'text':
+            default:
+              final preview = post.body.trim();
+              notifDesc = preview.isNotEmpty
+                  ? "Look back at note: \"${preview.length > 40 ? '${preview.substring(0, 40)}...' : preview}\""
+                  : "Review your note";
+              break;
+          }
+
+          // Generate Canvas Icon Thumbnail if still null
+          if (notifImagePath == null) {
+            try {
+              notifImagePath = await _generateIconThumbnail(post.type ?? 'text', post.title);
+            } catch (e) {
+              debugPrint("Error generating dynamic icon: $e");
+            }
+          }
         } else if (PostStore.instance.savedSocialPostIds.isNotEmpty) {
           final socialSaves = PostStore.predefinedPosts
               .where(
@@ -691,13 +1007,27 @@ class NotificationManager {
           if (socialSaves.isNotEmpty) {
             final rand = Random();
             final post = socialSaves[rand.nextInt(socialSaves.length)];
-            title = '"${post.title ?? 'Untitled'}"';
-            assetImagePath = post.mediaAssetPath;
+            targetPostId = post.id;
+            notifTitle = post.title ?? 'Saved Social Post';
+
+            if (post.mediaType == PostMediaType.video) {
+              notifDesc = "Watch back video post by @${post.username ?? 'someone'}";
+              if (post.mediaAssetPath.isNotEmpty) {
+                notifImagePath = post.mediaAssetPath;
+              }
+            } else {
+              notifDesc = "Take a look at post by @${post.username ?? 'someone'}";
+              if (post.mediaAssetPath.isNotEmpty) {
+                notifImagePath = post.mediaAssetPath;
+              }
+            }
           }
         }
 
-        final body = 'Remember to review your saved item: $title';
+        if (targetPostId == null) return;
+
         final String notifId = 'reminder-${now.millisecondsSinceEpoch}';
+        final String notifBody = "Hey! Check what you saved before you forget.\n$notifDesc";
 
         final newNotif = NotificationModel(
           id: notifId,
@@ -705,9 +1035,11 @@ class NotificationManager {
           avatarInitial: 'R',
           avatarColor: const Color(0xFFFF9500),
           username: 'Saverites Reminder',
-          previewText: body,
+          previewText: notifBody,
           timestamp: DateTime.now().toIso8601String(),
           isRead: false,
+          postId: targetPostId,
+          actionType: 'saved',
         );
 
         notificationsNotifier.value = [newNotif, ...notifications];
@@ -717,11 +1049,11 @@ class NotificationManager {
 
         await showLocalNotification(
           id: Random().nextInt(100000),
-          title: 'Saved Items Reminder',
-          body: body,
+          title: notifTitle,
+          body: notifBody,
+          payload: 'post:$targetPostId',
+          imagePath: notifImagePath,
         );
-
-
       }
     } catch (e) {
       debugPrint("Error running saved items reminder check: $e");

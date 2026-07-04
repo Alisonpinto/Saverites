@@ -47,7 +47,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
-      _reminderInterval = prefs.getString('savedItemsReminderInterval') ?? 'Always';
+      final stored = prefs.getString('savedItemsReminderInterval') ?? 'Once a Day';
+      _reminderInterval = stored == 'Always' ? 'Once a Day' : stored;
       _defaultPostPublic = prefs.getBool('default_post_public') ?? true;
     });
   }
@@ -1221,7 +1222,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showReminderIntervalSelector(BuildContext context) {
-    final List<String> intervals = ['Always', '2 Days', '1 Week', '1 Month', 'Never'];
+    final List<String> intervals = ['Test (1 Min)', 'Once a Day', '2 Days', '1 Week', '1 Month', 'Never'];
 
     showModalBottomSheet(
       context: context,

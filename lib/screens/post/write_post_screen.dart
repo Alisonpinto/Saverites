@@ -422,7 +422,9 @@ class _WritePostScreenState extends State<WritePostScreen>
     try {
       final XFile? file = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 90,
+        maxWidth: 1080,
+        maxHeight: 1080,
+        imageQuality: 75,
       );
       if (file != null && mounted) {
         setState(() {

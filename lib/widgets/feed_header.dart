@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../utils/translation_manager.dart';
 import '../utils/notification_manager.dart';
 import '../models/notification_model.dart';
+import '../utils/tutorial_keys.dart';
 
 /// Fixed header bar rendered above the scrollable feed.
 ///
@@ -53,6 +54,7 @@ class FeedHeader extends StatelessWidget {
         children: [
           // ── Hamburger Menu Icon ─────────────────────────────────────────
           GestureDetector(
+            key: TutorialKeys.hamburgerMenuKey,
             onTap: onMenuTap ?? () {},
             behavior: HitTestBehavior.opaque,
             child: const Icon(Icons.menu, color: Colors.white, size: 26),
@@ -63,6 +65,7 @@ class FeedHeader extends StatelessWidget {
           // ── Pill search bar ─────────────────────────────────────────────
           Expanded(
             child: Container(
+              key: TutorialKeys.searchBarKey,
               height: 40,
               decoration: BoxDecoration(
                 color: Colors.transparent,
@@ -109,6 +112,7 @@ class FeedHeader extends StatelessWidget {
 
           // ── Notifications Icon with Badge ───────────────────────────────
           GestureDetector(
+            key: TutorialKeys.notificationKey,
             onTap: onNotificationTap ?? () {},
             behavior: HitTestBehavior.opaque,
             child: ValueListenableBuilder<List<NotificationModel>>(

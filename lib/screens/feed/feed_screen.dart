@@ -27,6 +27,9 @@ import '../../widgets/premium_drawer.dart';
 import '../../utils/user_store.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/tutorial_keys.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -106,7 +109,10 @@ class _FeedScreenState extends State<FeedScreen> {
     // Initialize share intent listener
     _initShareIntentListener();
 
-
+    // Show onboarding guide for first-time users
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkFeedTutorial();
+    });
   }
 
   @override
@@ -121,6 +127,236 @@ class _FeedScreenState extends State<FeedScreen> {
   void _onPostsChanged() {
     if (mounted) setState(() {});
   }
+
+  // ── Onboarding Tutorial ─────────────────────────────────────────────────────
+
+  Future<void> _checkFeedTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool seen = prefs.getBool('hasSeenFeedTutorial') ?? false;
+    if (!seen) {
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) _showFeedTutorial();
+      });
+    }
+  }
+
+  void _showFeedTutorial() {
+    TutorialCoachMark(
+      targets: _createFeedTargets(),
+      colorShadow: Colors.black,
+      textSkip: 'SKIP',
+      paddingFocus: 8,
+      opacityShadow: 0.85,
+      onFinish: () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('hasSeenFeedTutorial', true);
+      },
+      onSkip: () {
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setBool('hasSeenFeedTutorial', true),
+        );
+        return true;
+      },
+    ).show(context: context);
+  }
+
+  List<TargetFocus> _createFeedTargets() {
+    return [
+      // Step 1 — Hamburger Menu
+      TargetFocus(
+        identify: 'feed-hamburger',
+        keyTarget: TutorialKeys.hamburgerMenuKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.RRect,
+        radius: 12,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.menu_rounded,
+              title: 'Side Menu',
+              desc:
+                  'Open the side menu to access your profile, save items privately, get help, change settings, or log out.',
+            ),
+          ),
+        ],
+      ),
+
+      // Step 2 — Search Bar
+      TargetFocus(
+        identify: 'feed-search',
+        keyTarget: TutorialKeys.searchBarKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.RRect,
+        radius: 20,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.search_rounded,
+              title: 'Search',
+              desc:
+                  'Search for any post, memory, or saved item instantly by keyword.',
+            ),
+          ),
+        ],
+      ),
+
+      // Step 3 — Notifications Bell
+      TargetFocus(
+        identify: 'feed-notifications',
+        keyTarget: TutorialKeys.notificationKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.Circle,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.notifications_outlined,
+              title: 'Notifications',
+              desc:
+                  'See your likes, comments, and follow requests here. The red dot means you have unread alerts.',
+            ),
+          ),
+        ],
+      ),
+
+      // Step 4 — Home Tab
+      TargetFocus(
+        identify: 'feed-home-tab',
+        keyTarget: TutorialKeys.homeTabKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.Circle,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.home_outlined,
+              title: 'Home Feed',
+              desc:
+                  'Return to the main community feed at any time by tapping here.',
+            ),
+          ),
+        ],
+      ),
+
+      // Step 5 — Add / FAB Button
+      TargetFocus(
+        identify: 'feed-add-button',
+        keyTarget: TutorialKeys.addButtonKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.Circle,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.add_circle_outline_rounded,
+              title: 'Create Something',
+              desc:
+                  'Tap to open the creation menu. Choose Write Post to share with the community, or Save Item to privately store a memory in your vault.',
+            ),
+          ),
+        ],
+      ),
+
+      // Step 6 — Profile Tab
+      TargetFocus(
+        identify: 'feed-profile-tab',
+        keyTarget: TutorialKeys.profileTabKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.Circle,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.person_outline_rounded,
+              title: 'Your Profile',
+              desc:
+                  'View your profile, manage your saved memories, and see your followers and following list.',
+            ),
+          ),
+        ],
+      ),
+
+      // Step 7 — First Post Card
+      TargetFocus(
+        identify: 'feed-first-card',
+        keyTarget: TutorialKeys.firstFeedCardKey,
+        alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.RRect,
+        radius: 20,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (ctx, _) => _buildTutorialContent(
+              icon: Icons.touch_app_outlined,
+              title: 'Interact with Posts',
+              desc:
+                  'Tap any post card to open it in full screen — like it, comment, bookmark, or share it with others.',
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  Widget _buildTutorialContent({
+    required IconData icon,
+    required String title,
+    required String desc,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Icon + Title row
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFFFAF096).withValues(alpha: 0.25),
+                  width: 1.0,
+                ),
+              ),
+              child: Icon(
+                icon,
+                color: const Color(0xFFFAF096),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Description
+        Text(
+          desc,
+          style: GoogleFonts.inter(
+            color: Colors.white.withValues(alpha: 0.75),
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   Future<void> _handleBackPress() async {
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
@@ -992,7 +1228,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
       columnWidgets.add(
         _FeedPostTile(
-          key: ValueKey(itemId),
+          key: columnWidgets.isEmpty ? TutorialKeys.firstFeedCardKey : ValueKey(itemId),
           item: item,
           cardHeight: cardHeight,
           isOnline: _isOnline,
@@ -1755,28 +1991,25 @@ class _FeedPostTileState extends State<_FeedPostTile> {
               width: double.infinity,
               errorBuilder: (context, error, stackTrace) {
                 if (post.imageUrl != null && post.imageUrl!.isNotEmpty) {
-                  return Image.network(
-                    post.imageUrl!,
+                  return CachedNetworkImage(
+                    imageUrl: post.imageUrl!,
                     fit: BoxFit.fitWidth,
                     width: double.infinity,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        height: 150,
-                        color: const Color(0xFF2A2A2E),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF7B61FF),
-                            ),
+                    placeholder: (context, url) => Container(
+                      height: 150,
+                      color: const Color(0xFF2A2A2E),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF7B61FF),
                           ),
                         ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) => Container(
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
                       height: 150,
                       color: const Color(0xFF2A2A2E),
                       child: const Center(
@@ -1803,28 +2036,25 @@ class _FeedPostTileState extends State<_FeedPostTile> {
               },
             );
           } else if (post.imageUrl != null && post.imageUrl!.isNotEmpty) {
-            mediaWidget = Image.network(
-              post.imageUrl!,
+            mediaWidget = CachedNetworkImage(
+              imageUrl: post.imageUrl!,
               fit: BoxFit.fitWidth,
               width: double.infinity,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  height: 150,
-                  color: const Color(0xFF2A2A2E),
-                  child: const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF7B61FF),
-                      ),
+              placeholder: (context, url) => Container(
+                height: 150,
+                color: const Color(0xFF2A2A2E),
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF7B61FF),
                     ),
                   ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) => Container(
+                ),
+              ),
+              errorWidget: (context, url, error) => Container(
                 height: 150,
                 color: const Color(0xFF2A2A2E),
                 child: const Center(

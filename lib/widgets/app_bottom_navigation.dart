@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/tutorial_keys.dart';
 
 /// Full-width bottom navigation bar with a centered Add button.
 ///
@@ -40,6 +41,7 @@ class AppBottomNavigation extends StatelessWidget {
               // Home Tab
               Expanded(
                 child: _NavIcon(
+                  key: TutorialKeys.homeTabKey,
                   icon: Icons.home_outlined,
                   activeIcon: Icons.home,
                   index: 0,
@@ -54,6 +56,7 @@ class AppBottomNavigation extends StatelessWidget {
               // Profile Tab
               Expanded(
                 child: _NavIcon(
+                  key: TutorialKeys.profileTabKey,
                   icon: Icons.person_outline,
                   activeIcon: Icons.person,
                   index: 3,
@@ -69,6 +72,7 @@ class AppBottomNavigation extends StatelessWidget {
         Positioned(
           top: -20, // Overflow the bar top
           child: GestureDetector(
+            key: TutorialKeys.addButtonKey,
             onTap: onAddTap,
             child: AnimatedScale(
               scale: isAddMenuOpen ? 1.08 : 1.0,
@@ -116,6 +120,7 @@ class _NavIcon extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   const _NavIcon({
+    super.key,
     required this.icon,
     required this.activeIcon,
     required this.index,

@@ -11,6 +11,7 @@ import '../../utils/post_store.dart';
 import '../../utils/notification_manager.dart';
 import '../profile/profile_screen.dart';
 import '../post_detail/post_detail_screen.dart';
+import '../post/write_post_screen.dart';
 import '../../models/post_model.dart';
 
 class NotificationScreen extends StatefulWidget {
@@ -140,14 +141,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                   (p) => p.id == notif.postId,
                                 );
                                 if (idx != -1) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => PostDetailScreen(
-                                        userPost: PostStore.instance.posts[idx],
+                                  final post = PostStore.instance.posts[idx];
+                                  if (post.savedInProfile) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => WritePostScreen(
+                                          isSaveItem: true,
+                                          editingPost: post,
+                                        ),
                                       ),
-                                    ),
-                                  );
+                                    );
+                                  } else {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PostDetailScreen(
+                                          userPost: post,
+                                        ),
+                                      ),
+                                    );
+                                  }
                                   pushedPost = true;
                                 } else {
                                   // Try finding PredefinedPost

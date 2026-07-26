@@ -16,6 +16,7 @@ import 'post_store.dart';
 import 'user_store.dart';
 import '../main.dart';
 import '../screens/post_detail/post_detail_screen.dart';
+import '../screens/post/write_post_screen.dart';
 import '../models/post_model.dart';
 
 class NotificationManager {
@@ -283,11 +284,22 @@ class NotificationManager {
     final navState = MyApp.navigatorKey.currentState;
     if (navState != null) {
       if (userPost != null) {
-        navState.push(
-          MaterialPageRoute(
-            builder: (_) => PostDetailScreen(userPost: userPost),
-          ),
-        );
+        if (userPost.savedInProfile) {
+          navState.push(
+            MaterialPageRoute(
+              builder: (_) => WritePostScreen(
+                isSaveItem: true,
+                editingPost: userPost,
+              ),
+            ),
+          );
+        } else {
+          navState.push(
+            MaterialPageRoute(
+              builder: (_) => PostDetailScreen(userPost: userPost),
+            ),
+          );
+        }
       } else if (postModel != null) {
         navState.push(
           MaterialPageRoute(

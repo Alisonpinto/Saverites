@@ -8,6 +8,7 @@ import 'package:app_links/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'utils/post_store.dart';
 import 'screens/post_detail/post_detail_screen.dart';
+import 'screens/post/write_post_screen.dart';
 import 'widgets/running_video_player.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -205,12 +206,24 @@ class _MyAppState extends State<MyApp> {
     if (context == null || !context.mounted) return;
 
     if (userPost != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PostDetailScreen(userPost: userPost),
-        ),
-      );
+      if (userPost.savedInProfile) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => WritePostScreen(
+              isSaveItem: true,
+              editingPost: userPost,
+            ),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PostDetailScreen(userPost: userPost),
+          ),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
